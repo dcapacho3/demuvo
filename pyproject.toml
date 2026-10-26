@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "demuvo"
+version = "0.0.1"
+authors = [
+  { name="David Capacho Parra", email="dcapacho3@gmail.com" },
+]
+description = "A small, deterministic 2D world for robots."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["numpy", "robomath>=0.1.1"]
+keywords = ["robotics", "simulator", "2d", "kinematics", "lidar", "odometry", "numpy"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+]
+license = "Apache-2.0"
+license-files = ["LICEN[CS]E*"]
+
+[project.urls]
+Homepage = "https://github.com/dcapacho3/demuvo"
+Source = "https://github.com/dcapacho3/demuvo"
+Issues = "https://github.com/dcapacho3/demuvo/issues"
+
+[dependency-groups]
+dev = ["pytest>=8", "pre-commit>=4.6.2", "pytest-cov>=7.1.0", "hypothesis>=6.100"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
