@@ -19,7 +19,7 @@ import math
 from dataclasses import dataclass
 from typing import ClassVar
 
-from demuvo.verify import (
+from .verify import (
     WorldError,
     check_keys,
     number,
@@ -95,10 +95,10 @@ class Box:
         return cls(numbers(require_key(data, "size", label), 2, label, "size", True))
 
     def points(self, pose: Pose) -> list[Point]:
-        """The four corners."""
+        """The four corners, in order around the box."""
         half_x, half_y = self.size[0] / 2, self.size[1] / 2
-        corners = [(sx * half_x, sy * half_y) for sx in (-1, 1) for sy in (-1, 1)]
-        return place(pose, corners)
+        corners = [(-half_x, -half_y), (half_x, -half_y), (half_x, half_y)]
+        return place(pose, [*corners, (-half_x, half_y)])
 
 
 @dataclass(frozen=True)

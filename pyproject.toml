@@ -25,13 +25,26 @@ classifiers = [
 license = "Apache-2.0"
 license-files = ["LICEN[CS]E*"]
 
+[project.scripts]
+demuvo = "demuvo.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/dcapacho3/demuvo"
 Source = "https://github.com/dcapacho3/demuvo"
 Issues = "https://github.com/dcapacho3/demuvo/issues"
 
+[project.optional-dependencies]
+view = ["pygame-ce>=2.5", "pillow>=10"]
+
 [dependency-groups]
-dev = ["pytest>=8", "pre-commit>=4.6.2", "pytest-cov>=7.1.0", "hypothesis>=6.100"]
+dev = [
+  "pytest>=8",
+  "pre-commit>=4.6.2",
+  "pytest-cov>=7.1.0",
+  "hypothesis>=6.100",
+  "pygame-ce>=2.5",
+  "pillow>=10",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -41,3 +54,11 @@ select = ["E", "F", "I", "N", "D"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.pylint.main]
+# pygame is a compiled module, so pylint must load it to see its names.
+extension-pkg-allow-list = ["pygame"]
+
+[tool.pylint.design]
+max-locals = 20
+max-attributes = 12

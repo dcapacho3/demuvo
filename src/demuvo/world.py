@@ -1,11 +1,15 @@
-"""Definition of a 2D world including size, obstacles and robots, all from a TOML file."""
+"""Definition of a 2D world.
+
+Including size, obstacles and robots, all from a TOML file.
+"""
 
 from __future__ import annotations
 
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
+from .models import MODELS, parse_params
 from .shapes import Pose, Shape, parse_shape
 from .verify import (
     WorldError,
@@ -54,6 +58,7 @@ class RobotSpec:
         pose: where it starts: x, y and angle in radians.
         goal: where it should end: x, y and angle in radians, or None.
         controller: "module:Class" of the controller, or None.
+        params: values that replace the model defaults, such as max_v.
     """
 
     name: str
@@ -62,6 +67,7 @@ class RobotSpec:
     pose: Pose
     goal: Pose | None = None
     controller: str | None = None
+    params: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -104,8 +110,14 @@ def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
     if name in names:
         raise WorldError(f"{label}: name used twice")
     names.add(name)
-    check_keys(item, {"name", "model", "shape", "pose", "goal", "controller"}, label)
+    check_keys(
+        item, {"name", "model", "shape", "pose", "goal", "controller", "params"}, label
+    )
     model = text(item, "model", label)
+    if model not in MODELS:
+        known = ", ".join(MODELS)
+        raise WorldError(f"{label}: unknown model '{model}', expected one of {known}")
+    params = parse_params(item.get("params", {}), model, label)
     shape = parse_shape(require_key(item, "shape", label), label, robot=True)
     pose = numbers(require_key(item, "pose", label), 3, label, "pose")
     goal = numbers(item["goal"], 3, label, "goal") if "goal" in item else None
@@ -117,7 +129,7 @@ def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
     for key, where in (("pose", pose), ("goal", goal)):
         if where is not None and not inside(shape.points(where), size):
             raise WorldError(f"{label}: '{key}' must lie inside the world")
-    return RobotSpec(name, model, shape, pose, goal, controller)
+    return RobotSpec(name, model, shape, pose, goal, controller, params)
 
 
 def load_world(path: str | Path) -> World:

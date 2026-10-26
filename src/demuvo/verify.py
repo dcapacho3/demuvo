@@ -51,7 +51,7 @@ def text(data: dict, key: str, label: str) -> str:
 
 
 def numbers(value, count: int, label: str, key: str, positive: bool = False):
-    """Check that value is a list of finite numbers"""
+    """Check that value is a list of finite numbers."""
     if (
         not isinstance(value, list)
         or len(value) != count

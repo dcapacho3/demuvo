@@ -159,7 +159,7 @@ def test_a_world_without_a_robot_is_refused(tmp_path):
 def test_a_world_without_obstacles_loads(tmp_path):
     """Obstacles are optional."""
     text = GOOD[: GOOD.index("[[obstacle]]")] + GOOD[GOOD.index("[[robot]]") :]
-    assert load(tmp_path, text).obstacles == ()
+    assert not load(tmp_path, text).obstacles
 
 
 def test_the_seed_must_be_an_integer(tmp_path):
@@ -288,3 +288,44 @@ def test_a_circle_radius_must_be_positive(tmp_path):
     """A negative radius is refused, and the message names the obstacle."""
     with pytest.raises(WorldError, match=r"obstacle 2.*radius"):
         load(tmp_path, GOOD.replace("radius = 0.5", "radius = -0.5"))
+
+
+def test_an_unknown_model_is_named(tmp_path):
+    """The message names the robot, the model and the known models."""
+    with pytest.raises(WorldError, match=r"robot 'r1'.*hovercraft.*diff_drive"):
+        load(tmp_path, GOOD.replace('"diff_drive"', '"hovercraft"'))
+
+
+def test_params_replace_the_model_defaults(tmp_path):
+    """The values in `params` come back on the robot."""
+    text = GOOD.replace(
+        'controller = "demuvo.controllers:GoToGoal"',
+        'controller = "demuvo.controllers:GoToGoal"\n'
+        "params = { max_v = 0.5, max_w = 2.0 }",
+    )
+    assert load(tmp_path, text).robots[0].params == {"max_v": 0.5, "max_w": 2.0}
+
+
+def test_robots_have_no_params_by_default(tmp_path):
+    """No `params` key gives an empty dict."""
+    assert load(tmp_path, GOOD).robots[0].params == {}
+
+
+def test_an_unknown_param_is_named(tmp_path):
+    """A parameter the model does not have is refused."""
+    text = GOOD.replace(
+        'controller = "demuvo.controllers:GoToGoal"',
+        'controller = "demuvo.controllers:GoToGoal"\nparams = { max_speed = 1.0 }',
+    )
+    with pytest.raises(WorldError, match=r"robot 'r1' params.*max_speed"):
+        load(tmp_path, text)
+
+
+def test_a_param_must_be_positive(tmp_path):
+    """A zero or negative limit is refused."""
+    text = GOOD.replace(
+        'controller = "demuvo.controllers:GoToGoal"',
+        'controller = "demuvo.controllers:GoToGoal"\nparams = { max_v = 0 }',
+    )
+    with pytest.raises(WorldError, match=r"robot 'r1' params.*max_v"):
+        load(tmp_path, text)
