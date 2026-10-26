@@ -1,0 +1,24 @@
+version = 1
+
+[world]
+size = [10.0, 6.0]        # metres
+seed = 7
+
+[[obstacle]]
+pose = [4.0, 3.0, 0.0]    # x, y, angle (radians)
+shape = { name = "box", size = [1.0, 2.0] }   # length along x, width along y
+
+[[obstacle]]
+pose = [7.0, 2.0, 0.0]
+shape = { name = "circle", radius = 0.5 }
+
+[[obstacle]]              # a wall: points joined in order, no pose needed
+shape = { name = "linestring", vertices = [[2.0, 5.0], [2.0, 3.5]] }
+
+[[robot]]
+name = "r1"
+model = "diff_drive"
+shape = { name = "circle", radius = 0.2 }     # or a box or a polygon
+pose = [1.0, 1.0, 0.0]    # where it starts: x, y, angle
+goal = [9.0, 5.0, 0.0]    # optional if testing a set goal
+controller = "demuvo.controllers:GoToGoal"    # optional; module:Class
