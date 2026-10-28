@@ -6,9 +6,9 @@ import math
 from collections.abc import Mapping
 
 import numpy as np
+from robomath import Transform2D
 
-from .models import MODELS
-from .shapes import Pose
+from .models import MODELS, Twist
 from .world import World
 
 
@@ -22,7 +22,9 @@ class Simulation:
         world: the world that was loaded.
         dt: length of a step in seconds.
         rng: random generator, seeded with the world seed.
-        poses: current pose of each robot, by name.
+        models: the kinematic model of each robot, by name.
+        poses: current pose of each robot, by name, as a Transform2D; its
+            `xyt` is (x, y, angle).
         steps: number of steps taken.
     """
 
@@ -39,7 +41,9 @@ class Simulation:
         self.dt = dt
         self.rng = np.random.default_rng(world.seed)
         self.models = {r.name: MODELS[r.model](**r.params) for r in world.robots}
-        self.poses: dict[str, Pose] = {r.name: r.pose for r in world.robots}
+        self.poses: dict[str, Transform2D] = {
+            r.name: Transform2D.from_xyt(r.pose) for r in world.robots
+        }
         self.steps = 0
 
     @property
@@ -47,12 +51,13 @@ class Simulation:
         """Simulated time in seconds, counted in steps, so it does not drift."""
         return self.steps * self.dt
 
-    def step(self, commands: Mapping[str, tuple[float, float]]) -> None:
-        """Advance every robot by one step.
+    def step(self, commands: Mapping[str, Twist]) -> None:
+        """Advance every robot by one step; a robot with no command stops.
+
+        Nothing changes if this raises.
 
         Args:
             commands: command of each robot, by name.
-            A robot with no command stops.
 
         Raises:
             ValueError: if a name is not a robot of this world.
@@ -60,7 +65,9 @@ class Simulation:
         for name in commands:
             if name not in self.models:
                 raise ValueError(f"no robot named '{name}'")
-        for name, model in self.models.items():
-            command = commands.get(name, (0.0, 0.0))
-            self.poses[name] = model.step(self.poses[name], command, self.dt)
+        moved = {
+            name: model.step(self.poses[name], commands.get(name, Twist()), self.dt)
+            for name, model in self.models.items()
+        }
+        self.poses.update(moved)
         self.steps += 1

@@ -10,7 +10,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .models import MODELS, parse_params
-from .shapes import Pose, Shape, parse_shape
+from .poses import Pose
+from .shapes import Shape, parse_shape
 from .verify import (
     WorldError,
     check_keys,
@@ -144,9 +145,13 @@ def load_world(path: str | Path) -> World:
     Raises:
         WorldError: if anything in the file is wrong. The message says which
             object (for example "obstacle 2" or "robot 'r1'") and which key.
+        OSError: if the file cannot be read.
     """
-    with open(path, "rb") as f:
-        data = tomllib.load(f)
+    try:
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+    except tomllib.TOMLDecodeError as error:
+        raise WorldError(f"file: not valid TOML: {error}") from error
 
     version = require_key(data, "version", "file")
     if version != FORMAT_VERSION:

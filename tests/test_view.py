@@ -16,10 +16,9 @@ from pygame.locals import (
     MOUSEMOTION,
     QUIT,
     K_a,
-    K_s,
 )
 
-from demuvo import Box, Circle, Simulation, load_world
+from demuvo import Box, Circle, Simulation, Twist, load_world
 from demuvo.view import (
     HUD,
     OBSTACLE,
@@ -105,9 +104,11 @@ def test_the_robot_moves_in_the_picture():
     sim = Simulation(load_world(DEMO), dt=1.0)
     view = View(sim)
     before = pygame.image.tobytes(view.render(), "RGB")
-    view.step(lambda _: {"r1": (1.0, 0.0)})
+    view.step(lambda _: {"r1": Twist(vx=1.0, wz=0.0)})
     assert pygame.image.tobytes(view.render(), "RGB") != before
-    assert list(view.trails["r1"]) == pytest.approx([(1.0, 1.0), (2.0, 1.0)])
+    assert np.array(view.trails["r1"]) == pytest.approx(
+        np.array([(1.0, 1.0), (2.0, 1.0)])
+    )
     assert close(pixel(view, view.render(), 2.0, 0.9), ROBOT_COLORS[0])
 
 
@@ -116,8 +117,34 @@ def test_the_trail_keeps_only_the_last_positions():
     sim = Simulation(load_world(DEMO))
     view = View(sim, trail=3)
     for _ in range(10):
-        view.step(lambda _: {"r1": (0.5, 0.0)})
+        view.step(lambda _: {"r1": Twist(vx=0.5, wz=0.0)})
     assert len(view.trails["r1"]) == 3
+
+
+def test_a_view_starts_the_font_system_itself():
+    """View(sim) works when nothing else has started pygame's fonts."""
+    pygame.font.quit()
+    View(Simulation(load_world(DEMO)))
+    assert pygame.font.get_init()
+
+
+def test_a_zero_trail_draws_no_path():
+    """With trail=0 nothing is kept, so a moving robot leaves no line."""
+    sim = Simulation(load_world(DEMO), dt=1.0)
+    view = View(sim, trail=0)
+    with_trail = View(Simulation(load_world(DEMO), dt=1.0))
+    for v in (view, with_trail):
+        v.step(lambda _: {"r1": Twist(vx=1.0, wz=0.0)})
+    assert len(view.trails["r1"]) == 0
+    assert pygame.image.tobytes(view.render(), "RGB") != pygame.image.tobytes(
+        with_trail.render(), "RGB"
+    )
+
+
+def test_every_robot_has_its_reach_from_the_start():
+    """The reach of the demo robot, a circle, is its radius (to the polygon)."""
+    view = View(Simulation(load_world(DEMO)))
+    assert view.reach == {"r1": pytest.approx(0.2)}
 
 
 def test_the_bar_shows_the_state():
@@ -146,7 +173,7 @@ def test_record_saves_a_gif(tmp_path):
     """The GIF has the first frame and one more for each step."""
     path = tmp_path / "run.gif"
     sim = Simulation(load_world(DEMO))
-    record(sim, lambda _: {"r1": (0.5, 0.5)}, steps=5, path=str(path))
+    record(sim, lambda _: {"r1": Twist(vx=0.5, wz=0.5)}, steps=5, path=str(path))
     assert sim.steps == 5
     with Image.open(path) as gif:
         assert gif.n_frames == 6
@@ -156,7 +183,9 @@ def test_a_gif_frame_is_every_skip_steps(tmp_path):
     """At 10 frames a second and dt = 0.05, a frame comes every 2 steps."""
     path = tmp_path / "run.gif"
     sim = Simulation(load_world(DEMO))
-    record(sim, lambda _: {"r1": (0.5, 0.5)}, steps=6, path=str(path), fps=10)
+    record(
+        sim, lambda _: {"r1": Twist(vx=0.5, wz=0.5)}, steps=6, path=str(path), fps=10
+    )
     with Image.open(path) as gif:
         assert gif.n_frames == 4
 
@@ -186,7 +215,9 @@ def run_window(monkeypatch):
             lambda: queue.pop(0) if queue else [pygame.event.Event(QUIT)],
         )
         sim = Simulation(load_world(DEMO))
-        play(sim, lambda _: {"r1": (0.5, 0.0)}, steps=steps, caption="a title")
+        play(
+            sim, lambda _: {"r1": Twist(vx=0.5, wz=0.0)}, steps=steps, caption="a title"
+        )
         return sim
 
     return run
@@ -235,13 +266,6 @@ def test_the_speed_keys_do_not_stop_the_run(window):
     mouse = pygame.event.Event(MOUSEMOTION, pos=(0, 0), rel=(0, 0), buttons=(0, 0, 0))
     frames = [[key(K_UP)], [key(K_DOWN)], [key(K_a)], [mouse]]
     assert window(frames + [[]] * 20).steps > 0
-
-
-def test_s_saves_a_screenshot(window, tmp_path, monkeypatch):
-    """The S key writes a PNG named after the simulated time."""
-    monkeypatch.chdir(tmp_path)
-    window([[key(K_s)]])
-    assert [p.name for p in tmp_path.glob("demuvo-*.png")] == ["demuvo-0.00s.png"]
 
 
 def test_the_window_gets_the_caption(window, monkeypatch):

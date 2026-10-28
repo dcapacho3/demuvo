@@ -3,42 +3,75 @@
 To add a model: write a class like DiffDrive and add it to MODELS. The
 world loader and the simulation need no other change.
 
+A command is a `Twist`, the six numbers of a ROS `cmd_vel`. A model follows the
+parts it can use and ignores the rest, with one warning. The world is flat, so
+today every model uses vx, vy and wz at most.
+
 Each model class includes:
     name: the word used in the world file
+    uses: the Twist fields it follows
+    clip: the command limited to what the robot can do
     step: the pose after `dt` seconds of a constant command.
 """
 
 from __future__ import annotations
 
 import math
+import warnings
 from dataclasses import dataclass, fields
-from typing import ClassVar
+from typing import ClassVar, Protocol
 
 import numpy as np
-from robomath import rplus_se2
+from robomath import Transform2D
 
-from .shapes import Pose
 from .verify import check_keys, number, table
 
 
-def _to_matrix(pose: Pose) -> np.ndarray:
-    """The 3x3 matrix of an (x, y, angle) pose."""
-    x, y, angle = pose
-    c, s = math.cos(angle), math.sin(angle)
-    return np.array([[c, -s, x], [s, c, y], [0.0, 0.0, 1.0]])
+@dataclass(frozen=True)
+class Twist:
+    """A velocity command, with the names and axes of a ROS Twist.
+
+    Attributes:
+        vx, vy, vz: speed along the robot's x, y and z axes in m/s.
+        wx, wy, wz: turn rate about those axes in rad/s.
+
+    Raises:
+        ValueError: if a value is nan or infinite.
+    """
+
+    vx: float = 0.0
+    vy: float = 0.0
+    vz: float = 0.0
+    wx: float = 0.0
+    wy: float = 0.0
+    wz: float = 0.0
+
+    def __post_init__(self) -> None:
+        """Refuse nan and infinity, so they never become a speed."""
+        for field in fields(self):
+            if not math.isfinite(getattr(self, field.name)):
+                raise ValueError(f"{field.name} must be finite, got {self}")
 
 
-def _to_pose(matrix: np.ndarray) -> Pose:
-    """The (x, y, angle) of a 3x3 pose matrix, with the angle in (-pi, pi]."""
-    angle = math.atan2(matrix[1, 0], matrix[0, 0])
-    return (float(matrix[0, 2]), float(matrix[1, 2]), angle)
+class Model(Protocol):
+    """What every model class offers; see the module docstring."""
+
+    name: ClassVar[str]
+    uses: ClassVar[tuple[str, ...]]
+
+    def clip(self, command: Twist) -> Twist:
+        """The command limited to what the robot can do."""
+
+    def step(self, pose: Transform2D, command: Twist, dt: float) -> Transform2D:
+        """The pose after dt seconds of command."""
 
 
 @dataclass(frozen=True)
 class DiffDrive:
     """Two wheels on one axle.
 
-    The command is (v, w): forward speed in m/s and turn rate in rad/s.
+    It follows vx and wz. It cannot move sideways, so it ignores vy, and the
+    rest of the Twist is out of its plane.
     The step is exact for a constant command, the robot follows a circular arc
     of radius v / w, or a straight line when w is zero.
 
@@ -51,23 +84,33 @@ class DiffDrive:
     max_w: float = 1.0
 
     name: ClassVar[str] = "diff_drive"
+    uses: ClassVar[tuple[str, ...]] = ("vx", "wz")
 
-    def clip(self, command: tuple[float, float]) -> tuple[float, float]:
-        """Limit a command to the speeds this robot can reach."""
-        v, w = command
-        return (
-            max(-self.max_v, min(self.max_v, v)),
-            max(-self.max_w, min(self.max_w, w)),
+    def clip(self, command: Twist) -> Twist:
+        """Limit a command to the speeds this robot can reach.
+
+        Warns once if the command asks for something the robot cannot do.
+        """
+        ignored = [
+            f.name
+            for f in fields(command)
+            if f.name not in self.uses and getattr(command, f.name) != 0.0
+        ]
+        if ignored:
+            warnings.warn(f"{self.name} ignores {', '.join(ignored)}")
+        return Twist(
+            vx=max(-self.max_v, min(self.max_v, command.vx)),
+            wz=max(-self.max_w, min(self.max_w, command.wz)),
         )
 
-    def step(self, pose: Pose, command: tuple[float, float], dt: float) -> Pose:
+    def step(self, pose: Transform2D, command: Twist, dt: float) -> Transform2D:
         """The pose after dt seconds of command."""
-        v, w = self.clip(command)
-        moved = rplus_se2(_to_matrix(pose), np.array([v * dt, 0.0, w * dt]))
-        return _to_pose(moved)
+        command = self.clip(command)
+        return pose.rplus(np.array([command.vx * dt, 0.0, command.wz * dt]))
 
 
-MODELS = {cls.name: cls for cls in (DiffDrive,)}
+# The one place that lists the models, a new model class needs only an entry here.
+MODELS: dict[str, type[Model]] = {cls.name: cls for cls in (DiffDrive,)}
 
 
 def parse_params(value, model: str, label: str) -> dict[str, float]:

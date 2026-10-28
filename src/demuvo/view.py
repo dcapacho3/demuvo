@@ -1,7 +1,7 @@
 """A top-down view of a simulation, drawn with pygame.
 
 This module is not imported by `demuvo`, so the core runs without pygame.
-Install it with `pip install demuvo[view]`.
+Install the `view` extra of the package to use it.
 
 The window and the GIF share one drawing routine: a frame is drawn at twice
 the size and shrunk, which smooths the edges.
@@ -26,15 +26,17 @@ from pygame.locals import (
     KEYDOWN,
     QUIT,
     SRCALPHA,
-    K_s,
 )
 
-from .shapes import Circle, LineString, Pose, Shape
+from .models import Twist
+from .poses import Pose
+from .shapes import Circle, LineString, Shape
 from .simulation import Simulation
 
-Commands = Callable[[Simulation], Mapping[str, tuple[float, float]]]
+Commands = Callable[[Simulation], Mapping[str, Twist]]
 
 SS = 2
+TRAIL = 4000  # past positions kept for each robot's trail
 HUD = 34
 MARGIN = 0.35
 TILE = 1.0
@@ -80,13 +82,15 @@ class View:
     Attributes:
         sim: the simulation that is drawn.
         size: size in pixels of a rendered frame.
+        reach: for each robot name, the distance from its pose to the farthest
+            point of its body.
         paused: shown in the top bar.
         speed: shown in the top bar, as a multiple of real time.
         done: shown in the top bar when the run has ended.
     """
 
     def __init__(
-        self, sim: Simulation, width: int = 960, height: int = 640, trail: int = 4000
+        self, sim: Simulation, width: int = 960, height: int = 640, trail: int = TRAIL
     ) -> None:
         """Work out the scale and draw the parts that do not move.
 
@@ -94,8 +98,10 @@ class View:
             sim: the simulation to draw.
             width: largest width of the world area in pixels.
             height: largest height of the world area in pixels.
-            trail: number of past positions kept for each robot's trail.
+            trail: number of past positions kept for each robot's trail; 0
+                draws no trail.
         """
+        pygame.font.init()
         self.sim = sim
         w, h = sim.world.size
         self.scale = min(width / (w + 2 * MARGIN), height / (h + 2 * MARGIN))
@@ -105,8 +111,10 @@ class View:
         )
         self.size = (self._scene[0], self._scene[1] + HUD)
         self.trails = {
-            name: deque([pose[:2]], maxlen=trail) for name, pose in sim.poses.items()
+            name: deque([tuple(pose.translation)], maxlen=trail)
+            for name, pose in sim.poses.items()
         }
+        self.reach = {r.name: _reach(r.shape) for r in sim.world.robots}
         self.paused = False
         self.speed = 1.0
         self.done = False
@@ -181,7 +189,7 @@ class View:
         """Advance the simulation one step and record where each robot is."""
         self.sim.step(commands(self.sim))
         for name, pose in self.sim.poses.items():
-            self.trails[name].append(pose[:2])
+            self.trails[name].append(tuple(pose.translation))
 
     def render(self) -> pygame.Surface:
         """The picture of the simulation as it is now."""
@@ -219,12 +227,12 @@ class View:
 
     def _draw_robot(self, layer: pygame.Surface, robot, color: str) -> None:
         """The body, with a white line from the centre toward the front."""
-        pose = self.sim.poses[robot.name]
+        pose = self.sim.poses[robot.name].xyt
         points = self._points(outline(robot.shape, pose))
         pygame.draw.polygon(layer, color, points)
         pygame.draw.polygon(layer, _darker(color), points, width=SS * 2)
         x, y, angle = pose
-        reach = 0.8 * _reach(robot.shape)
+        reach = 0.8 * self.reach[robot.name]
         centre = self.to_pixel(x, y, SS)
         front = self.to_pixel(
             x + reach * math.cos(angle), y + reach * math.sin(angle), SS
@@ -235,17 +243,17 @@ class View:
 
     def _draw_label(self, frame: pygame.Surface, robot) -> None:
         """The robot's name above it."""
-        x, y, _ = self.sim.poses[robot.name]
+        x, y, _ = self.sim.poses[robot.name].xyt
         text = self._small.render(robot.name, True, WALL)
         cx, cy = self.to_pixel(x, y)
-        top = cy + HUD - _reach(robot.shape) * self.scale - 16
+        top = cy + HUD - self.reach[robot.name] * self.scale - 16
         frame.blit(text, (cx - text.get_width() / 2, top))
 
     def _draw_bar(self, frame: pygame.Surface) -> None:
         """Time and speed on the left, the keys on the right."""
         state = "   DONE" if self.done else "   PAUSED" if self.paused else ""
         left = f"t = {self.sim.time:6.2f} s    speed x{self.speed:g}{state}"
-        keys = "SPACE pause   RIGHT step   UP/DOWN speed   S screenshot   ESC quit"
+        keys = "SPACE pause   RIGHT step   UP/DOWN speed   ESC quit"
         frame.blit(self._font.render(left, True, TEXT), (12, 8))
         right = self._small.render(keys, True, OUTSIDE)
         frame.blit(right, (self.size[0] - right.get_width() - 12, 10))
@@ -257,7 +265,12 @@ class View:
 
 
 def record(
-    sim: Simulation, commands: Commands, steps: int, path: str, fps: int = 20
+    sim: Simulation,
+    commands: Commands,
+    steps: int,
+    path: str,
+    fps: int = 20,
+    trail: int = TRAIL,
 ) -> None:
     """Run `steps` steps and save the run as a GIF, one frame every 1 / fps seconds.
 
@@ -270,9 +283,9 @@ def record(
         steps: number of steps to run.
         path: where to save the GIF.
         fps: frames per second of the GIF.
+        trail: past positions kept for each robot's trail; 0 draws none.
     """
-    pygame.font.init()
-    view = View(sim)
+    view = View(sim, trail=trail)
     skip = max(1, round(1 / (fps * sim.dt)))
     frames = [view.image()]
     for i in range(1, steps + 1):
@@ -296,13 +309,11 @@ def _change_speed(speed: float, up: bool) -> float:
 
 
 def _on_key(view: View, key: int) -> None:
-    """Apply a key that changes only the view: pause, speed, screenshot."""
+    """Apply a key that changes only the view: pause or speed."""
     if key == K_SPACE:
         view.paused = not view.paused
     elif key in (K_UP, K_DOWN):
         view.speed = _change_speed(view.speed, key == K_UP)
-    elif key == K_s:
-        pygame.image.save(view.render(), f"demuvo-{view.sim.time:.2f}s.png")
 
 
 def _read_events(view: View) -> tuple[bool, bool]:
@@ -357,6 +368,7 @@ def play(
     commands: Commands,
     steps: int | None = None,
     caption: str = "demuvo",
+    trail: int = TRAIL,
 ) -> None:
     """Run the simulation in a window until it is closed.
 
@@ -367,6 +379,6 @@ def play(
         steps: number of steps to run before the run counts as done, or None
             to run for as long as the window is open.
         caption: title of the window.
+        trail: past positions kept for each robot's trail; 0 draws none.
     """
-    pygame.font.init()
-    _window(View(sim), commands, steps, caption)
+    _window(View(sim, trail=trail), commands, steps, caption)

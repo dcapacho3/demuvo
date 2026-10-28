@@ -329,3 +329,9 @@ def test_a_param_must_be_positive(tmp_path):
     )
     with pytest.raises(WorldError, match=r"robot 'r1' params.*max_v"):
         load(tmp_path, text)
+
+
+def test_a_toml_syntax_error_is_a_world_error(tmp_path):
+    """A file that is not TOML raises WorldError, like any other bad file."""
+    with pytest.raises(WorldError, match="not valid TOML"):
+        load(tmp_path, "version = = 1")

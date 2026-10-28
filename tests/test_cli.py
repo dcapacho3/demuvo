@@ -14,7 +14,7 @@ DEMO = str(Path(__file__).resolve().parents[1] / "examples" / "worlds" / "demo.t
 def test_check_reads_the_file_and_opens_nothing(capsys):
     """--check prints a summary and returns 0."""
     assert main([DEMO, "--check"]) == 0
-    assert "3 obstacles, 1 robots" in capsys.readouterr().out
+    assert "3 obstacles, 1 robot" in capsys.readouterr().out
 
 
 def test_a_wrong_file_names_the_problem(tmp_path, capsys):
@@ -41,21 +41,43 @@ def test_a_bad_step_length_is_reported(capsys):
 
 def test_the_window_opens_with_the_file_name(monkeypatch):
     """With no options the view gets the simulation and a caption."""
-    pytest.importorskip("pygame")
+    view = pytest.importorskip("demuvo.view")
     calls = []
     monkeypatch.setattr("demuvo.view.play", lambda *a, **k: calls.append((a, k)))
     assert main([DEMO]) == 0
     assert len(calls) == 1
     args, kwargs = calls[0]
     assert len(args) == 2
-    assert kwargs == {"caption": "demuvo - demo.toml"}
+    assert kwargs == {"caption": "demuvo - demo.toml", "trail": view.TRAIL}
+
+
+def test_no_trail_turns_the_path_off(monkeypatch):
+    """--no-trail asks the view for a trail of 0 points."""
+    pytest.importorskip("pygame")
+    calls = []
+    monkeypatch.setattr("demuvo.view.play", lambda *a, **k: calls.append(k))
+    assert main([DEMO, "--no-trail"]) == 0
+    assert calls[0]["trail"] == 0
 
 
 def test_without_pygame_the_message_says_how_to_install(monkeypatch, capsys):
-    """A missing view module is a hint, not a traceback."""
-    monkeypatch.setitem(sys.modules, "demuvo.view", None)
+    """A missing package is a hint on stderr that names it, not a traceback."""
+    monkeypatch.delitem(sys.modules, "demuvo.view", raising=False)
+    monkeypatch.setitem(sys.modules, "pygame", None)
     assert main([DEMO]) == 1
-    assert "demuvo[view]" in capsys.readouterr().out
+    err = capsys.readouterr().err
+    assert "'pygame'" in err
+    assert "'view' extra" in err
+
+
+def test_a_bad_option_ends_with_code_2(capsys):
+    """Argparse refuses a step length that is not a number."""
+    with pytest.raises(SystemExit) as info:
+        main([DEMO, "--dt", "abc"])
+    assert info.value.code == 2
+    with pytest.raises(SystemExit) as info:
+        main([])
+    assert info.value.code == 2
 
 
 def test_python_dash_m_runs_the_command(monkeypatch):

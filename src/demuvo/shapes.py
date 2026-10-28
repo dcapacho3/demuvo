@@ -10,15 +10,18 @@ Each shape class says:
     pose_optional: True if the vertices can be given in world coordinates, so
         the object may leave out the pose.
     parse: builds the shape from its table and checks it.
-    points: where its extent lies in the world, for the inside the world verification.
+    points: the corners (or the ends of a line) in the world; the loader checks
+        that they lie inside the world.
 """
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import ClassVar, Protocol
 
+from robomath import act_se2, xyt_to_se2
+
+from .poses import Point, Pose
 from .verify import (
     WorldError,
     check_keys,
@@ -29,27 +32,82 @@ from .verify import (
     text,
 )
 
-Point = tuple[float, float]
-Pose = tuple[float, float, float]
 
-
-def place(pose: Pose, points) -> list[Point]:
+def _place(pose: Pose, points) -> list[Point]:
     """Rotate points by the pose angle, then move them to the pose position."""
-    x, y, angle = pose
-    c, s = math.cos(angle), math.sin(angle)
-    return [(x + c * px - s * py, y + s * px + c * py) for px, py in points]
+    return list(map(tuple, act_se2(xyt_to_se2(pose), points).tolist()))
 
 
 def _vertices(value, minimum: int, label: str) -> tuple[Point, ...]:
-    """Check a list of at least [x, y] points."""
+    """Check a list of at least [x, y] points, none equal to the one before."""
     if not isinstance(value, list) or len(value) < minimum:
         raise WorldError(f"{label}: 'vertices' needs at least {minimum} points")
-    return tuple(numbers(v, 2, label, "vertices") for v in value)
+    points = tuple(
+        numbers(v, 2, label, f"vertex {i}") for i, v in enumerate(value, start=1)
+    )
+    if any(a == b for a, b in zip(points, points[1:])):
+        raise WorldError(f"{label}: two vertices in a row are equal")
+    return points
+
+
+def _cross(o: Point, a: Point, b: Point) -> float:
+    """Twice the signed area of the triangle o, a, b."""
+    return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+
+def _on(a: Point, b: Point, p: Point) -> bool:
+    """True if p, which is on the line through a and b, is between them."""
+    return min(a[0], b[0]) <= p[0] <= max(a[0], b[0]) and (
+        min(a[1], b[1]) <= p[1] <= max(a[1], b[1])
+    )
+
+
+def _touch(a: Point, b: Point, c: Point, d: Point) -> bool:
+    """True if the segments ab and cd share a point."""
+    d1, d2, d3, d4 = _cross(a, b, c), _cross(a, b, d), _cross(c, d, a), _cross(c, d, b)
+    if d1 * d2 < 0 and d3 * d4 < 0:
+        return True
+    return (
+        (d1 == 0 and _on(a, b, c))
+        or (d2 == 0 and _on(a, b, d))
+        or (d3 == 0 and _on(c, d, a))
+        or (d4 == 0 and _on(c, d, b))
+    )
+
+
+def _check_simple(vertices: tuple[Point, ...], label: str) -> None:
+    """Refuse a polygon with no area, a spike, or edges that touch.
+
+    The tests are exact, which suits coordinates typed by hand.
+    """
+    n = len(vertices)
+    if vertices[0] == vertices[-1]:
+        raise WorldError(f"{label}: the first and last vertex are equal")
+    twice_area = sum(
+        vertices[i][0] * vertices[(i + 1) % n][1]
+        - vertices[(i + 1) % n][0] * vertices[i][1]
+        for i in range(n)
+    )
+    if twice_area == 0:
+        raise WorldError(f"{label}: the polygon has no area")
+    for i in range(n):
+        prev, here, after = vertices[i - 1], vertices[i], vertices[(i + 1) % n]
+        turns_back = (here[0] - prev[0]) * (after[0] - here[0]) + (
+            here[1] - prev[1]
+        ) * (after[1] - here[1]) < 0
+        if _cross(prev, here, after) == 0 and turns_back:
+            raise WorldError(f"{label}: the polygon doubles back at vertex {i + 1}")
+    for i in range(n):
+        for j in range(i + 2, n):
+            if i == 0 and j == n - 1:
+                continue
+            if _touch(vertices[i], vertices[i + 1], vertices[j], vertices[(j + 1) % n]):
+                raise WorldError(f"{label}: edges {i + 1} and {j + 1} touch")
 
 
 @dataclass(frozen=True)
 class Circle:
-    """A circle.
+    """A circle. The angle of the pose does not change it.
 
     Attributes:
         radius: radius in metres.
@@ -96,9 +154,8 @@ class Box:
 
     def points(self, pose: Pose) -> list[Point]:
         """The four corners, in order around the box."""
-        half_x, half_y = self.size[0] / 2, self.size[1] / 2
-        corners = [(-half_x, -half_y), (half_x, -half_y), (half_x, half_y)]
-        return place(pose, [*corners, (-half_x, half_y)])
+        hx, hy = self.size[0] / 2, self.size[1] / 2
+        return _place(pose, [(-hx, -hy), (hx, -hy), (hx, hy), (-hx, hy)])
 
 
 @dataclass(frozen=True)
@@ -119,11 +176,13 @@ class Polygon:
     @classmethod
     def parse(cls, data: dict, label: str) -> Polygon:
         """Build a polygon from its table."""
-        return cls(_vertices(require_key(data, "vertices", label), 3, label))
+        vertices = _vertices(require_key(data, "vertices", label), 3, label)
+        _check_simple(vertices, label)
+        return cls(vertices)
 
     def points(self, pose: Pose) -> list[Point]:
         """The vertices in the world."""
-        return place(pose, self.vertices)
+        return _place(pose, self.vertices)
 
 
 @dataclass(frozen=True)
@@ -148,11 +207,26 @@ class LineString:
 
     def points(self, pose: Pose) -> list[Point]:
         """The vertices in the world."""
-        return place(pose, self.vertices)
+        return _place(pose, self.vertices)
 
 
-Shape = Circle | Box | Polygon | LineString
+class Shape(Protocol):
+    """What every shape class offers; see the module docstring."""
 
+    name: ClassVar[str]
+    keys: ClassVar[set[str]]
+    closed: ClassVar[bool]
+    pose_optional: ClassVar[bool]
+
+    @classmethod
+    def parse(cls, data: dict, label: str) -> Shape:
+        """Build the shape from its table."""
+
+    def points(self, pose: Pose) -> list[Point]:
+        """Where the shape lies in the world."""
+
+
+# The one place that lists the shapes, a new shape class needs only an entry here.
 SHAPES: dict[str, type[Shape]] = {
     cls.name: cls for cls in (Circle, Box, Polygon, LineString)
 }

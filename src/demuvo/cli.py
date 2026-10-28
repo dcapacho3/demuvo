@@ -12,6 +12,11 @@ from .simulation import Simulation
 from .world import load_world
 
 
+def _count(n: int, word: str) -> str:
+    """'1 robot', '2 robots'."""
+    return f"{n} {word}" + ("" if n == 1 else "s")
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the command.
 
@@ -20,7 +25,9 @@ def main(argv: list[str] | None = None) -> int:
             command line.
 
     Returns:
-        The exit code: 0 on success, 1 if the file or an option is wrong.
+        The exit code: 0 on success, 1 if the file or the step length is wrong.
+        A missing or malformed option ends the program with code 2, as argparse
+        does.
     """
     parser = argparse.ArgumentParser(
         prog="demuvo", description="Open a world file and watch it."
@@ -30,6 +37,9 @@ def main(argv: list[str] | None = None) -> int:
         "--check", action="store_true", help="check the file and open nothing"
     )
     parser.add_argument("--dt", type=float, default=0.05, help="step length in s")
+    parser.add_argument(
+        "--no-trail", action="store_true", help="do not draw the path of each robot"
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -40,8 +50,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if args.check:
         print(
-            f"{args.world}: ok, {len(world.obstacles)} obstacles, "
-            f"{len(world.robots)} robots"
+            f"{args.world}: ok, {_count(len(world.obstacles), 'obstacle')}, "
+            f"{_count(len(world.robots), 'robot')}"
         )
         return 0
 
@@ -49,8 +59,17 @@ def main(argv: list[str] | None = None) -> int:
     os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
     try:
         view = importlib.import_module(".view", __package__)
-    except ImportError:
-        print("demuvo: the view needs pygame: pip install demuvo[view]")
+    except ModuleNotFoundError as error:
+        print(
+            f"demuvo: the view needs the package '{error.name}': "
+            "install the 'view' extra of demuvo",
+            file=sys.stderr,
+        )
         return 1
-    view.play(sim, lambda _: {}, caption=f"demuvo - {Path(args.world).name}")
+    view.play(
+        sim,
+        lambda _: {},
+        caption=f"demuvo - {Path(args.world).name}",
+        trail=0 if args.no_trail else view.TRAIL,
+    )
     return 0

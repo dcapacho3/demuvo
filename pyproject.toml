@@ -11,7 +11,7 @@ authors = [
 description = "A small, deterministic 2D world for robots."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["numpy", "robomath>=0.1.1"]
+dependencies = ["numpy", "robomath>=0.1.2"]
 keywords = ["robotics", "simulator", "2d", "kinematics", "lidar", "odometry", "numpy"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
