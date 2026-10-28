@@ -49,13 +49,18 @@ class Navigation:
             if robot.controller is None:
                 continue
             self._controllers[robot.name] = load_class(
-                robot.controller, robot.controller_params, robot.name, "controller"
+                robot.controller,
+                robot.controller_params,
+                robot.name,
+                "controller",
+                "command",
             )
             self._planners[robot.name] = load_class(
                 robot.planner or DEFAULT_PLANNER,
                 robot.planner_params,
                 robot.name,
                 "planner",
+                "plan",
             )
 
     def set_goal(self, name: str, goal: Pose | None) -> None:

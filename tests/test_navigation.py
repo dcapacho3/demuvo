@@ -220,3 +220,30 @@ def test_a_goal_or_path_for_an_unknown_robot_is_refused(tmp_path, monkeypatch):
         nav.set_goal("r2", (1.0, 1.0, 0.0))
     with pytest.raises(ValueError, match="no robot named 'r2'"):
         nav.set_path("r2", [[1.0, 1.0, 0.0]])
+
+
+@pytest.mark.parametrize(
+    ("changes", "kind", "method"),
+    [
+        (
+            {
+                PURE_PURSUIT: 'controller = "demuvo.planners:StraightLine"',
+                "controller_params = { speed = 0.5, lookahead = 0.6 }": "",
+            },
+            "controller",
+            "command",
+        ),
+        (
+            {"demuvo.planners:StraightLine": "demuvo.controllers:PurePursuit"},
+            "planner",
+            "plan",
+        ),
+    ],
+)
+def test_a_class_with_the_wrong_methods_is_refused_before_the_first_step(
+    tmp_path, changes, kind, method
+):
+    """A planner named as a controller, or the reverse, fails at load, by name."""
+    path = world_file(tmp_path, **changes)
+    with pytest.raises(WorldError, match=f"robot 'r1': {kind} .* has no '{method}'"):
+        Navigation(load_world(path))
