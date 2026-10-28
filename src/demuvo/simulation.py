@@ -22,7 +22,6 @@ class Simulation:
         world: the world that was loaded.
         dt: length of a step in seconds.
         rng: random generator, seeded with the world seed.
-        specs: the robot entries of the world file, by name.
         models: the kinematic model of each robot, by name.
         poses: current pose of each robot, by name, as a Transform2D; its
             `xyt` is (x, y, angle).
@@ -41,11 +40,8 @@ class Simulation:
         self.world = world
         self.dt = dt
         self.rng = np.random.default_rng(world.seed)
-        self.specs = {r.name: r for r in world.robots}
         self.models = {r.name: MODELS[r.model](**r.params) for r in world.robots}
-        self.poses: dict[str, Transform2D] = {
-            r.name: Transform2D.from_xyt(r.pose) for r in world.robots
-        }
+        self.poses: dict[str, Transform2D] = {r.name: r.pose for r in world.robots}
         self.steps = 0
 
     @property

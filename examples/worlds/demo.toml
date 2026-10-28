@@ -20,8 +20,11 @@ name = "r1"
 model = "diff_drive"
 shape = { name = "circle", radius = 0.2 }     # or a box or a polygon
 pose = [1.0, 1.0, 0.0]    # where it starts: x, y, angle
-goal = [9.0, 5.0, 0.0]    # optional if testing a set goal
-goal_tolerance = [0.1, 0.1]                   # optional: metres, radians
 planner = "demuvo.planners:StraightLine"      # optional; this is the default
 controller = "demuvo.controllers:PurePursuit" # optional; module:Class
 controller_params = { speed = 0.5, lookahead = 0.6 }   # optional
+
+[[task]]                  # what a robot is to do; several for one robot are waypoints
+robot = "r1"
+goal = [9.0, 5.0, 0.0]
+goal_tolerance = [0.1, 0.1]                   # optional: metres, radians

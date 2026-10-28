@@ -6,7 +6,7 @@ from .navigation import Navigation
 from .planners import Planner, StraightLine
 from .shapes import SHAPES, Box, Circle, LineString, Polygon
 from .simulation import Simulation
-from .world import Obstacle, RobotSpec, World, WorldError, load_world
+from .world import Obstacle, RobotSpec, Task, World, WorldError, load_world
 
 __all__ = [
     "MODELS",
@@ -25,6 +25,7 @@ __all__ = [
     "RobotSpec",
     "Simulation",
     "StraightLine",
+    "Task",
     "Twist",
     "World",
     "WorldError",

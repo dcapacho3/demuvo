@@ -3,9 +3,10 @@
 from pathlib import Path
 
 import pytest
+from robomath import Transform2D
 
 from demuvo.shapes import Box, Circle, LineString, Polygon
-from demuvo.world import DEFAULT_GOAL_TOLERANCE, Obstacle, WorldError, load_world
+from demuvo.world import DEFAULT_GOAL_TOLERANCE, Obstacle, Task, WorldError, load_world
 
 GOOD = """
 version = 1
@@ -27,8 +28,11 @@ name = "r1"
 model = "diff_drive"
 shape = { name = "circle", radius = 0.2 }
 pose = [1.0, 1.0, 0.0]
-goal = [9.0, 5.0, 0.0]
 controller = "demuvo.controllers:PurePursuit"
+
+[[task]]
+robot = "r1"
+goal = [9.0, 5.0, 0.0]
 """
 
 
@@ -45,20 +49,22 @@ def load(tmp_path, text):
 
 
 def test_loads_a_good_world(tmp_path):
-    """Every field comes back, in file order, as tuples."""
+    """Every field comes back in file order; poses are Transform2D."""
     world = load(tmp_path, GOOD)
     assert world.size == (10.0, 6.0)
     assert world.seed == 7
     assert world.obstacles == (
-        Obstacle((4.0, 3.0, 0.0), Box((1.0, 2.0))),
-        Obstacle((7.0, 2.0, 0.0), Circle(0.5)),
+        Obstacle(Transform2D.from_xyt((4.0, 3.0, 0.0)), Box((1.0, 2.0))),
+        Obstacle(Transform2D.from_xyt((7.0, 2.0, 0.0)), Circle(0.5)),
     )
     (robot,) = world.robots
     assert robot.name == "r1"
     assert robot.shape == Circle(0.2)
-    assert robot.pose == (1.0, 1.0, 0.0)
-    assert robot.goal == (9.0, 5.0, 0.0)
+    assert tuple(robot.pose.xyt) == (1.0, 1.0, 0.0)
     assert robot.controller == "demuvo.controllers:PurePursuit"
+    assert world.tasks == (
+        Task("r1", Transform2D.from_xyt((9.0, 5.0, 0.0)), DEFAULT_GOAL_TOLERANCE),
+    )
 
 
 def test_the_example_world_loads():
@@ -125,9 +131,9 @@ def test_a_robot_pose_outside_the_world_is_named(tmp_path):
         load(tmp_path, GOOD.replace("pose = [1.0, 1.0, 0.0]", "pose = [0.1, 1.0, 0.0]"))
 
 
-def test_a_robot_goal_outside_the_world_is_named(tmp_path):
+def test_a_goal_outside_the_world_is_named(tmp_path):
     """The goal must be inside the world too."""
-    with pytest.raises(WorldError, match=r"robot 'r1'.*goal"):
+    with pytest.raises(WorldError, match=r"task 1.*goal"):
         load(tmp_path, GOOD.replace("goal = [9.0, 5.0, 0.0]", "goal = [9.0, 6.5, 0.0]"))
 
 
@@ -208,12 +214,14 @@ def test_the_world_must_be_a_table(tmp_path):
         load(tmp_path, "version = 1\nworld = 3\n")
 
 
-def test_goal_and_controller_are_optional(tmp_path):
+def test_tasks_and_controller_are_optional(tmp_path):
     """A robot needs only a name, a model, a shape and a pose."""
-    text = GOOD[: GOOD.index("goal =")]
-    (robot,) = load(tmp_path, text).robots
-    assert robot.goal is None
-    assert robot.controller is None
+    text = GOOD[: GOOD.index("[[task]]")].replace(
+        'controller = "demuvo.controllers:PurePursuit"\n', ""
+    )
+    world = load(tmp_path, text)
+    assert not world.tasks
+    assert world.robots[0].controller is None
 
 
 def test_a_robot_can_be_a_box(tmp_path):
@@ -247,7 +255,7 @@ def test_a_polygon_obstacle_and_a_wall_load(tmp_path):
     text = GOOD.replace("[[robot]]", extra + "[[robot]]")
     *_, polygon, wall = load(tmp_path, text).obstacles
     assert polygon == Obstacle(
-        (0.0, 0.0, 0.0), Polygon(((5.0, 4.0), (6.0, 4.0), (5.5, 5.0)))
+        Transform2D.identity(), Polygon(((5.0, 4.0), (6.0, 4.0), (5.5, 5.0)))
     )
     assert wall.shape == LineString(((2.0, 5.0), (2.0, 3.5)))
 
@@ -337,29 +345,32 @@ def test_a_toml_syntax_error_is_a_world_error(tmp_path):
         load(tmp_path, "version = = 1")
 
 
-def test_a_robot_gets_the_default_goal_tolerance(tmp_path):
+def test_a_robot_gets_the_default_goal_tolerance_and_no_planner(tmp_path):
     """No `goal_tolerance` gives the default; the planner and its params are empty."""
-    robot = load(tmp_path, GOOD).robots[0]
-    assert robot.goal_tolerance == DEFAULT_GOAL_TOLERANCE
+    world = load(tmp_path, GOOD)
+    robot = world.robots[0]
+    assert world.tasks[0].goal_tolerance == DEFAULT_GOAL_TOLERANCE
     assert robot.planner is None
     assert (robot.controller_params, robot.planner_params) == ({}, {})
 
 
 def test_the_planner_controller_and_their_params_come_back(tmp_path):
-    """The new keys are read as written."""
+    """The planner and controller keys are read as written; so is the tolerance."""
     text = GOOD.replace(
         'controller = "demuvo.controllers:PurePursuit"',
         'controller = "demuvo.controllers:PurePursuit"\n'
         "controller_params = { speed = 0.3, rotate_to_goal = false }\n"
         'planner = "demuvo.planners:StraightLine"\n'
-        "planner_params = { spacing = 0.1 }\n"
-        "goal_tolerance = [0.2, 0.3]",
+        "planner_params = { spacing = 0.1 }",
+    ).replace(
+        "goal = [9.0, 5.0, 0.0]", "goal = [9.0, 5.0, 0.0]\ngoal_tolerance = [0.2, 0.3]"
     )
-    robot = load(tmp_path, text).robots[0]
+    world = load(tmp_path, text)
+    robot = world.robots[0]
     assert robot.controller_params == {"speed": 0.3, "rotate_to_goal": False}
     assert robot.planner == "demuvo.planners:StraightLine"
     assert robot.planner_params == {"spacing": 0.1}
-    assert robot.goal_tolerance == (0.2, 0.3)
+    assert world.tasks[0].goal_tolerance == (0.2, 0.3)
 
 
 @pytest.mark.parametrize(
@@ -368,26 +379,58 @@ def test_the_planner_controller_and_their_params_come_back(tmp_path):
         ('planner = "StraightLine"', "'planner' must be 'module:Class'"),
         ("planner_params = { spacing = 0.1 }", "'planner_params' needs 'planner'"),
         ("controller_params = 3", "controller_params.*table"),
-        ("goal_tolerance = [0.1]", "'goal_tolerance' needs 2"),
-        ("goal_tolerance = [0.1, 0.0]", "'goal_tolerance' must be positive"),
     ],
 )
-def test_bad_planner_and_tolerance_keys_are_named(tmp_path, extra, message):
-    """Each mistake in the new keys names the robot and the key."""
-    text = GOOD.replace('controller = "demuvo.controllers:PurePursuit"\n', "")
-    text = text.replace(
-        "goal = [9.0, 5.0, 0.0]\n", "goal = [9.0, 5.0, 0.0]\n" + extra + "\n"
-    )
-    if extra.startswith("controller_params"):
-        text = text.replace(
-            "controller_params", 'controller = "a:B"\ncontroller_params'
-        )
+def test_bad_planner_keys_are_named(tmp_path, extra, message):
+    """Each mistake in the planner or controller keys names the robot and the key."""
+    pose = "pose = [1.0, 1.0, 0.0]\n"
+    text = GOOD.replace(pose, pose + extra + "\n")
     with pytest.raises(WorldError, match=f"robot 'r1'.*{message}"):
         load(tmp_path, text)
 
 
-def test_a_tolerance_needs_a_goal(tmp_path):
-    """Without a goal there is nothing to be within."""
-    text = GOOD.replace("goal = [9.0, 5.0, 0.0]", "goal_tolerance = [0.1, 0.1]")
-    with pytest.raises(WorldError, match="'goal_tolerance' needs 'goal'"):
+@pytest.mark.parametrize(
+    ("old", "new", "message"),
+    [
+        ('robot = "r1"', 'robot = "r9"', "task 1: no robot named 'r9'"),
+        ('robot = "r1"\n', "", "task 1: missing 'robot'"),
+        ("goal = [9.0, 5.0, 0.0]", "", "task 1: missing 'goal'"),
+        ("goal = [9.0, 5.0, 0.0]", "goal = [9.0, 5.0, 0.0]\nspeed = 1", "unknown key"),
+        (
+            "goal = [9.0, 5.0, 0.0]",
+            "goal = [9.0, 5.0, 0.0]\ngoal_tolerance = [0.1]",
+            "'goal_tolerance' needs 2",
+        ),
+        (
+            "goal = [9.0, 5.0, 0.0]",
+            "goal = [9.0, 5.0, 0.0]\ngoal_tolerance = [0.1, 0.0]",
+            "'goal_tolerance' must be positive",
+        ),
+    ],
+)
+def test_a_bad_task_is_named(tmp_path, old, new, message):
+    """Each mistake in a task names the task and the key."""
+    head, tail = GOOD.split("[[task]]")
+    with pytest.raises(WorldError, match=message):
+        load(tmp_path, head + "[[task]]" + tail.replace(old, new, 1))
+
+
+def test_goal_and_goal_tolerance_belong_to_a_task_not_a_robot(tmp_path):
+    """The old place for a goal is refused, by name."""
+    text = GOOD.replace(
+        "pose = [1.0, 1.0, 0.0]\n", "pose = [1.0, 1.0, 0.0]\ngoal = [2.0, 2.0, 0.0]\n"
+    )
+    with pytest.raises(WorldError, match=r"robot 'r1'.*unknown key 'goal'"):
         load(tmp_path, text)
+
+
+def test_several_tasks_for_one_robot_are_kept_in_file_order(tmp_path):
+    """Waypoints: the order of the file is the order of the tasks."""
+    second = '\n[[task]]\nrobot = "r1"\ngoal = [5.0, 5.0, 0.0]\n'
+    third = '\n[[task]]\nrobot = "r1"\ngoal = [2.0, 4.0, 0.0]\n'
+    tasks = load(tmp_path, GOOD + second + third).tasks
+    assert [tuple(t.goal.xyt[:2]) for t in tasks] == [
+        (9.0, 5.0),
+        (5.0, 5.0),
+        (2.0, 4.0),
+    ]

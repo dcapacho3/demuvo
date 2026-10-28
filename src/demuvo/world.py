@@ -9,8 +9,9 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from robomath import Transform2D
+
 from .models import MODELS, parse_params
-from .poses import Pose
 from .shapes import Shape, parse_shape
 from .verify import (
     WorldError,
@@ -33,6 +34,7 @@ __all__ = [
     "FORMAT_VERSION",
     "Obstacle",
     "RobotSpec",
+    "Task",
     "World",
     "WorldError",
     "load_world",
@@ -44,11 +46,11 @@ class Obstacle:
     """A fixed object.
 
     Attributes:
-        pose: x, y coordinates of the origin and the angle in radians.
+        pose: where its origin is and which way it points.
         shape: its shape.
     """
 
-    pose: Pose
+    pose: Transform2D
     shape: Shape
 
 
@@ -60,27 +62,40 @@ class RobotSpec:
         name: unique name.
         model: name of a kinematic model, for example "diff_drive".
         shape: its body, a shape that encloses an area.
-        pose: where it starts: x, y and angle in radians.
-        goal: where it should end: x, y and angle in radians, or None.
+        pose: where it starts.
         controller: "module:Class" of the controller, or None.
         params: values that replace the model defaults, such as max_v.
         planner: "module:Class" of the planner, or None for the default.
         controller_params: keyword arguments for the controller class.
         planner_params: keyword arguments for the planner class.
-        goal_tolerance: distance in metres and angle in radians within which
-            the robot counts as at its goal.
     """
 
     name: str
     model: str
     shape: Shape
-    pose: Pose
-    goal: Pose | None = None
+    pose: Transform2D
     controller: str | None = None
     params: dict[str, float] = field(default_factory=dict)
     planner: str | None = None
     controller_params: dict = field(default_factory=dict)
     planner_params: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class Task:
+    """Something a robot is to do: go to a goal.
+
+    Several tasks for one robot, in file order, are waypoints.
+
+    Attributes:
+        robot: name of the robot.
+        goal: where it should end.
+        goal_tolerance: distance in metres and angle in radians within which
+            the robot counts as at its goal.
+    """
+
+    robot: str
+    goal: Transform2D
     goal_tolerance: tuple[float, float] = DEFAULT_GOAL_TOLERANCE
 
 
@@ -93,12 +108,14 @@ class World:
         seed: seed for every random number the run uses.
         obstacles: the obstacles, in file order.
         robots: the robots, in file order.
+        tasks: what the robots are to do, in file order.
     """
 
     size: tuple[float, float]
     seed: int
     obstacles: tuple[Obstacle, ...]
     robots: tuple[RobotSpec, ...]
+    tasks: tuple[Task, ...] = ()
 
 
 def _parse_obstacle(item: dict, index: int, size) -> Obstacle:
@@ -108,12 +125,17 @@ def _parse_obstacle(item: dict, index: int, size) -> Obstacle:
     check_keys(item, {"shape", "pose"}, label)
     shape = parse_shape(require_key(item, "shape", label), label)
     if "pose" in item or not shape.pose_optional:
-        pose = numbers(require_key(item, "pose", label), 3, label, "pose")
+        pose = _pose(item, label)
     else:
-        pose = (0.0, 0.0, 0.0)
+        pose = Transform2D.identity()
     if not inside(shape.points(pose), size):
         raise WorldError(f"{label}: must lie inside the world")
     return Obstacle(pose, shape)
+
+
+def _pose(item: dict, label: str, key: str = "pose") -> Transform2D:
+    """Read a required (x, y, angle) as a pose."""
+    return Transform2D.from_xyt(numbers(require_key(item, key, label), 3, label, key))
 
 
 def _plugin(item: dict, key: str, label: str) -> str | None:
@@ -151,8 +173,6 @@ def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
             "model",
             "shape",
             "pose",
-            "goal",
-            "goal_tolerance",
             "planner",
             "planner_params",
             "controller",
@@ -167,33 +187,41 @@ def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
         raise WorldError(f"{label}: unknown model '{model}', expected one of {known}")
     params = parse_params(item.get("params", {}), model, label)
     shape = parse_shape(require_key(item, "shape", label), label, robot=True)
-    pose = numbers(require_key(item, "pose", label), 3, label, "pose")
-    goal = numbers(item["goal"], 3, label, "goal") if "goal" in item else None
-    if "goal_tolerance" in item and goal is None:
-        raise WorldError(f"{label}: 'goal_tolerance' needs 'goal'")
-    tolerance = DEFAULT_GOAL_TOLERANCE
-    if "goal_tolerance" in item:
-        tolerance = numbers(item["goal_tolerance"], 2, label, "goal_tolerance", True)
+    pose = _pose(item, label)
     controller = _plugin(item, "controller", label)
     planner = _plugin(item, "planner", label)
     controller_params = _plugin_params(item, "controller_params", "controller", label)
     planner_params = _plugin_params(item, "planner_params", "planner", label)
-    for key, where in (("pose", pose), ("goal", goal)):
-        if where is not None and not inside(shape.points(where), size):
-            raise WorldError(f"{label}: '{key}' must lie inside the world")
+    if not inside(shape.points(pose), size):
+        raise WorldError(f"{label}: 'pose' must lie inside the world")
     return RobotSpec(
         name,
         model,
         shape,
         pose,
-        goal,
         controller,
         params,
         planner,
         controller_params,
         planner_params,
-        tolerance,
     )
+
+
+def _parse_task(item: dict, index: int, size, robots: dict[str, RobotSpec]) -> Task:
+    """Build and check one `[[task]]`; the robot must be in `robots`."""
+    label = f"task {index}"
+    item = table(item, label)
+    check_keys(item, {"robot", "goal", "goal_tolerance"}, label)
+    name = text(item, "robot", label)
+    if name not in robots:
+        raise WorldError(f"{label}: no robot named '{name}'")
+    goal = _pose(item, label, "goal")
+    if not inside(robots[name].shape.points(goal), size):
+        raise WorldError(f"{label}: 'goal' must lie inside the world")
+    tolerance = DEFAULT_GOAL_TOLERANCE
+    if "goal_tolerance" in item:
+        tolerance = numbers(item["goal_tolerance"], 2, label, "goal_tolerance", True)
+    return Task(name, goal, tolerance)
 
 
 def load_world(path: str | Path) -> World:
@@ -221,7 +249,7 @@ def load_world(path: str | Path) -> World:
         raise WorldError(
             f"file: version {version} is not supported, expected {FORMAT_VERSION}"
         )
-    check_keys(data, {"version", "world", "obstacle", "robot"}, "file")
+    check_keys(data, {"version", "world", "obstacle", "robot", "task"}, "file")
 
     world = table(require_key(data, "world", "file"), "world")
     check_keys(world, {"size", "seed"}, "world")
@@ -243,4 +271,9 @@ def load_world(path: str | Path) -> World:
     if not robots:
         raise WorldError("file: needs at least one [[robot]]")
 
-    return World(size, seed, obstacles, robots)
+    by_name = {r.name: r for r in robots}
+    tasks = tuple(
+        _parse_task(item, i, size, by_name)
+        for i, item in enumerate(items(data, "task"), start=1)
+    )
+    return World(size, seed, obstacles, robots, tasks)

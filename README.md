@@ -41,7 +41,8 @@ demuvo examples/worlds/demo.toml     # a robot drives to the star; --no-trail hi
 demuvo examples/worlds/demo.toml --check   # check the file and open nothing
 ```
 
-A robot that has a `goal` gets a path from its planner, and its controller follows it:
+A robot that has a task gets a path from its planner, and its controller follows it.
+Several tasks for one robot, in file order, are waypoints:
 
 ```toml
 [[robot]]
@@ -49,10 +50,13 @@ name = "r1"
 model = "diff_drive"
 shape = { name = "circle", radius = 0.2 }
 pose = [1.0, 1.0, 0.0]                         # x, y, angle
-goal = [9.0, 5.0, 0.0]
-goal_tolerance = [0.1, 0.1]                    # metres, radians
 controller = "demuvo.controllers:PurePursuit"
 controller_params = { speed = 0.5, lookahead = 0.6, rotate_to_goal = true }
+
+[[task]]
+robot = "r1"
+goal = [9.0, 5.0, 0.0]
+goal_tolerance = [0.1, 0.1]                    # metres, radians
 ```
 
 To use your own, write a class with one method and name it in the file. A planner has

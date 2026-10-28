@@ -7,7 +7,7 @@ python examples/drive.py --gif circle.gif     save a GIF, open nothing
 import argparse
 from pathlib import Path
 
-from demuvo import Simulation, load_world
+from demuvo import Simulation, Twist, load_world
 from demuvo.view import play, record
 
 DEMO = Path(__file__).parent / "worlds" / "demo.toml"
@@ -22,8 +22,8 @@ sim = Simulation(load_world(args.world))
 
 
 def commands(_):
-    """Drive in a circle: 0.5 m/s forward and 0.5 rad/s turn."""
-    return {"r1": (0.5, 0.5)}
+    """Drive in a circle of 0.5 m radius: 0.5 m/s forward and 1 rad/s turn."""
+    return {"r1": Twist(vx=0.5, wz=1.0)}
 
 
 if args.gif:

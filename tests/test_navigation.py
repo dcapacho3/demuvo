@@ -4,8 +4,10 @@ import math
 from pathlib import Path
 
 import pytest
+from robomath import Transform2D
 
-from demuvo import Navigation, Simulation, Twist, WorldError, load_world
+from demuvo import Navigation, Simulation, Task, Twist, WorldError, load_world
+from demuvo.navigation import reached
 
 DEMO = Path(__file__).resolve().parents[1] / "examples" / "worlds" / "demo.toml"
 PURE_PURSUIT = 'controller = "demuvo.controllers:PurePursuit"'
@@ -34,7 +36,7 @@ def run(path, steps):
 def error(sim):
     """Distance and angle between the robot and its goal."""
     x, y, yaw = sim.poses["r1"].xyt
-    gx, gy, gyaw = sim.specs["r1"].goal
+    gx, gy, gyaw = sim.world.tasks[-1].goal.xyt
     return math.hypot(gx - x, gy - y), abs(
         (gyaw - yaw + math.pi) % (2 * math.pi) - math.pi
     )
@@ -83,7 +85,7 @@ def user_module(tmp_path, monkeypatch):
         "    def __init__(self, n=2):\n"
         "        self.n = n\n"
         "    def plan(self, world, start, goal):\n"
-        "        calls.append((start, goal))\n"
+        "        calls.append((tuple(start.xyt), tuple(goal.xyt)))\n"
         "        return np.zeros((self.n, 3))\n"
         "class Count:\n"
         "    def command(self, obs):\n"
@@ -105,25 +107,24 @@ def test_the_planner_runs_once_and_its_path_reaches_the_controller(
         tmp_path,
         **{
             PURE_PURSUIT: 'controller = "my_nav:Count"',
-            'planner = "demuvo.planners:StraightLine"': 'planner = "my_nav:Points"',
+            'planner = "demuvo.planners:StraightLine"': (
+                'planner = "my_nav:Points"\nplanner_params = { n = 7 }'
+            ),
             "controller_params = { speed = 0.5, lookahead = 0.6 }": "",
         },
     )
-    path.write_text(path.read_text() + "planner_params = { n = 7 }\n")
     sim = Simulation(load_world(path))
     commands = Navigation(sim.world)
     assert [commands(sim) for _ in range(3)] == [{"r1": Twist(vx=7.0)}] * 3
     assert my_nav.calls == [((1.0, 1.0, 0.0), (9.0, 5.0, 0.0))]
 
 
-def test_a_robot_with_no_goal_gets_an_empty_path(tmp_path, monkeypatch):
+def test_a_robot_with_no_task_gets_an_empty_path(tmp_path, monkeypatch):
     """The controller still runs; its path is empty."""
     user_module(tmp_path, monkeypatch)
-    lines = DEMO.read_text(encoding="utf-8").splitlines()
+    lines = DEMO.read_text(encoding="utf-8").split("[[task]]")[0].splitlines()
     text = "\n".join(
-        line
-        for line in lines
-        if not line.startswith(("goal", "planner", "controller_params"))
+        line for line in lines if not line.startswith(("planner", "controller_params"))
     ).replace("demuvo.controllers:PurePursuit", "my_nav:Count")
     path = tmp_path / "w.toml"
     path.write_text(text, encoding="utf-8")
@@ -171,14 +172,14 @@ def test_a_new_goal_is_planned_again(tmp_path, monkeypatch):
     """set_goal drops the old path; the planner runs again from where the robot is."""
     sim, nav, my_nav = counting_world(tmp_path, monkeypatch)
     nav(sim)
-    nav.set_goal("r1", (2.0, 2.0, 0.5))
+    nav.set_goal("r1", Transform2D.from_xyt((2.0, 2.0, 0.5)))
     nav(sim)
     nav(sim)
     assert my_nav.calls == [
         ((1.0, 1.0, 0.0), (9.0, 5.0, 0.0)),
         ((1.0, 1.0, 0.0), (2.0, 2.0, 0.5)),
     ]
-    assert nav.goals["r1"] == (2.0, 2.0, 0.5)
+    assert tuple(nav.tasks["r1"][0].goal.xyt) == (2.0, 2.0, 0.5)
 
 
 def test_a_path_from_outside_is_used_and_not_replanned(tmp_path, monkeypatch):
@@ -199,7 +200,7 @@ def test_the_end_of_an_outside_path_is_the_goal_when_there_is_none(
     nav.set_goal("r1", None)
     nav.set_path("r1", [[1.0, 1.0, 0.0], [4.0, 2.0, 0.7]])
     nav(sim)
-    assert seen == [(4.0, 2.0, 0.7)]
+    assert tuple(seen[0].xyt) == pytest.approx((4.0, 2.0, 0.7))
 
 
 @pytest.mark.parametrize(
@@ -217,7 +218,7 @@ def test_a_goal_or_path_for_an_unknown_robot_is_refused(tmp_path, monkeypatch):
     """Only the robots of the world can be given a goal or a path."""
     _, nav, _ = counting_world(tmp_path, monkeypatch)
     with pytest.raises(ValueError, match="no robot named 'r2'"):
-        nav.set_goal("r2", (1.0, 1.0, 0.0))
+        nav.set_goal("r2", Transform2D.from_xyt((1.0, 1.0, 0.0)))
     with pytest.raises(ValueError, match="no robot named 'r2'"):
         nav.set_path("r2", [[1.0, 1.0, 0.0]])
 
@@ -247,3 +248,40 @@ def test_a_class_with_the_wrong_methods_is_refused_before_the_first_step(
     path = world_file(tmp_path, **changes)
     with pytest.raises(WorldError, match=f"robot 'r1': {kind} .* has no '{method}'"):
         Navigation(load_world(path))
+
+
+def test_reached_needs_both_the_distance_and_the_angle():
+    """Inside the distance but not the angle is not reached."""
+    task = Task("r1", Transform2D.from_xyt((3.0, 3.0, 0.0)), (0.1, 0.2))
+    assert reached(Transform2D.from_xyt((3.05, 3.0, 0.1)), task)
+    assert not reached(Transform2D.from_xyt((3.05, 3.0, 0.5)), task)
+    assert not reached(Transform2D.from_xyt((3.3, 3.0, 0.0)), task)
+
+
+def test_a_robot_visits_its_waypoints_in_order(tmp_path):
+    """Two tasks: the robot reaches the first, goes on, and ends at the second."""
+    text = DEMO.read_text(encoding="utf-8")
+    text = text.replace("goal = [9.0, 5.0, 0.0]", "goal = [3.0, 1.0, 0.0]")
+    text += '\n[[task]]\nrobot = "r1"\ngoal = [3.0, 3.0, 1.5]\n'
+    path = tmp_path / "waypoints.toml"
+    path.write_text(text, encoding="utf-8")
+    sim = Simulation(load_world(path))
+    nav = Navigation(sim.world)
+    first = sim.world.tasks[0].goal.translation
+    closest = 99.0
+    for _ in range(1500):
+        sim.step(nav(sim))
+        x, y, _ = sim.poses["r1"].xyt
+        closest = min(closest, math.hypot(x - first[0], y - first[1]))
+    assert closest <= 0.1
+    assert reached(sim.poses["r1"], sim.world.tasks[1])
+
+
+def test_a_goal_set_from_outside_replaces_the_tasks(tmp_path, monkeypatch):
+    """set_goal leaves one task; None leaves none and the robot has no goal."""
+    sim, nav, _ = counting_world(tmp_path, monkeypatch)
+    nav.set_goal("r1", Transform2D.from_xyt((2.0, 2.0, 0.0)), (0.3, 0.4))
+    assert [t.goal_tolerance for t in nav.tasks["r1"]] == [(0.3, 0.4)]
+    nav.set_goal("r1", None)
+    assert nav.tasks["r1"] == []
+    assert nav(sim) == {"r1": Twist(vx=0.0)}

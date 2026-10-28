@@ -2,6 +2,7 @@
 
 import numpy as np
 import pytest
+from robomath import Transform2D
 
 from demuvo import SHAPES, Box, Circle, LineString, Polygon, WorldError
 from demuvo.shapes import parse_shape
@@ -24,7 +25,9 @@ def test_the_table_names_every_shape():
 
 def test_a_box_has_four_corners_around_the_pose():
     """The corners go around the box, turned and moved by the pose."""
-    corners = Box((4.0, 2.0)).points((10.0, 20.0, 3.141592653589793 / 2))
+    corners = Box((4.0, 2.0)).points(
+        Transform2D.from_xyt((10.0, 20.0, 3.141592653589793 / 2))
+    )
     assert np.array(corners) == pytest.approx(
         np.array([(11, 18), (11, 22), (9, 22), (9, 18)])
     )
@@ -32,7 +35,10 @@ def test_a_box_has_four_corners_around_the_pose():
 
 def test_a_circle_gives_the_square_around_it():
     """Two opposite corners of the square, whatever the angle."""
-    assert Circle(0.5).points((1.0, 2.0, 0.7)) == [(0.5, 1.5), (1.5, 2.5)]
+    assert Circle(0.5).points(Transform2D.from_xyt((1.0, 2.0, 0.7))) == [
+        (0.5, 1.5),
+        (1.5, 2.5),
+    ]
 
 
 def test_a_vertex_error_names_the_vertex():

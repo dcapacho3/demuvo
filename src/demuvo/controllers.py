@@ -19,7 +19,6 @@ from robomath import Transform2D, wrap_angle
 
 from .models import Twist
 from .plugins import check_positive
-from .poses import Pose
 
 
 @dataclass(frozen=True, eq=False)
@@ -35,7 +34,7 @@ class Observation:
             the simulation for collisions and scoring.
         path: the path to follow, shape (N, 3) of (x, y, angle); empty if the
             robot has no goal.
-        goal: the goal as (x, y, angle), or None.
+        goal: the goal, or None.
         goal_tolerance: distance in metres and angle in radians within which
             the robot counts as at its goal.
     """
@@ -44,7 +43,7 @@ class Observation:
     dt: float
     pose: Transform2D
     path: np.ndarray
-    goal: Pose | None
+    goal: Transform2D | None
     goal_tolerance: tuple[float, float]
 
 
@@ -109,7 +108,7 @@ class PurePursuit:
         if obs.goal is None or len(obs.path) == 0:
             raise ValueError("PurePursuit needs a goal and a path")
         to_robot = obs.pose.inverse()
-        distance = float(np.hypot(*(to_robot @ np.array(obs.goal[:2]))))
+        distance = float(np.hypot(*(to_robot @ obs.goal.translation)))
         xy_tolerance, yaw_tolerance = obs.goal_tolerance
         if distance <= xy_tolerance:
             return self._turn_to_goal(obs, yaw_tolerance)
@@ -135,7 +134,7 @@ class PurePursuit:
         """Stop, or turn on the spot to the goal's angle."""
         if not self.rotate_to_goal:
             return Twist()
-        error = float(wrap_angle(obs.goal[2] - obs.pose.xyt[2]))
+        error = float(wrap_angle(obs.goal.xyt[2] - obs.pose.xyt[2]))
         if abs(error) <= tolerance:
             return Twist()
         return Twist(wz=self._turn(error))

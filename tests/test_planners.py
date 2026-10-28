@@ -4,13 +4,20 @@ import math
 
 import numpy as np
 import pytest
+from robomath import Transform2D
 
 from demuvo import StraightLine
 
 
+def plan(start, goal, **options):
+    """The path of a StraightLine from an (x, y, angle) to another."""
+    start, goal = Transform2D.from_xyt(start), Transform2D.from_xyt(goal)
+    return StraightLine(**options).plan(None, start, goal)
+
+
 def test_the_path_runs_from_the_start_to_the_goal():
     """Points every `spacing` metres; the last one has the goal's angle."""
-    path = StraightLine(spacing=0.25).plan(None, (0.0, 0.0, 0.0), (1.0, 0.0, 1.0))
+    path = plan((0.0, 0.0, 0.0), (1.0, 0.0, 1.0), spacing=0.25)
     assert path.shape == (5, 3)
     assert path[:, 0] == pytest.approx([0.0, 0.25, 0.5, 0.75, 1.0])
     assert path[:, 1] == pytest.approx(0.0)
@@ -19,14 +26,14 @@ def test_the_path_runs_from_the_start_to_the_goal():
 
 def test_the_angle_along_the_path_is_the_heading_of_the_line():
     """A diagonal path points along the diagonal."""
-    path = StraightLine().plan(None, (1.0, 1.0, 0.0), (3.0, 3.0, 0.5))
+    path = plan((1.0, 1.0, 0.0), (3.0, 3.0, 0.5))
     assert path[0, 2] == pytest.approx(math.pi / 4)
     assert path[-1] == pytest.approx([3.0, 3.0, 0.5])
 
 
 def test_a_goal_at_the_start_gives_two_points():
     """No distance to cover: the path keeps the start's angle, then the goal's."""
-    path = StraightLine().plan(None, (2.0, 2.0, 0.3), (2.0, 2.0, 1.0))
+    path = plan((2.0, 2.0, 0.3), (2.0, 2.0, 1.0))
     assert path == pytest.approx(np.array([[2.0, 2.0, 0.3], [2.0, 2.0, 1.0]]))
 
 

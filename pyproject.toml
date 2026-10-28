@@ -64,4 +64,4 @@ max-args = 6
 # A controller is a class with one method.
 min-public-methods = 1
 max-locals = 20
-max-attributes = 12
+max-attributes = 13

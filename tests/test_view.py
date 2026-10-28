@@ -17,6 +17,7 @@ from pygame.locals import (
     QUIT,
     K_a,
 )
+from robomath import Transform2D
 
 from demuvo import Box, Circle, Simulation, Twist, load_world
 from demuvo.view import (
@@ -54,14 +55,14 @@ def close(colour, expected, tolerance=12):
 
 def test_a_box_outline_goes_around_the_box():
     """Consecutive corners are one side apart, never a diagonal."""
-    points = outline(Box((4.0, 2.0)), (0.0, 0.0, 0.0))
+    points = outline(Box((4.0, 2.0)), Transform2D.identity())
     sides = [np.hypot(*(points[i] - points[i - 1])) for i in range(4)]
     assert sorted(sides) == pytest.approx([2.0, 2.0, 4.0, 4.0])
 
 
 def test_a_circle_outline_stays_at_the_radius():
     """Every point of the outline is one radius from the centre."""
-    points = outline(Circle(0.5), (1.0, 2.0, 0.3))
+    points = outline(Circle(0.5), Transform2D.from_xyt((1.0, 2.0, 0.3)))
     assert np.hypot(points[:, 0] - 1.0, points[:, 1] - 2.0) == pytest.approx(0.5)
 
 
@@ -159,9 +160,8 @@ def test_the_bar_shows_the_state():
 
 
 def test_a_world_without_goals_or_trails_still_draws(tmp_path):
-    """A robot with no goal has no star."""
-    lines = Path(DEMO).read_text(encoding="utf-8").splitlines()
-    text = "\n".join(line for line in lines if not line.startswith("goal"))
+    """A robot with no task has no star."""
+    text = Path(DEMO).read_text(encoding="utf-8").split("[[task]]")[0]
     path = tmp_path / "w.toml"
     path.write_text(text)
     view = View(Simulation(load_world(path)))

@@ -27,9 +27,9 @@ from pygame.locals import (
     QUIT,
     SRCALPHA,
 )
+from robomath import Transform2D
 
 from .models import Twist
-from .poses import Pose
 from .shapes import Circle, LineString, Shape
 from .simulation import Simulation
 
@@ -51,10 +51,10 @@ TEXT = "#eceff1"
 SHADOW = (0, 0, 0, 55)
 
 
-def outline(shape: Shape, pose: Pose) -> np.ndarray:
+def outline(shape: Shape, pose: Transform2D) -> np.ndarray:
     """The points to draw for a shape at a pose, as an array of shape (n, 2)."""
     if isinstance(shape, Circle):
-        x, y, _ = pose
+        x, y = pose.translation
         angles = np.linspace(0.0, 2 * math.pi, 65)[:-1]
         return np.column_stack(
             [x + shape.radius * np.cos(angles), y + shape.radius * np.sin(angles)]
@@ -70,7 +70,7 @@ def _darker(color: str) -> pygame.Color:
 
 def _reach(shape: Shape) -> float:
     """Distance from the pose to the farthest point of the shape."""
-    return max(math.hypot(*p) for p in outline(shape, (0.0, 0.0, 0.0)))
+    return max(math.hypot(*p) for p in outline(shape, Transform2D.identity()))
 
 
 class View:
@@ -115,6 +115,10 @@ class View:
             for name, pose in sim.poses.items()
         }
         self.reach = {r.name: _reach(r.shape) for r in sim.world.robots}
+        self.goals = {
+            r.name: [t.goal.translation for t in sim.world.tasks if t.robot == r.name]
+            for r in sim.world.robots
+        }
         self.paused = False
         self.speed = 1.0
         self.done = False
@@ -153,8 +157,9 @@ class View:
             big.fill(FLOOR[(i + j) % 2], (x0, y0, x1 - x0, y1 - y0))
         shadows = self._layer(alpha=True)
         for obstacle in self.sim.world.obstacles:
-            x, y, angle = obstacle.pose
-            self._draw_obstacle(shadows, obstacle.shape, (x + 0.07, y - 0.07, angle))
+            x, y, angle = obstacle.pose.xyt
+            shifted = Transform2D.from_xyt((x + 0.07, y - 0.07, angle))
+            self._draw_obstacle(shadows, obstacle.shape, shifted)
         big.blit(shadows, (0, 0))
         for obstacle in self.sim.world.obstacles:
             self._draw_obstacle(big, obstacle.shape, obstacle.pose, solid=True)
@@ -170,7 +175,11 @@ class View:
         return background
 
     def _draw_obstacle(
-        self, surface: pygame.Surface, shape: Shape, pose: Pose, solid: bool = False
+        self,
+        surface: pygame.Surface,
+        shape: Shape,
+        pose: Transform2D,
+        solid: bool = False,
     ) -> None:
         """Draw one obstacle, as a shadow unless `solid`."""
         points = self._points(outline(shape, pose))
@@ -202,8 +211,8 @@ class View:
                 trail = (*pygame.Color(color)[:3], 170)
                 points = self._points(self.trails[robot.name])
                 pygame.draw.lines(layer, trail, False, points, width)
-            if robot.goal is not None:
-                self._draw_goal(layer, robot.goal[:2], color)
+            for goal in self.goals[robot.name]:
+                self._draw_goal(layer, goal, color)
         for i, robot in robots:
             self._draw_robot(layer, robot, ROBOT_COLORS[i % len(ROBOT_COLORS)])
         frame = self._background.copy()
@@ -227,11 +236,11 @@ class View:
 
     def _draw_robot(self, layer: pygame.Surface, robot, color: str) -> None:
         """The body, with a white line from the centre toward the front."""
-        pose = self.sim.poses[robot.name].xyt
+        pose = self.sim.poses[robot.name]
         points = self._points(outline(robot.shape, pose))
         pygame.draw.polygon(layer, color, points)
         pygame.draw.polygon(layer, _darker(color), points, width=SS * 2)
-        x, y, angle = pose
+        x, y, angle = pose.xyt
         reach = 0.8 * self.reach[robot.name]
         centre = self.to_pixel(x, y, SS)
         front = self.to_pixel(

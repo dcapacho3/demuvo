@@ -19,9 +19,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import ClassVar, Protocol
 
-from robomath import act_se2, xyt_to_se2
+from robomath import Transform2D, act_se2
 
-from .poses import Point, Pose
 from .verify import (
     WorldError,
     check_keys,
@@ -32,10 +31,12 @@ from .verify import (
     text,
 )
 
+Point = tuple[float, float]
 
-def _place(pose: Pose, points) -> list[Point]:
+
+def _place(pose: Transform2D, points) -> list[Point]:
     """Rotate points by the pose angle, then move them to the pose position."""
-    return list(map(tuple, act_se2(xyt_to_se2(pose), points).tolist()))
+    return list(map(tuple, act_se2(pose.matrix, points).tolist()))
 
 
 def _vertices(value, minimum: int, label: str) -> tuple[Point, ...]:
@@ -125,9 +126,9 @@ class Circle:
         """Build a circle from its table."""
         return cls(number(data, "radius", label))
 
-    def points(self, pose: Pose) -> list[Point]:
+    def points(self, pose: Transform2D) -> list[Point]:
         """Two corners of the square around the disc, which is exact for a circle."""
-        x, y, _ = pose
+        x, y = pose.translation
         r = self.radius
         return [(x - r, y - r), (x + r, y + r)]
 
@@ -152,7 +153,7 @@ class Box:
         """Build a box from its table."""
         return cls(numbers(require_key(data, "size", label), 2, label, "size", True))
 
-    def points(self, pose: Pose) -> list[Point]:
+    def points(self, pose: Transform2D) -> list[Point]:
         """The four corners, in order around the box."""
         hx, hy = self.size[0] / 2, self.size[1] / 2
         return _place(pose, [(-hx, -hy), (hx, -hy), (hx, hy), (-hx, hy)])
@@ -180,7 +181,7 @@ class Polygon:
         _check_simple(vertices, label)
         return cls(vertices)
 
-    def points(self, pose: Pose) -> list[Point]:
+    def points(self, pose: Transform2D) -> list[Point]:
         """The vertices in the world."""
         return _place(pose, self.vertices)
 
@@ -205,7 +206,7 @@ class LineString:
         """Build a line string from its table."""
         return cls(_vertices(require_key(data, "vertices", label), 2, label))
 
-    def points(self, pose: Pose) -> list[Point]:
+    def points(self, pose: Transform2D) -> list[Point]:
         """The vertices in the world."""
         return _place(pose, self.vertices)
 
@@ -222,7 +223,7 @@ class Shape(Protocol):
     def parse(cls, data: dict, label: str) -> Shape:
         """Build the shape from its table."""
 
-    def points(self, pose: Pose) -> list[Point]:
+    def points(self, pose: Transform2D) -> list[Point]:
         """Where the shape lies in the world."""
 
 
