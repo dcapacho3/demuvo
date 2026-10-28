@@ -70,7 +70,7 @@ def test_without_pygame_the_message_says_how_to_install(monkeypatch, capsys):
     assert "'view' extra" in err
 
 
-def test_a_bad_option_ends_with_code_2(capsys):
+def test_a_bad_option_ends_with_code_2():
     """Argparse refuses a step length that is not a number."""
     with pytest.raises(SystemExit) as info:
         main([DEMO, "--dt", "abc"])

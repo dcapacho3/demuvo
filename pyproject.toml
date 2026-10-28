@@ -60,5 +60,6 @@ convention = "google"
 extension-pkg-allow-list = ["pygame"]
 
 [tool.pylint.design]
+max-args = 6
 max-locals = 20
 max-attributes = 12

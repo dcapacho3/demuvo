@@ -269,6 +269,7 @@ def record(
     commands: Commands,
     steps: int,
     path: str,
+    *,
     fps: int = 20,
     trail: int = TRAIL,
 ) -> None:

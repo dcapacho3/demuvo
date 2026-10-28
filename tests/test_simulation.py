@@ -1,6 +1,7 @@
 """Tests for the simulation loop."""
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -95,14 +96,10 @@ pose = [3.0, 3.0, 0.0]
     path.write_text(text)
     sim = Simulation(load_world(path))
 
-    class Broken:
-        """A model that always fails."""
+    def fail(*_):
+        raise ValueError("broken")
 
-        def step(self, *_):
-            """Fail."""
-            raise ValueError("broken")
-
-    sim.models["r2"] = Broken()
+    sim.models["r2"] = SimpleNamespace(step=fail)
     before = dict(sim.poses)
     with pytest.raises(ValueError, match="broken"):
         sim.step({"r1": Twist(vx=1.0)})
