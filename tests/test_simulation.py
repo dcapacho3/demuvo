@@ -70,8 +70,9 @@ def test_the_same_seed_gives_the_same_run(world):
 def test_a_robot_overrides_the_speed_limit(tmp_path):
     """`params` in the file replaces the model default: 0.5 m/s, not 1 m/s."""
     text = DEMO.read_text().replace(
-        'controller = "demuvo.controllers:GoToGoal"',
-        'controller = "demuvo.controllers:GoToGoal"\nparams = { max_v = 0.5 }',
+        "controller_params = { speed = 0.5, lookahead = 0.6 }",
+        "controller_params = { speed = 0.5, lookahead = 0.6 }\n"
+        "params = { max_v = 0.5 }",
     )
     path = tmp_path / "slow.toml"
     path.write_text(text)

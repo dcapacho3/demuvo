@@ -18,14 +18,48 @@ compared fairly.
 
 ## Status
 
-Early development. Nothing is released yet and the API will change. The first release
-will have:
+Early development. Nothing is released yet and the API will change.
 
-- a world file (TOML) with a fixed world size, obstacles and robots;
-- kinematic models: differential drive, car-like, forklift, mecanum and skid-steer;
-- noisy wheel encoders and a lidar;
-- a top-down view and GIF export;
-- a runner that compares controllers on the same worlds and seeds.
+Working today:
+
+- a world file (TOML) with a world size, obstacles (box, circle, polygon, wall) and
+  robots, checked when it loads;
+- one kinematic model, differential drive, driven by a ROS-style `Twist` command;
+- a planner and a controller for each robot, chosen in the file as `module:Class`;
+  built in: `StraightLine` and `PurePursuit`;
+- a top-down view, and GIF export from Python.
+
+Not yet: collisions, noisy wheel encoders, a lidar, the other kinematic models
+(car-like, forklift, mecanum, skid-steer), and a runner that compares controllers on
+the same worlds and seeds.
+
+## Try it
+
+```bash
+pip install -e ".[view]"
+demuvo examples/worlds/demo.toml     # a robot drives to the star; --no-trail hides its path
+demuvo examples/worlds/demo.toml --check   # check the file and open nothing
+```
+
+A robot that has a `goal` gets a path from its planner, and its controller follows it:
+
+```toml
+[[robot]]
+name = "r1"
+model = "diff_drive"
+shape = { name = "circle", radius = 0.2 }
+pose = [1.0, 1.0, 0.0]                         # x, y, angle
+goal = [9.0, 5.0, 0.0]
+goal_tolerance = [0.1, 0.1]                    # metres, radians
+controller = "demuvo.controllers:PurePursuit"
+controller_params = { speed = 0.5, lookahead = 0.6, rotate_to_goal = true }
+```
+
+To use your own, write a class with one method and name it in the file. A planner has
+`plan(world, start, goal)` and returns an array of shape (N, 3) of x, y, angle. A
+controller has `command(obs)` and returns a `Twist`; it sees only the observation (its
+pose, the path, the goal), not the simulation. From Python, `Navigation` also takes a
+goal or a path from outside with `set_goal` and `set_path`.
 
 ## Develop
 

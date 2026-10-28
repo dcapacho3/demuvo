@@ -49,6 +49,8 @@ def test_the_window_opens_with_the_file_name(monkeypatch):
     args, kwargs = calls[0]
     assert len(args) == 2
     assert kwargs == {"caption": "demuvo - demo.toml", "trail": view.TRAIL}
+    commands = args[1]
+    assert list(commands(args[0])) == ["r1"]
 
 
 def test_no_trail_turns_the_path_off(monkeypatch):
@@ -86,3 +88,12 @@ def test_python_dash_m_runs_the_command(monkeypatch):
     with pytest.raises(SystemExit) as info:
         runpy.run_module("demuvo", run_name="__main__")
     assert info.value.code == 0
+
+
+def test_a_controller_that_cannot_load_is_reported(tmp_path, capsys):
+    """--check stops on a controller the file names but demuvo cannot find."""
+    text = Path(DEMO).read_text(encoding="utf-8").replace("PurePursuit", "Nothing")
+    path = tmp_path / "bad.toml"
+    path.write_text(text)
+    assert main([str(path), "--check"]) == 1
+    assert "robot 'r1': cannot load controller" in capsys.readouterr().err

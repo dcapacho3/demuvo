@@ -8,6 +8,7 @@ import os
 import sys
 from pathlib import Path
 
+from .navigation import Navigation
 from .simulation import Simulation
 from .world import load_world
 
@@ -45,6 +46,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         world = load_world(args.world)
         sim = Simulation(world, args.dt)
+        commands = Navigation(world)
     except (OSError, ValueError) as error:
         print(f"demuvo: {args.world}: {error}", file=sys.stderr)
         return 1
@@ -68,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     view.play(
         sim,
-        lambda _: {},
+        commands,
         caption=f"demuvo - {Path(args.world).name}",
         trail=0 if args.no_trail else view.TRAIL,
     )

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from demuvo.shapes import Box, Circle, LineString, Polygon
-from demuvo.world import Obstacle, WorldError, load_world
+from demuvo.world import DEFAULT_GOAL_TOLERANCE, Obstacle, WorldError, load_world
 
 GOOD = """
 version = 1
@@ -28,7 +28,7 @@ model = "diff_drive"
 shape = { name = "circle", radius = 0.2 }
 pose = [1.0, 1.0, 0.0]
 goal = [9.0, 5.0, 0.0]
-controller = "demuvo.controllers:GoToGoal"
+controller = "demuvo.controllers:PurePursuit"
 """
 
 
@@ -58,7 +58,7 @@ def test_loads_a_good_world(tmp_path):
     assert robot.shape == Circle(0.2)
     assert robot.pose == (1.0, 1.0, 0.0)
     assert robot.goal == (9.0, 5.0, 0.0)
-    assert robot.controller == "demuvo.controllers:GoToGoal"
+    assert robot.controller == "demuvo.controllers:PurePursuit"
 
 
 def test_the_example_world_loads():
@@ -141,7 +141,7 @@ def test_robot_names_must_be_unique(tmp_path):
 def test_a_controller_needs_a_module_and_a_class(tmp_path):
     """The controller is written as module:Class."""
     with pytest.raises(WorldError, match=r"robot 'r1'.*controller"):
-        load(tmp_path, GOOD.replace("demuvo.controllers:GoToGoal", "GoToGoal"))
+        load(tmp_path, GOOD.replace("demuvo.controllers:PurePursuit", "PurePursuit"))
 
 
 def test_a_misspelled_key_is_refused(tmp_path):
@@ -299,8 +299,8 @@ def test_an_unknown_model_is_named(tmp_path):
 def test_params_replace_the_model_defaults(tmp_path):
     """The values in `params` come back on the robot."""
     text = GOOD.replace(
-        'controller = "demuvo.controllers:GoToGoal"',
-        'controller = "demuvo.controllers:GoToGoal"\n'
+        'controller = "demuvo.controllers:PurePursuit"',
+        'controller = "demuvo.controllers:PurePursuit"\n'
         "params = { max_v = 0.5, max_w = 2.0 }",
     )
     assert load(tmp_path, text).robots[0].params == {"max_v": 0.5, "max_w": 2.0}
@@ -314,8 +314,8 @@ def test_robots_have_no_params_by_default(tmp_path):
 def test_an_unknown_param_is_named(tmp_path):
     """A parameter the model does not have is refused."""
     text = GOOD.replace(
-        'controller = "demuvo.controllers:GoToGoal"',
-        'controller = "demuvo.controllers:GoToGoal"\nparams = { max_speed = 1.0 }',
+        'controller = "demuvo.controllers:PurePursuit"',
+        'controller = "demuvo.controllers:PurePursuit"\nparams = { max_speed = 1.0 }',
     )
     with pytest.raises(WorldError, match=r"robot 'r1' params.*max_speed"):
         load(tmp_path, text)
@@ -324,8 +324,8 @@ def test_an_unknown_param_is_named(tmp_path):
 def test_a_param_must_be_positive(tmp_path):
     """A zero or negative limit is refused."""
     text = GOOD.replace(
-        'controller = "demuvo.controllers:GoToGoal"',
-        'controller = "demuvo.controllers:GoToGoal"\nparams = { max_v = 0 }',
+        'controller = "demuvo.controllers:PurePursuit"',
+        'controller = "demuvo.controllers:PurePursuit"\nparams = { max_v = 0 }',
     )
     with pytest.raises(WorldError, match=r"robot 'r1' params.*max_v"):
         load(tmp_path, text)
@@ -335,3 +335,59 @@ def test_a_toml_syntax_error_is_a_world_error(tmp_path):
     """A file that is not TOML raises WorldError, like any other bad file."""
     with pytest.raises(WorldError, match="not valid TOML"):
         load(tmp_path, "version = = 1")
+
+
+def test_a_robot_gets_the_default_goal_tolerance(tmp_path):
+    """No `goal_tolerance` gives the default; the planner and its params are empty."""
+    robot = load(tmp_path, GOOD).robots[0]
+    assert robot.goal_tolerance == DEFAULT_GOAL_TOLERANCE
+    assert robot.planner is None
+    assert (robot.controller_params, robot.planner_params) == ({}, {})
+
+
+def test_the_planner_controller_and_their_params_come_back(tmp_path):
+    """The new keys are read as written."""
+    text = GOOD.replace(
+        'controller = "demuvo.controllers:PurePursuit"',
+        'controller = "demuvo.controllers:PurePursuit"\n'
+        "controller_params = { speed = 0.3, rotate_to_goal = false }\n"
+        'planner = "demuvo.planners:StraightLine"\n'
+        "planner_params = { spacing = 0.1 }\n"
+        "goal_tolerance = [0.2, 0.3]",
+    )
+    robot = load(tmp_path, text).robots[0]
+    assert robot.controller_params == {"speed": 0.3, "rotate_to_goal": False}
+    assert robot.planner == "demuvo.planners:StraightLine"
+    assert robot.planner_params == {"spacing": 0.1}
+    assert robot.goal_tolerance == (0.2, 0.3)
+
+
+@pytest.mark.parametrize(
+    ("extra", "message"),
+    [
+        ('planner = "StraightLine"', "'planner' must be 'module:Class'"),
+        ("planner_params = { spacing = 0.1 }", "'planner_params' needs 'planner'"),
+        ("controller_params = 3", "controller_params.*table"),
+        ("goal_tolerance = [0.1]", "'goal_tolerance' needs 2"),
+        ("goal_tolerance = [0.1, 0.0]", "'goal_tolerance' must be positive"),
+    ],
+)
+def test_bad_planner_and_tolerance_keys_are_named(tmp_path, extra, message):
+    """Each mistake in the new keys names the robot and the key."""
+    text = GOOD.replace('controller = "demuvo.controllers:PurePursuit"\n', "")
+    text = text.replace(
+        "goal = [9.0, 5.0, 0.0]\n", "goal = [9.0, 5.0, 0.0]\n" + extra + "\n"
+    )
+    if extra.startswith("controller_params"):
+        text = text.replace(
+            "controller_params", 'controller = "a:B"\ncontroller_params'
+        )
+    with pytest.raises(WorldError, match=f"robot 'r1'.*{message}"):
+        load(tmp_path, text)
+
+
+def test_a_tolerance_needs_a_goal(tmp_path):
+    """Without a goal there is nothing to be within."""
+    text = GOOD.replace("goal = [9.0, 5.0, 0.0]", "goal_tolerance = [0.1, 0.1]")
+    with pytest.raises(WorldError, match="'goal_tolerance' needs 'goal'"):
+        load(tmp_path, text)

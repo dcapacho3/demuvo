@@ -25,7 +25,11 @@ from .verify import (
 
 FORMAT_VERSION = 1
 
+# Nav2 uses 0.25 m and 0.25 rad; demuvo asks for a little more.
+DEFAULT_GOAL_TOLERANCE = (0.1, 0.1)
+
 __all__ = [
+    "DEFAULT_GOAL_TOLERANCE",
     "FORMAT_VERSION",
     "Obstacle",
     "RobotSpec",
@@ -60,6 +64,11 @@ class RobotSpec:
         goal: where it should end: x, y and angle in radians, or None.
         controller: "module:Class" of the controller, or None.
         params: values that replace the model defaults, such as max_v.
+        planner: "module:Class" of the planner, or None for the default.
+        controller_params: keyword arguments for the controller class.
+        planner_params: keyword arguments for the planner class.
+        goal_tolerance: distance in metres and angle in radians within which
+            the robot counts as at its goal.
     """
 
     name: str
@@ -69,6 +78,10 @@ class RobotSpec:
     goal: Pose | None = None
     controller: str | None = None
     params: dict[str, float] = field(default_factory=dict)
+    planner: str | None = None
+    controller_params: dict = field(default_factory=dict)
+    planner_params: dict = field(default_factory=dict)
+    goal_tolerance: tuple[float, float] = DEFAULT_GOAL_TOLERANCE
 
 
 @dataclass(frozen=True)
@@ -103,6 +116,26 @@ def _parse_obstacle(item: dict, index: int, size) -> Obstacle:
     return Obstacle(pose, shape)
 
 
+def _plugin(item: dict, key: str, label: str) -> str | None:
+    """Read an optional "module:Class" string."""
+    if key not in item:
+        return None
+    value = text(item, key, label)
+    module, _, cls = value.partition(":")
+    if not (module and cls):
+        raise WorldError(f"{label}: '{key}' must be 'module:Class'")
+    return value
+
+
+def _plugin_params(item: dict, key: str, plugin: str, label: str) -> dict:
+    """Read the keyword arguments of a plugin; they need the plugin's key."""
+    if key not in item:
+        return {}
+    if plugin not in item:
+        raise WorldError(f"{label}: '{key}' needs '{plugin}'")
+    return dict(table(item[key], f"{label} {key}"))
+
+
 def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
     """Build and check one `[[robot]]`; `names` holds the names read so far."""
     item = table(item, f"robot {index}")
@@ -112,7 +145,21 @@ def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
         raise WorldError(f"{label}: name used twice")
     names.add(name)
     check_keys(
-        item, {"name", "model", "shape", "pose", "goal", "controller", "params"}, label
+        item,
+        {
+            "name",
+            "model",
+            "shape",
+            "pose",
+            "goal",
+            "goal_tolerance",
+            "planner",
+            "planner_params",
+            "controller",
+            "controller_params",
+            "params",
+        },
+        label,
     )
     model = text(item, "model", label)
     if model not in MODELS:
@@ -122,15 +169,31 @@ def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
     shape = parse_shape(require_key(item, "shape", label), label, robot=True)
     pose = numbers(require_key(item, "pose", label), 3, label, "pose")
     goal = numbers(item["goal"], 3, label, "goal") if "goal" in item else None
-    controller = text(item, "controller", label) if "controller" in item else None
-    if controller is not None:
-        module, _, cls = controller.partition(":")
-        if not (module and cls):
-            raise WorldError(f"{label}: 'controller' must be 'module:Class'")
+    if "goal_tolerance" in item and goal is None:
+        raise WorldError(f"{label}: 'goal_tolerance' needs 'goal'")
+    tolerance = DEFAULT_GOAL_TOLERANCE
+    if "goal_tolerance" in item:
+        tolerance = numbers(item["goal_tolerance"], 2, label, "goal_tolerance", True)
+    controller = _plugin(item, "controller", label)
+    planner = _plugin(item, "planner", label)
+    controller_params = _plugin_params(item, "controller_params", "controller", label)
+    planner_params = _plugin_params(item, "planner_params", "planner", label)
     for key, where in (("pose", pose), ("goal", goal)):
         if where is not None and not inside(shape.points(where), size):
             raise WorldError(f"{label}: '{key}' must lie inside the world")
-    return RobotSpec(name, model, shape, pose, goal, controller, params)
+    return RobotSpec(
+        name,
+        model,
+        shape,
+        pose,
+        goal,
+        controller,
+        params,
+        planner,
+        controller_params,
+        planner_params,
+        tolerance,
+    )
 
 
 def load_world(path: str | Path) -> World:
