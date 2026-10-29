@@ -26,7 +26,7 @@ def world_file(tmp_path, **changes):
 
 def run(path, steps):
     """Run a world file with its own planner and controller; return the simulation."""
-    sim = Simulation(load_world(path))
+    sim = Simulation(load_world(path), dt=0.05)
     commands = Navigation(sim.world)
     for _ in range(steps):
         sim.step(commands(sim))
@@ -90,11 +90,17 @@ def user_module(tmp_path, monkeypatch):
         "class Count:\n"
         "    def command(self, obs):\n"
         "        return Twist(vx=float(len(obs.path)))\n"
+        "seen = []\n"
+        "class Log:\n"
+        "    def command(self, obs):\n"
+        "        seen.append((round(obs.time, 6), round(obs.dt, 6)))\n"
+        "        return Twist(vx=obs.time)\n"
     )
     monkeypatch.syspath_prepend(tmp_path)
     import my_nav  # pylint: disable=import-error,import-outside-toplevel
 
     my_nav.calls.clear()  # the module stays loaded between tests
+    my_nav.seen.clear()
     return my_nav
 
 
@@ -164,7 +170,7 @@ def counting_world(tmp_path, monkeypatch):
             "controller_params = { speed = 0.5, lookahead = 0.6 }": "",
         },
     )
-    sim = Simulation(load_world(path))
+    sim = Simulation(load_world(path), dt=0.05)
     return sim, Navigation(sim.world), my_nav
 
 
@@ -173,7 +179,7 @@ def test_a_new_goal_is_planned_again(tmp_path, monkeypatch):
     sim, nav, my_nav = counting_world(tmp_path, monkeypatch)
     nav(sim)
     nav.set_goal("r1", Transform2D.from_xyt((2.0, 2.0, 0.5)))
-    nav(sim)
+    sim.step({})
     nav(sim)
     assert my_nav.calls == [
         ((1.0, 1.0, 0.0), (9.0, 5.0, 0.0)),
@@ -285,3 +291,95 @@ def test_a_goal_set_from_outside_replaces_the_tasks(tmp_path, monkeypatch):
     nav.set_goal("r1", None)
     assert nav.tasks["r1"] == []
     assert nav(sim) == {"r1": Twist(vx=0.0)}
+
+
+def logging_run(tmp_path, monkeypatch, dt, period, steps):
+    """Run the demo robot with the Log controller; return the log and the commands."""
+    my_nav = user_module(tmp_path, monkeypatch)
+    path = world_file(
+        tmp_path,
+        **{
+            PURE_PURSUIT: 'controller = "my_nav:Log"',
+            "controller_params = { speed = 0.5, lookahead = 0.6 }": "",
+            "control_period = 0.05": f"control_period = {period}",
+        },
+    )
+    sim = Simulation(load_world(path), dt=dt)
+    nav = Navigation(sim.world)
+    vx = []
+    for _ in range(steps):
+        commands = nav(sim)
+        vx.append(commands["r1"].vx)
+        sim.step(commands)
+    return my_nav.seen, vx
+
+
+def test_the_controller_runs_once_per_period_and_its_command_is_held(
+    tmp_path, monkeypatch
+):
+    """Period 0.05 with dt 0.01: a run every 5 steps; the command stays between."""
+    seen, vx = logging_run(tmp_path, monkeypatch, dt=0.01, period=0.05, steps=12)
+    assert seen == [(0.0, 0.05), (0.05, 0.05), (0.1, 0.05)]
+    assert vx == [0.0] * 5 + [0.05] * 5 + [0.1] * 2
+
+
+def test_a_period_that_is_not_a_multiple_alternates_two_gaps(tmp_path, monkeypatch):
+    """Period 0.03, dt 0.02: runs on steps 0, 2, 3, 5, 6, 8; the mean gap is 0.03."""
+    with pytest.warns(UserWarning, match="not a whole number of steps"):
+        seen, _ = logging_run(tmp_path, monkeypatch, dt=0.02, period=0.03, steps=10)
+    assert seen == [
+        (0.0, 0.03),
+        (0.04, 0.04),
+        (0.06, 0.02),
+        (0.1, 0.04),
+        (0.12, 0.02),
+        (0.16, 0.04),
+        (0.18, 0.02),
+    ]
+
+
+def test_the_period_is_checked_once_for_each_dt(tmp_path, monkeypatch, recwarn):
+    """A new dt is checked again; the same dt is not."""
+    sim, nav, _ = counting_world(tmp_path, monkeypatch)
+    nav.check(0.02)
+    nav.check(0.02)
+    assert len(recwarn) == 1
+    nav.check(0.03)
+    assert len(recwarn) == 2
+    nav.check(0.01)
+    assert len(recwarn) == 2
+    assert sim.dt == 0.05
+
+
+def test_a_period_below_dt_is_refused_by_name(tmp_path, monkeypatch):
+    """A controller cannot run twice in one step."""
+    user_module(tmp_path, monkeypatch)
+    path = world_file(tmp_path, **{"control_period = 0.05": "control_period = 0.005"})
+    sim = Simulation(load_world(path), dt=0.01)
+    nav = Navigation(sim.world)
+    with pytest.raises(
+        WorldError, match="robot 'r1': control_period 0.005 is below dt 0.01"
+    ):
+        nav.check(sim.dt)
+    with pytest.raises(WorldError, match="below dt"):
+        nav(sim)
+
+
+def test_a_robot_with_no_controller_has_no_period_to_check():
+    """Only robots with a controller are checked."""
+    world = load_world(DEMO)
+    world = type(world)(
+        world.size,
+        world.seed,
+        world.obstacles,
+        (
+            type(world.robots[0])(
+                "r1",
+                "diff_drive",
+                world.robots[0].shape,
+                world.robots[0].pose,
+                control_period=0.001,
+            ),
+        ),
+    )
+    Navigation(world).check(0.01)

@@ -37,7 +37,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check", action="store_true", help="check the file and open nothing"
     )
-    parser.add_argument("--dt", type=float, default=0.05, help="step length in s")
+    parser.add_argument(
+        "--dt", type=float, help="step length in s; the default is the file's"
+    )
     parser.add_argument(
         "--no-trail", action="store_true", help="do not draw the path of each robot"
     )
@@ -47,6 +49,7 @@ def main(argv: list[str] | None = None) -> int:
         world = load_world(args.world)
         sim = Simulation(world, args.dt)
         commands = Navigation(world)
+        commands.check(sim.dt)
     except (OSError, ValueError) as error:
         print(f"demuvo: {args.world}: {error}", file=sys.stderr)
         return 1

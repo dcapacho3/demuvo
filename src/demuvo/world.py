@@ -18,6 +18,7 @@ from .verify import (
     check_keys,
     inside,
     items,
+    number,
     numbers,
     require_key,
     table,
@@ -26,10 +27,13 @@ from .verify import (
 
 FORMAT_VERSION = 1
 
-# Nav2 uses 0.25 m and 0.25 rad; demuvo asks for a little more.
 DEFAULT_GOAL_TOLERANCE = (0.1, 0.1)
+DEFAULT_DT = 0.01
+DEFAULT_CONTROL_PERIOD = 0.05
 
 __all__ = [
+    "DEFAULT_CONTROL_PERIOD",
+    "DEFAULT_DT",
     "DEFAULT_GOAL_TOLERANCE",
     "FORMAT_VERSION",
     "Obstacle",
@@ -68,6 +72,8 @@ class RobotSpec:
         planner: "module:Class" of the planner, or None for the default.
         controller_params: keyword arguments for the controller class.
         planner_params: keyword arguments for the planner class.
+        control_period: seconds between two runs of the controller; at least
+            the simulation step. The command stays in force between runs.
     """
 
     name: str
@@ -79,6 +85,7 @@ class RobotSpec:
     planner: str | None = None
     controller_params: dict = field(default_factory=dict)
     planner_params: dict = field(default_factory=dict)
+    control_period: float = DEFAULT_CONTROL_PERIOD
 
 
 @dataclass(frozen=True)
@@ -109,6 +116,7 @@ class World:
         obstacles: the obstacles, in file order.
         robots: the robots, in file order.
         tasks: what the robots are to do, in file order.
+        dt: length of a simulation step in seconds.
     """
 
     size: tuple[float, float]
@@ -116,6 +124,7 @@ class World:
     obstacles: tuple[Obstacle, ...]
     robots: tuple[RobotSpec, ...]
     tasks: tuple[Task, ...] = ()
+    dt: float = DEFAULT_DT
 
 
 def _parse_obstacle(item: dict, index: int, size) -> Obstacle:
@@ -178,6 +187,7 @@ def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
             "controller",
             "controller_params",
             "params",
+            "control_period",
         },
         label,
     )
@@ -192,6 +202,9 @@ def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
     planner = _plugin(item, "planner", label)
     controller_params = _plugin_params(item, "controller_params", "controller", label)
     planner_params = _plugin_params(item, "planner_params", "planner", label)
+    period = DEFAULT_CONTROL_PERIOD
+    if "control_period" in item:
+        period = number(item, "control_period", label)
     if not inside(shape.points(pose), size):
         raise WorldError(f"{label}: 'pose' must lie inside the world")
     return RobotSpec(
@@ -204,6 +217,7 @@ def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
         planner,
         controller_params,
         planner_params,
+        period,
     )
 
 
@@ -252,11 +266,12 @@ def load_world(path: str | Path) -> World:
     check_keys(data, {"version", "world", "obstacle", "robot", "task"}, "file")
 
     world = table(require_key(data, "world", "file"), "world")
-    check_keys(world, {"size", "seed"}, "world")
+    check_keys(world, {"size", "seed", "dt"}, "world")
     size = numbers(require_key(world, "size", "world"), 2, "world", "size", True)
     seed = require_key(world, "seed", "world")
     if not isinstance(seed, int) or isinstance(seed, bool):
         raise WorldError("world: 'seed' must be an integer")
+    dt = number(world, "dt", "world") if "dt" in world else DEFAULT_DT
 
     obstacles = tuple(
         _parse_obstacle(item, i, size)
@@ -276,4 +291,4 @@ def load_world(path: str | Path) -> World:
         _parse_task(item, i, size, by_name)
         for i, item in enumerate(items(data, "task"), start=1)
     )
-    return World(size, seed, obstacles, robots, tasks)
+    return World(size, seed, obstacles, robots, tasks, dt)

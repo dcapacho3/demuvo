@@ -97,3 +97,9 @@ def test_a_controller_that_cannot_load_is_reported(tmp_path, capsys):
     path.write_text(text)
     assert main([str(path), "--check"]) == 1
     assert "robot 'r1': cannot load controller" in capsys.readouterr().err
+
+
+def test_a_period_below_dt_is_reported_before_the_window(capsys):
+    """--dt 0.1 is above the demo's 0.05 s control period, so the run is refused."""
+    assert main([DEMO, "--dt", "0.1", "--check"]) == 1
+    assert "control_period" in capsys.readouterr().err

@@ -28,13 +28,15 @@ class Simulation:
         steps: number of steps taken.
     """
 
-    def __init__(self, world: World, dt: float = 0.05) -> None:
+    def __init__(self, world: World, dt: float | None = None) -> None:
         """Place every robot at its start pose.
 
         Args:
             world: the world to run.
-            dt: length of a step in seconds; must be positive.
+            dt: length of a step in seconds, positive; None takes the world's.
         """
+        if dt is None:
+            dt = world.dt
         if not 0 < dt < math.inf:
             raise ValueError(f"dt must be positive, got {dt}")
         self.world = world

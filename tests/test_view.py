@@ -172,7 +172,7 @@ def test_a_world_without_goals_or_trails_still_draws(tmp_path):
 def test_record_saves_a_gif(tmp_path):
     """The GIF has the first frame and one more for each step."""
     path = tmp_path / "run.gif"
-    sim = Simulation(load_world(DEMO))
+    sim = Simulation(load_world(DEMO), dt=0.05)
     record(sim, lambda _: {"r1": Twist(vx=0.5, wz=0.5)}, steps=5, path=str(path))
     assert sim.steps == 5
     with Image.open(path) as gif:
@@ -182,7 +182,7 @@ def test_record_saves_a_gif(tmp_path):
 def test_a_gif_frame_is_every_skip_steps(tmp_path):
     """At 10 frames a second and dt = 0.05, a frame comes every 2 steps."""
     path = tmp_path / "run.gif"
-    sim = Simulation(load_world(DEMO))
+    sim = Simulation(load_world(DEMO), dt=0.05)
     record(
         sim, lambda _: {"r1": Twist(vx=0.5, wz=0.5)}, steps=6, path=str(path), fps=10
     )

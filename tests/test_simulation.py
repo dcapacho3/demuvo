@@ -106,3 +106,12 @@ pose = [3.0, 3.0, 0.0]
         sim.step({"r1": Twist(vx=1.0)})
     assert sim.poses == before
     assert sim.steps == 0
+
+
+def test_dt_comes_from_the_world_unless_given(tmp_path):
+    """The world's dt is the default; an argument replaces it."""
+    path = tmp_path / "w.toml"
+    path.write_text(DEMO.read_text().replace("dt = 0.01", "dt = 0.02"))
+    world = load_world(path)
+    assert Simulation(world).dt == 0.02
+    assert Simulation(world, dt=0.1).dt == 0.1

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import warnings
 
 import numpy as np
 from robomath import Transform2D, wrap_angle
@@ -12,7 +13,7 @@ from .models import Twist
 from .planners import Planner
 from .plugins import load_class
 from .simulation import Simulation
-from .world import DEFAULT_GOAL_TOLERANCE, Task, World
+from .world import DEFAULT_GOAL_TOLERANCE, Task, World, WorldError
 
 DEFAULT_PLANNER = "demuvo.planners:StraightLine"
 
@@ -43,6 +44,13 @@ class Navigation:
     `set_path` gives a robot a path made elsewhere, such as a Nav2 plan, and the
     planner then stays out of it.
 
+    A robot's controller runs once every `control_period` seconds, as the Nav2
+    controller does, and its last command stays in force between runs. Run k
+    falls on step ceil(k * period / dt), counted from whole numbers so the
+    schedule never drifts. A period that is not a whole number of steps gives
+    gaps of two lengths, one step apart, and the mean gap is still the period.
+    A planner runs when the controller does.
+
     Attributes:
         tasks: the tasks of each robot, in order, by name. Starts as the tasks
             of the world file.
@@ -64,6 +72,11 @@ class Navigation:
         self._current = dict.fromkeys(self.tasks, 0)
         self._planners: dict[str, Planner] = {}
         self._controllers: dict[str, Controller] = {}
+        self._periods = {r.name: r.control_period for r in world.robots}
+        self._runs = dict.fromkeys(self._periods, 0)
+        self._last_run = dict.fromkeys(self._periods, 0)
+        self._held: dict[str, Twist] = {}
+        self._checked_dt: float | None = None
         for robot in world.robots:
             if robot.controller is None:
                 continue
@@ -81,6 +94,32 @@ class Navigation:
                 "planner",
                 "plan",
             )
+
+    def check(self, dt: float) -> None:
+        """Check every control period against the simulation step `dt`.
+
+        `__call__` does this when `dt` is new; call it earlier to fail early.
+
+        Raises:
+            WorldError: if a control period is shorter than `dt`, since a
+                controller cannot run twice in one step.
+
+        Warns if a period is not a whole number of steps.
+        """
+        if dt == self._checked_dt:
+            return
+        for name in self._controllers:
+            period = self._periods[name]
+            steps = round(period / dt, 9)
+            label = f"robot '{name}': control_period {period:g}"
+            if steps < 1:
+                raise WorldError(f"{label} is below dt {dt:g}")
+            if not steps.is_integer():
+                warnings.warn(
+                    f"{label} is not a whole number of steps of dt {dt:g}, "
+                    "so the gap between runs alternates between two lengths"
+                )
+        self._checked_dt = dt
 
     def set_goal(
         self,
@@ -129,10 +168,18 @@ class Navigation:
         self._current[name] = i
         return tasks[i] if tasks else None
 
+    def _due(self, name: str, dt: float) -> int:
+        """The step of the robot's next controller run."""
+        return math.ceil(round(self._runs[name] * self._periods[name] / dt, 9))
+
     def __call__(self, sim: Simulation) -> dict[str, Twist]:
         """The command of every robot that has a controller, for this step."""
+        self.check(sim.dt)
         commands = {}
         for name, controller in self._controllers.items():
+            if sim.steps < self._due(name, sim.dt):
+                commands[name] = self._held[name]
+                continue
             pose = sim.poses[name]
             task = self._task(name, pose)
             if name not in self.paths:
@@ -145,14 +192,21 @@ class Navigation:
             if goal is None and len(path) > 0:
                 goal = Transform2D.from_xyt(path[-1])
             tolerance = task.goal_tolerance if task else DEFAULT_GOAL_TOLERANCE
-            commands[name] = controller.command(
+            gap = (
+                (sim.steps - self._last_run[name]) * sim.dt
+                if self._runs[name]
+                else self._periods[name]
+            )
+            commands[name] = self._held[name] = controller.command(
                 Observation(
                     time=sim.time,
-                    dt=sim.dt,
+                    dt=gap,
                     pose=pose,
                     path=path,
                     goal=goal,
                     goal_tolerance=tolerance,
                 )
             )
+            self._runs[name] += 1
+            self._last_run[name] = sim.steps
         return commands

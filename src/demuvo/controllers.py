@@ -27,7 +27,8 @@ class Observation:
 
     Attributes:
         time: simulated time in seconds.
-        dt: length of a step in seconds.
+        dt: seconds since the controller last ran; its control period on
+            the first run.
         pose: where the robot believes it is. Today this is the true pose, with
             no noise, because demuvo has no odometry model yet; it will be the
             estimate of the odometry or of a filter, and the true pose stays in

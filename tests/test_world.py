@@ -434,3 +434,39 @@ def test_several_tasks_for_one_robot_are_kept_in_file_order(tmp_path):
         (5.0, 5.0),
         (2.0, 4.0),
     ]
+
+
+def test_dt_and_the_control_period_have_defaults(tmp_path):
+    """No `dt` gives 0.01 s and no `control_period` gives 0.05 s."""
+    world = load(tmp_path, GOOD)
+    assert world.dt == 0.01
+    assert world.robots[0].control_period == 0.05
+
+
+def test_dt_and_the_control_period_come_back(tmp_path):
+    """Both are read from the file."""
+    text = GOOD.replace("seed = 7", "seed = 7\ndt = 0.02").replace(
+        'controller = "demuvo.controllers:PurePursuit"',
+        'controller = "demuvo.controllers:PurePursuit"\ncontrol_period = 0.03',
+    )
+    world = load(tmp_path, text)
+    assert world.dt == 0.02
+    assert world.robots[0].control_period == 0.03
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "message"),
+    [
+        ("seed = 7", "seed = 7\ndt = 0", "world: 'dt' must be positive"),
+        ("seed = 7", 'seed = 7\ndt = "x"', "world: 'dt' needs 1 finite number"),
+        (
+            'controller = "demuvo.controllers:PurePursuit"',
+            'controller = "demuvo.controllers:PurePursuit"\ncontrol_period = -1',
+            "robot 'r1': 'control_period' must be positive",
+        ),
+    ],
+)
+def test_a_bad_dt_or_control_period_is_named(tmp_path, old, new, message):
+    """Zero, negative and non-numbers are refused, with the key named."""
+    with pytest.raises(WorldError, match=message):
+        load(tmp_path, GOOD.replace(old, new))

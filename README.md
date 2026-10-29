@@ -27,6 +27,7 @@ Working today:
 - one kinematic model, differential drive, driven by a ROS-style `Twist` command;
 - a planner and a controller for each robot, chosen in the file as `module:Class`;
   built in: `StraightLine` and `PurePursuit`;
+- a step length and a controller rate that you set apart (see "Time" below);
 - a top-down view, and GIF export from Python.
 
 Not yet: collisions, noisy wheel encoders, a lidar, the other kinematic models
@@ -64,6 +65,34 @@ To use your own, write a class with one method and name it in the file. A planne
 controller has `command(obs)` and returns a `Twist`; it sees only the observation (its
 pose, the path, the goal), not the simulation. From Python, `Navigation` also takes a
 goal or a path from outside with `set_goal` and `set_path`.
+
+## Time
+
+The simulation moves in steps of `dt` seconds, set in `[world]` (default 0.01). Each
+robot's controller runs on its own clock, `control_period` seconds apart (default 0.05,
+the 20 Hz of the Nav2 controller), and its last command stays in force between runs:
+
+```toml
+[world]
+size = [10.0, 6.0]
+seed = 7
+dt = 0.01                  # optional: seconds per step
+
+[[robot]]
+name = "r1"
+model = "diff_drive"
+shape = { name = "circle", radius = 0.2 }
+pose = [1.0, 1.0, 0.0]
+controller = "demuvo.controllers:PurePursuit"
+control_period = 0.05      # optional: seconds between controller runs
+```
+
+`demuvo file.toml --dt 0.02` replaces the file's `dt`. A period shorter than `dt` is an
+error, since a controller cannot run twice in one step. A period that is not a whole
+number of steps works, with one warning: the gaps then alternate between two lengths,
+one step apart, and their mean is the period. A new goal or path takes effect at the
+controller's next run, up to one period later, as in Nav2. The controller's
+`Observation.dt` is the time since it last ran.
 
 ## Develop
 

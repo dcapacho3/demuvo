@@ -3,6 +3,7 @@ version = 1
 [world]
 size = [10.0, 6.0]        # metres
 seed = 7
+dt = 0.01                 # optional: seconds per step
 
 [[obstacle]]
 pose = [4.0, 3.0, 0.0]    # x, y, angle (radians)
@@ -23,6 +24,7 @@ pose = [1.0, 1.0, 0.0]    # where it starts: x, y, angle
 planner = "demuvo.planners:StraightLine"      # optional; this is the default
 controller = "demuvo.controllers:PurePursuit" # optional; module:Class
 controller_params = { speed = 0.5, lookahead = 0.6 }   # optional
+control_period = 0.05     # optional: seconds between controller runs
 
 [[task]]                  # what a robot is to do; several for one robot are waypoints
 robot = "r1"

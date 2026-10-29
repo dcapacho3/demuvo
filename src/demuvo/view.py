@@ -357,6 +357,8 @@ def _window(view: View, commands: Commands, steps: int | None, caption: str) -> 
     running = True
     while running:
         running, step_once = _read_events(view)
+        if not running:
+            break
         elapsed = clock.tick(60) / 1000
         if step_once:
             owed = 1.0
