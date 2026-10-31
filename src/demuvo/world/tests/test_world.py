@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 from robomath import Transform2D
 
-from demuvo.shapes import Box, Circle, LineString, Polygon
 from demuvo.world import DEFAULT_GOAL_TOLERANCE, Obstacle, Task, WorldError, load_world
+from demuvo.world.shapes import Box, Circle, LineString, Polygon
 
 GOOD = """
 version = 1
@@ -69,7 +69,7 @@ def test_loads_a_good_world(tmp_path):
 
 def test_the_example_world_loads():
     """The example file in the repository is a valid world."""
-    path = Path(__file__).resolve().parents[1] / "examples" / "worlds" / "demo.toml"
+    path = Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml"
     assert len(load_world(path).robots) == 1
 
 

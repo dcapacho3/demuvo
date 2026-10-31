@@ -17,8 +17,8 @@ from typing import Protocol
 import numpy as np
 from robomath import Transform2D, wrap_angle
 
-from .models import Twist
-from .plugins import check_positive
+from ..models import Twist
+from ..plugins import check_positive
 
 
 @dataclass(frozen=True, eq=False)

@@ -8,9 +8,9 @@ import os
 import sys
 from pathlib import Path
 
-from .navigation import Navigation
-from .simulation import Simulation
-from .world import load_world
+from ..nav.navigation import Navigation
+from ..sim.simulation import Simulation
+from ..world import load_world
 
 
 def _count(n: int, word: str) -> str:
@@ -63,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     # The view is an optional extra, so it is loaded only when a window opens.
     os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
     try:
-        view = importlib.import_module(".view", __package__)
+        view = importlib.import_module("demuvo.view")
     except ModuleNotFoundError as error:
         print(
             f"demuvo: the view needs the package '{error.name}': "

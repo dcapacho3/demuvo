@@ -7,7 +7,7 @@ import pytest
 
 from demuvo import Simulation, Twist, load_world
 
-DEMO = Path(__file__).resolve().parents[1] / "examples" / "worlds" / "demo.toml"
+DEMO = Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml"
 
 
 @pytest.fixture(name="world")

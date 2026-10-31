@@ -2,11 +2,11 @@
 
 from .controllers import Controller, Observation, PurePursuit
 from .models import MODELS, DiffDrive, Twist
-from .navigation import Navigation
+from .nav import Navigation
 from .planners import Planner, StraightLine
-from .shapes import SHAPES, Box, Circle, LineString, Polygon
-from .simulation import Simulation
+from .sim import Simulation
 from .world import Obstacle, RobotSpec, Task, World, WorldError, load_world
+from .world.shapes import SHAPES, Box, Circle, LineString, Polygon
 
 __all__ = [
     "MODELS",

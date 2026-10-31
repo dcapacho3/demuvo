@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from demuvo.cli import main
+from demuvo.run.cli import main
 
-DEMO = str(Path(__file__).resolve().parents[1] / "examples" / "worlds" / "demo.toml")
+DEMO = str(Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml")
 
 
 def test_check_reads_the_file_and_opens_nothing(capsys):

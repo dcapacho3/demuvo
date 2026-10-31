@@ -110,6 +110,9 @@ pre-commit install
 python -m pytest
 ```
 
+Each part of the code is a folder under `src/demuvo/` (`world`, `models`, `sim`, `planners`,
+`controllers`, `nav`, `evaluation`, `run`, `view`), and its tests sit in a `tests` folder inside it.
+
 Pose maths comes from [robomath](https://github.com/dcapacho3/robomath).
 
 ## License

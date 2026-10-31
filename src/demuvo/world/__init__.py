@@ -11,9 +11,8 @@ from pathlib import Path
 
 from robomath import Transform2D
 
-from .models import MODELS, parse_params
-from .shapes import Shape, parse_shape
-from .verify import (
+from ..models import MODELS, parse_params
+from ..verify import (
     WorldError,
     check_keys,
     inside,
@@ -24,6 +23,7 @@ from .verify import (
     table,
     text,
 )
+from .shapes import Shape, parse_shape
 
 FORMAT_VERSION = 1
 

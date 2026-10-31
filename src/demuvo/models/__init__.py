@@ -24,7 +24,7 @@ from typing import ClassVar, Protocol
 import numpy as np
 from robomath import Transform2D
 
-from .verify import check_keys, number, table
+from ..verify import check_keys, number, table
 
 
 @dataclass(frozen=True)

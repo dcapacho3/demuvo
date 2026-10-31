@@ -26,7 +26,7 @@ license = "Apache-2.0"
 license-files = ["LICEN[CS]E*"]
 
 [project.scripts]
-demuvo = "demuvo.cli:main"
+demuvo = "demuvo.run.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/dcapacho3/demuvo"
@@ -46,8 +46,16 @@ dev = [
   "pillow>=10",
 ]
 
+[tool.setuptools.packages.find]
+where = ["src"]
+# The tests sit beside the code they test; they stay out of the wheel.
+exclude = ["*.tests", "*.tests.*"]
+
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["src", "tests"]
+
+[tool.coverage.run]
+omit = ["*/tests/*"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "D"]

@@ -8,8 +8,8 @@ from collections.abc import Mapping
 import numpy as np
 from robomath import Transform2D
 
-from .models import MODELS, Twist
-from .world import World
+from ..models import MODELS, Twist
+from ..world import World
 
 
 class Simulation:

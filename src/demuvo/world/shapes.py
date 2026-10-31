@@ -21,7 +21,7 @@ from typing import ClassVar, Protocol
 
 from robomath import Transform2D, act_se2
 
-from .verify import (
+from ..verify import (
     WorldError,
     check_keys,
     number,

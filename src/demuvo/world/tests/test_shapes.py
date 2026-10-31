@@ -5,7 +5,7 @@ import pytest
 from robomath import Transform2D
 
 from demuvo import SHAPES, Box, Circle, LineString, Polygon, WorldError
-from demuvo.shapes import parse_shape
+from demuvo.world.shapes import parse_shape
 
 
 def shape(**table):

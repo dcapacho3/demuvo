@@ -29,9 +29,9 @@ from pygame.locals import (
 )
 from robomath import Transform2D
 
-from .models import Twist
-from .shapes import Circle, LineString, Shape
-from .simulation import Simulation
+from ..models import Twist
+from ..sim.simulation import Simulation
+from ..world.shapes import Circle, LineString, Shape
 
 Commands = Callable[[Simulation], Mapping[str, Twist]]
 

@@ -1,5 +1,5 @@
 """Run the command with `python -m demuvo`."""
 
-from .cli import main
+from .run.cli import main
 
 raise SystemExit(main())

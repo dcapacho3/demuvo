@@ -16,8 +16,8 @@ from typing import Protocol
 import numpy as np
 from robomath import Transform2D
 
-from .plugins import check_positive
-from .world import World
+from ..plugins import check_positive
+from ..world import World
 
 
 class Planner(Protocol):

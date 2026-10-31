@@ -12,8 +12,8 @@ from collections.abc import Mapping
 
 from robomath import Transform2D, wrap_angle
 
-from .simulation import Simulation
-from .world import Task
+from ..sim.simulation import Simulation
+from ..world import Task
 
 # Below these speeds, in m/s and rad/s, a robot counts as standing still.
 STOPPED = (0.01, 0.01)

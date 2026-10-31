@@ -8,13 +8,13 @@ import warnings
 import numpy as np
 from robomath import Transform2D
 
-from .controllers import Controller, Observation
-from .judge import Judge
-from .models import Twist
-from .planners import Planner
-from .plugins import load_class
-from .simulation import Simulation
-from .world import DEFAULT_GOAL_TOLERANCE, Task, World, WorldError
+from ..controllers import Controller, Observation
+from ..evaluation.judge import Judge
+from ..models import Twist
+from ..planners import Planner
+from ..plugins import load_class
+from ..sim.simulation import Simulation
+from ..world import DEFAULT_GOAL_TOLERANCE, Task, World, WorldError
 
 DEFAULT_PLANNER = "demuvo.planners:StraightLine"
 

@@ -1,0 +1,1 @@
+"""The demuvo command."""

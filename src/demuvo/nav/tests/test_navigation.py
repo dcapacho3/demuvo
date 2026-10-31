@@ -7,9 +7,9 @@ import pytest
 from robomath import Transform2D
 
 from demuvo import Navigation, Simulation, Task, Twist, WorldError, load_world
-from demuvo.judge import reached
+from demuvo.evaluation import reached
 
-DEMO = Path(__file__).resolve().parents[1] / "examples" / "worlds" / "demo.toml"
+DEMO = Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml"
 PURE_PURSUIT = 'controller = "demuvo.controllers:PurePursuit"'
 
 

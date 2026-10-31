@@ -6,9 +6,9 @@ import pytest
 from robomath import Transform2D
 
 from demuvo import Simulation, Task, Twist, load_world
-from demuvo.judge import Judge
+from demuvo.evaluation import Judge
 
-DEMO = Path(__file__).resolve().parents[1] / "examples" / "worlds" / "demo.toml"
+DEMO = Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml"
 
 
 def goal(x):

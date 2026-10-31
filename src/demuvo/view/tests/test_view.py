@@ -32,7 +32,7 @@ from demuvo.view import (
     record,
 )
 
-DEMO = str(Path(__file__).resolve().parents[1] / "examples" / "worlds" / "demo.toml")
+DEMO = str(Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml")
 
 
 @pytest.fixture(autouse=True)
