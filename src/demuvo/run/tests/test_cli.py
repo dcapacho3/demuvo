@@ -64,7 +64,8 @@ def test_no_trail_turns_the_path_off(monkeypatch):
 
 def test_without_pygame_the_message_says_how_to_install(monkeypatch, capsys):
     """A missing package is a hint on stderr that names it, not a traceback."""
-    monkeypatch.delitem(sys.modules, "demuvo.view", raising=False)
+    for name in [n for n in sys.modules if n.startswith("demuvo.view")]:
+        monkeypatch.delitem(sys.modules, name)
     monkeypatch.setitem(sys.modules, "pygame", None)
     assert main([DEMO]) == 1
     err = capsys.readouterr().err

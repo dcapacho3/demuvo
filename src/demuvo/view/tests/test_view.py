@@ -26,11 +26,11 @@ from demuvo.view import (
     ROBOT_COLORS,
     SPEEDS,
     View,
-    _change_speed,
     outline,
     play,
     record,
 )
+from demuvo.view.window import _change_speed
 
 DEMO = str(Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml")
 
