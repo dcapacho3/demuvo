@@ -6,9 +6,10 @@ import math
 import warnings
 
 import numpy as np
-from robomath import Transform2D, wrap_angle
+from robomath import Transform2D
 
 from .controllers import Controller, Observation
+from .judge import Judge
 from .models import Twist
 from .planners import Planner
 from .plugins import load_class
@@ -16,21 +17,6 @@ from .simulation import Simulation
 from .world import DEFAULT_GOAL_TOLERANCE, Task, World, WorldError
 
 DEFAULT_PLANNER = "demuvo.planners:StraightLine"
-
-# Below these speeds, in m/s and rad/s, a robot counts as standing still.
-# Shortcut: fixed; make it a key of the world file when a user needs another.
-STOPPED = (0.01, 0.01)
-
-
-def reached(pose: Transform2D, task: Task) -> bool:
-    """True if the pose is within the task's distance and angle of its goal."""
-    xy_tolerance, yaw_tolerance = task.goal_tolerance
-    x, y, yaw = pose.xyt
-    gx, gy, gyaw = task.goal.xyt
-    return (
-        math.hypot(gx - x, gy - y) <= xy_tolerance
-        and abs(wrap_angle(gyaw - yaw)) <= yaw_tolerance
-    )
 
 
 class Navigation:
@@ -43,10 +29,9 @@ class Navigation:
 
     A robot follows its tasks in order. At a robot's first step, when it starts
     a new task, or after `set_goal`, its planner makes a path from where the
-    robot is to the goal. A task is done when the robot is within its tolerance
-    of the goal, stands still if the task asks for it (`Task.stop`), and has
-    held the goal for `Task.wait` seconds; the last goal stays, so the
-    controller holds the robot there.
+    robot is to the goal. The `judge` says when a task is done and moves the
+    robot on to the next; the last goal stays, so the controller holds the robot
+    there.
     `set_path` gives a robot a path made elsewhere, such as a Nav2 plan, and the
     planner then stays out of it.
 
@@ -61,8 +46,7 @@ class Navigation:
         tasks: the tasks of each robot, in order, by name. Starts as the tasks
             of the world file.
         paths: the path of each robot that has one, by name, shape (N, 3).
-        done: for each finished task, (robot name, task index) to the
-            simulated time at which the robot first met all its conditions.
+        judge: which task each robot is on and which are done; see `Judge`.
     """
 
     def __init__(self, world: World) -> None:
@@ -77,9 +61,8 @@ class Navigation:
         for task in world.tasks:
             self.tasks[task.robot].append(task)
         self.paths: dict[str, np.ndarray] = {}
-        self.done: dict[tuple[str, int], float] = {}
-        self._met: dict[str, float] = {}
-        self._current = dict.fromkeys(self.tasks, 0)
+        self.judge = Judge(self.tasks)
+        self._planned: dict[str, int] = {}
         self._planners: dict[str, Planner] = {}
         self._controllers: dict[str, Controller] = {}
         self._periods = {r.name: r.control_period for r in world.robots}
@@ -144,10 +127,8 @@ class Navigation:
         """
         self._check(name)
         self.tasks[name] = [] if goal is None else [Task(name, goal, goal_tolerance)]
-        self._current[name] = 0
+        self.judge.reset(name)
         self.paths.pop(name, None)
-        self._met.pop(name, None)
-        self.done = {key: t for key, t in self.done.items() if key[0] != name}
 
     def set_path(self, name: str, path) -> None:
         """Give a robot a path made elsewhere, as (x, y, angle) rows.
@@ -171,35 +152,6 @@ class Navigation:
         if name not in self.tasks:
             raise ValueError(f"no robot named '{name}'")
 
-    def _finished(self, name: str, i: int, sim: Simulation) -> bool:
-        """True once the robot has done task `i`; the first time notes `done`."""
-        tasks = self.tasks[name]
-        task = tasks[i]
-        stop = task.stop
-        if stop is None:
-            stop = i == len(tasks) - 1 or task.wait > 0
-        speed, turn = sim.velocity[name][[0, 2]]
-        still = abs(speed) <= STOPPED[0] and abs(turn) <= STOPPED[1]
-        if not (reached(sim.poses[name], task) and (still or not stop)):
-            self._met.pop(name, None)
-            return False
-        since = self._met.setdefault(name, sim.time)
-        if sim.time - since < task.wait:
-            return False
-        self.done.setdefault((name, i), since)
-        return True
-
-    def _task(self, name: str, sim: Simulation) -> Task | None:
-        """The task the robot is on; move on past tasks that are done."""
-        tasks, i = self.tasks[name], self._current[name]
-        # `_finished` is asked of the last task too, so it notes its time.
-        while tasks and self._finished(name, i, sim) and i < len(tasks) - 1:
-            i += 1
-            self.paths.pop(name, None)
-            self._met.pop(name, None)
-        self._current[name] = i
-        return tasks[i] if tasks else None
-
     def _due(self, name: str, dt: float) -> int:
         """The step of the robot's next controller run."""
         return math.ceil(round(self._runs[name] * self._periods[name] / dt, 9))
@@ -207,15 +159,19 @@ class Navigation:
     def __call__(self, sim: Simulation) -> dict[str, Twist]:
         """The command of every robot that has a controller, for this step."""
         self.check(sim.dt)
+        self.judge.update(sim)
         commands = {}
         for name, controller in self._controllers.items():
             if sim.steps < self._due(name, sim.dt):
                 commands[name] = self._held[name]
                 continue
             pose = sim.poses[name]
-            task = self._task(name, sim)
+            task = self.judge.task(name)
+            if self._planned.get(name, 0) != self.judge.current[name]:
+                self.paths.pop(name, None)  # the robot moved on to its next task
             if name not in self.paths:
                 self.paths[name] = np.empty((0, 3))
+                self._planned[name] = self.judge.current[name]
                 if task is not None:
                     path = self._planners[name].plan(sim.world, pose, task.goal)
                     self.paths[name] = path

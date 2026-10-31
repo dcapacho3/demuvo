@@ -7,7 +7,7 @@ import pytest
 from robomath import Transform2D
 
 from demuvo import Navigation, Simulation, Task, Twist, WorldError, load_world
-from demuvo.navigation import reached
+from demuvo.judge import reached
 
 DEMO = Path(__file__).resolve().parents[1] / "examples" / "worlds" / "demo.toml"
 PURE_PURSUIT = 'controller = "demuvo.controllers:PurePursuit"'
@@ -404,10 +404,10 @@ def test_a_task_with_a_wait_holds_the_robot_until_the_time_has_passed(tmp_path):
     for _ in range(5):
         sim.step(nav(sim))
     assert list(nav.paths["r1"][-1, :2]) == [1.0, 1.0]
-    assert nav.done == {}
+    assert nav.judge.done == {}
     for _ in range(10):
         sim.step(nav(sim))
-    assert nav.done == {("r1", 0): 0.0}
+    assert nav.judge.done == {("r1", 0): 0.0}
     assert list(nav.paths["r1"][-1, :2]) == [3.0, 1.0]
 
 
@@ -416,11 +416,11 @@ def test_a_task_that_must_stop_is_not_done_while_the_robot_moves(tmp_path):
     sim, nav = waiting_world(tmp_path, wait=0.05)
     sim.velocity["r1"][:] = [0.5, 0.0, 0.0]
     commands = nav(sim)
-    assert nav.done == {}
+    assert nav.judge.done == {}
     sim.step(commands)  # the robot is told to hold, so it is still from now on
     for _ in range(2):
         sim.step(nav(sim))
-    assert nav.done == pytest.approx({("r1", 0): 0.05})
+    assert nav.judge.done == pytest.approx({("r1", 0): 0.05})
 
 
 def test_the_last_task_notes_the_time_it_was_first_met():
@@ -429,5 +429,5 @@ def test_the_last_task_notes_the_time_it_was_first_met():
     nav = Navigation(sim.world)
     for _ in range(800):
         sim.step(nav(sim))
-    assert list(nav.done) == [("r1", 0)]
-    assert 0.0 < nav.done[("r1", 0)] <= sim.time
+    assert list(nav.judge.done) == [("r1", 0)]
+    assert 0.0 < nav.judge.done[("r1", 0)] <= sim.time
