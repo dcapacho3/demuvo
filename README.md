@@ -113,6 +113,12 @@ one step apart, and their mean is the period. A new goal or path takes effect at
 controller's next run, up to one period later, as in Nav2. The controller's
 `Observation.dt` is the time since it last ran.
 
+The window draws each robot between its last two steps, so the motion stays smooth
+whatever `dt` is. The picture lags the simulation by up to one step. With `dt = 0.05`
+and a 60 Hz screen, a robot at 0.5 m/s would otherwise stand still in most frames and
+then jump 25 mm; blended, it moves 8.3 mm in every frame. A GIF has one frame per
+whole step and is not blended.
+
 ## Develop
 
 ```bash

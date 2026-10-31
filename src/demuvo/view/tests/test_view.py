@@ -274,3 +274,59 @@ def test_the_window_gets_the_caption(window, monkeypatch):
     monkeypatch.setattr(pygame.display, "set_caption", captions.append)
     window([[]])
     assert captions == ["a title"]
+
+
+def moved_view(trail=100):
+    """A view of the demo after one step of 1 s at 1 m/s: x went from 1 to 2."""
+    sim = Simulation(load_world(DEMO), dt=1.0)
+    view = View(sim, trail=trail)
+    view.step(lambda _: {"r1": Twist(vx=1.0, wz=0.0)})
+    return view
+
+
+def test_a_fraction_draws_the_robot_between_its_last_two_poses():
+    """Half way from x = 1 to x = 2 puts the body at x = 1.5, and nowhere else."""
+    view = moved_view()
+    halfway = view.render(0.5)
+    assert close(pixel(view, halfway, 1.5, 0.9), ROBOT_COLORS[0])
+    assert not close(pixel(view, halfway, 2.0, 0.9), ROBOT_COLORS[0])
+    assert not close(pixel(view, halfway, 1.0, 0.9), ROBOT_COLORS[0])
+    now = view.render()
+    assert close(pixel(view, now, 2.0, 0.9), ROBOT_COLORS[0])
+
+
+def test_the_pose_to_draw_at_fraction_one_is_the_pose_now():
+    """No blend at the end, so the usual picture is exact."""
+    view = moved_view()
+    assert view.pose("r1", 1.0) is view.sim.poses["r1"]
+    assert view.pose("r1", 0.5).xyt[0] == pytest.approx(1.5)
+
+
+def test_a_pose_set_from_outside_is_drawn_where_it_is():
+    """A jump that is not a step is not blended, so the body does not streak."""
+    view = moved_view()
+    view.sim.poses["r1"] = Transform2D.from_xyt((5.0, 3.0, 0.0))
+    frame = view.render(0.5)
+    assert close(pixel(view, frame, 5.0, 2.9), ROBOT_COLORS[0])
+    assert view.pose("r1", 0.5) is view.sim.poses["r1"]
+
+
+def test_the_window_draws_between_steps_and_the_pose_now_when_paused(
+    window, monkeypatch
+):
+    """Running gives fractions below 1; a paused window draws at exactly 1."""
+    fractions = []
+    render = View.render
+
+    def record_fraction(self, fraction=1.0):
+        fractions.append((self.paused, fraction))
+        return render(self, fraction)
+
+    monkeypatch.setattr(View, "render", record_fraction)
+    window([[]] * 10 + [[key(K_SPACE)]] + [[]] * 5)
+    running = [f for paused, f in fractions if not paused]
+    paused = [f for paused, f in fractions if paused]
+    assert running
+    assert all(0.0 <= f <= 1.0 for f in running)
+    assert paused
+    assert set(paused) == {1.0}

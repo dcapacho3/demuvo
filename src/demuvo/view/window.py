@@ -80,7 +80,10 @@ def _window(view: View, commands: Commands, steps: int | None, caption: str) -> 
             view.step(commands)
             owed -= 1.0
         view.done = steps is not None and sim.steps >= steps
-        screen.blit(view.render(), (0, 0))
+        # Paused, stepping by hand or finished: draw the pose now. Otherwise draw
+        # between the last two steps, as far along as the time left over.
+        fraction = 1.0 if view.paused or view.done else min(owed, 1.0)
+        screen.blit(view.render(fraction), (0, 0))
         pygame.display.flip()
     pygame.display.quit()
 

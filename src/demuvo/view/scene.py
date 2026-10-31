@@ -18,6 +18,7 @@ from robomath import Transform2D
 from ..models import Twist
 from ..sim.simulation import Simulation
 from ..world.shapes import Circle, LineString, Shape
+from .blend import blend
 from .style import (
     BAR,
     FLOOR,
@@ -105,6 +106,8 @@ class View:
             r.name: [t.goal.translation for t in sim.world.tasks if t.robot == r.name]
             for r in sim.world.robots
         }
+        self._previous = dict(sim.poses)  # poses before the last step
+        self._seen = dict(sim.poses)  # poses after the last step of this view
         self.paused = False
         self.speed = 1.0
         self.done = False
@@ -180,31 +183,56 @@ class View:
             if solid:
                 pygame.draw.polygon(surface, _darker(OBSTACLE), points, width=SS * 2)
 
+    def pose(self, name: str, fraction: float = 1.0) -> Transform2D:
+        """Where to draw a robot between its last two steps.
+
+        `fraction` is how far to go from its pose before the last step (0) to its
+        pose now (1). A pose that changed other than by this view's `step` (a
+        reset, or a step taken elsewhere) is drawn as it is, so the robot never
+        streaks across the map.
+        """
+        current = self.sim.poses[name]
+        if fraction >= 1.0 or current is not self._seen[name]:
+            return current
+        return blend(self._previous[name], current, fraction)
+
     def step(self, commands: Commands) -> None:
         """Advance the simulation one step and record where each robot is."""
+        self._previous = dict(self.sim.poses)
         self.sim.step(commands(self.sim))
+        self._seen = dict(self.sim.poses)
         for name, pose in self.sim.poses.items():
             self.trails[name].append(tuple(pose.translation))
 
-    def render(self) -> pygame.Surface:
-        """The picture of the simulation as it is now."""
+    def render(self, fraction: float = 1.0) -> pygame.Surface:
+        """The picture of the simulation as it is now.
+
+        Args:
+            fraction: how far to draw each robot from its pose before the last
+                step (0) to its pose now (1); see `pose`.
+        """
         layer = self._layer(alpha=True)
         robots = list(enumerate(self.sim.world.robots))
+        poses = {robot.name: self.pose(robot.name, fraction) for _, robot in robots}
         for i, robot in robots:
             color = ROBOT_COLORS[i % len(ROBOT_COLORS)]
             if len(self.trails[robot.name]) > 1:
                 width = round(0.03 * self.scale * SS)
                 trail = (*pygame.Color(color)[:3], 170)
-                points = self._points(self.trails[robot.name])
+                trail_points = list(self.trails[robot.name])
+                if poses[robot.name] is not self.sim.poses[robot.name]:
+                    trail_points[-1] = tuple(poses[robot.name].translation)
+                points = self._points(trail_points)
                 pygame.draw.lines(layer, trail, False, points, width)
             for goal in self.goals[robot.name]:
                 self._draw_goal(layer, goal, color)
         for i, robot in robots:
-            self._draw_robot(layer, robot, ROBOT_COLORS[i % len(ROBOT_COLORS)])
+            color = ROBOT_COLORS[i % len(ROBOT_COLORS)]
+            self._draw_robot(layer, robot, color, poses[robot.name])
         frame = self._background.copy()
         frame.blit(self._shrink(layer), (0, HUD))
         for _, robot in robots:
-            self._draw_label(frame, robot)
+            self._draw_label(frame, robot, poses[robot.name])
         self._draw_bar(frame)
         return frame
 
@@ -220,9 +248,10 @@ class View:
         pygame.draw.polygon(layer, color, pixels)
         pygame.draw.polygon(layer, WALL, pixels, width=SS)
 
-    def _draw_robot(self, layer: pygame.Surface, robot, color: str) -> None:
+    def _draw_robot(
+        self, layer: pygame.Surface, robot, color: str, pose: Transform2D
+    ) -> None:
         """The body, with a white line from the centre toward the front."""
-        pose = self.sim.poses[robot.name]
         points = self._points(outline(robot.shape, pose))
         pygame.draw.polygon(layer, color, points)
         pygame.draw.polygon(layer, _darker(color), points, width=SS * 2)
@@ -236,9 +265,9 @@ class View:
         pygame.draw.line(layer, "white", centre, front, width)
         pygame.draw.circle(layer, "white", centre, width)
 
-    def _draw_label(self, frame: pygame.Surface, robot) -> None:
+    def _draw_label(self, frame: pygame.Surface, robot, pose: Transform2D) -> None:
         """The robot's name above it."""
-        x, y, _ = self.sim.poses[robot.name].xyt
+        x, y, _ = pose.xyt
         text = self._small.render(robot.name, True, WALL)
         cx, cy = self.to_pixel(x, y)
         top = cy + HUD - self.reach[robot.name] * self.scale - 16
