@@ -115,3 +115,13 @@ def test_dt_comes_from_the_world_unless_given(tmp_path):
     world = load_world(path)
     assert Simulation(world).dt == 0.02
     assert Simulation(world, dt=0.1).dt == 0.1
+
+
+def test_velocity_is_the_motion_of_the_last_step(world):
+    """Zero at the start, the command after a step, zero again for no command."""
+    sim = Simulation(world, dt=0.1)
+    assert sim.velocity["r1"] == pytest.approx([0.0, 0.0, 0.0])
+    sim.step({"r1": Twist(vx=0.5, wz=0.2)})
+    assert sim.velocity["r1"] == pytest.approx([0.5, 0.0, 0.2])
+    sim.step({})
+    assert sim.velocity["r1"] == pytest.approx([0.0, 0.0, 0.0], abs=1e-12)

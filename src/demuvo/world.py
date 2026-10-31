@@ -99,11 +99,17 @@ class Task:
         goal: where it should end.
         goal_tolerance: distance in metres and angle in radians within which
             the robot counts as at its goal.
+        stop: True if the robot must also be standing still to finish the
+            task. None means yes for the robot's last task and for any task
+            with a `wait`, no for the others.
+        wait: seconds the robot must hold the goal before the task is done.
     """
 
     robot: str
     goal: Transform2D
     goal_tolerance: tuple[float, float] = DEFAULT_GOAL_TOLERANCE
+    stop: bool | None = None
+    wait: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -225,7 +231,7 @@ def _parse_task(item: dict, index: int, size, robots: dict[str, RobotSpec]) -> T
     """Build and check one `[[task]]`; the robot must be in `robots`."""
     label = f"task {index}"
     item = table(item, label)
-    check_keys(item, {"robot", "goal", "goal_tolerance"}, label)
+    check_keys(item, {"robot", "goal", "goal_tolerance", "stop", "wait"}, label)
     name = text(item, "robot", label)
     if name not in robots:
         raise WorldError(f"{label}: no robot named '{name}'")
@@ -235,7 +241,11 @@ def _parse_task(item: dict, index: int, size, robots: dict[str, RobotSpec]) -> T
     tolerance = DEFAULT_GOAL_TOLERANCE
     if "goal_tolerance" in item:
         tolerance = numbers(item["goal_tolerance"], 2, label, "goal_tolerance", True)
-    return Task(name, goal, tolerance)
+    stop = item.get("stop")
+    if stop is not None and not isinstance(stop, bool):
+        raise WorldError(f"{label}: 'stop' must be true or false")
+    wait = number(item, "wait", label) if "wait" in item else 0.0
+    return Task(name, goal, tolerance, stop, wait)
 
 
 def load_world(path: str | Path) -> World:

@@ -58,7 +58,13 @@ controller_params = { speed = 0.5, lookahead = 0.6, rotate_to_goal = true }
 robot = "r1"
 goal = [9.0, 5.0, 0.0]
 goal_tolerance = [0.1, 0.1]                    # metres, radians
+wait = 2.0                                     # optional: seconds to hold the goal
 ```
+
+A task is done when the robot is within the tolerance and, if the task asks, standing
+still (below 0.01 m/s and 0.01 rad/s) for `wait` seconds. `stop = true` or `false` sets
+the standing-still test; the default is yes for a robot's last task and for a task with
+a `wait`, and no for the waypoints in between.
 
 To use your own, write a class with one method and name it in the file. A planner has
 `plan(world, start, goal)` and returns an array of shape (N, 3) of x, y, angle. A

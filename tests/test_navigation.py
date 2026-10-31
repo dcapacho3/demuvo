@@ -383,3 +383,51 @@ def test_a_robot_with_no_controller_has_no_period_to_check():
         ),
     )
     Navigation(world).check(0.01)
+
+
+def waiting_world(tmp_path, wait=0.5):
+    """The demo robot with a first task at its own start and a second elsewhere."""
+    text = DEMO.read_text(encoding="utf-8")
+    text = text.replace(
+        "goal = [9.0, 5.0, 0.0]", f"goal = [1.0, 1.0, 0.0]\nwait = {wait}"
+    )
+    text += '\n[[task]]\nrobot = "r1"\ngoal = [3.0, 1.0, 0.0]\n'
+    path = tmp_path / "waiting.toml"
+    path.write_text(text, encoding="utf-8")
+    sim = Simulation(load_world(path), dt=0.05)
+    return sim, Navigation(sim.world)
+
+
+def test_a_task_with_a_wait_holds_the_robot_until_the_time_has_passed(tmp_path):
+    """The robot sits on the first goal for 0.5 s; only then does it plan the second."""
+    sim, nav = waiting_world(tmp_path)
+    for _ in range(5):
+        sim.step(nav(sim))
+    assert list(nav.paths["r1"][-1, :2]) == [1.0, 1.0]
+    assert nav.done == {}
+    for _ in range(10):
+        sim.step(nav(sim))
+    assert nav.done == {("r1", 0): 0.0}
+    assert list(nav.paths["r1"][-1, :2]) == [3.0, 1.0]
+
+
+def test_a_task_that_must_stop_is_not_done_while_the_robot_moves(tmp_path):
+    """At the goal but still moving does not finish a task with a wait."""
+    sim, nav = waiting_world(tmp_path, wait=0.05)
+    sim.velocity["r1"][:] = [0.5, 0.0, 0.0]
+    commands = nav(sim)
+    assert nav.done == {}
+    sim.step(commands)  # the robot is told to hold, so it is still from now on
+    for _ in range(2):
+        sim.step(nav(sim))
+    assert nav.done == pytest.approx({("r1", 0): 0.05})
+
+
+def test_the_last_task_notes_the_time_it_was_first_met():
+    """The demo robot finishes its only task; the time is noted once."""
+    sim = Simulation(load_world(DEMO), dt=0.05)
+    nav = Navigation(sim.world)
+    for _ in range(800):
+        sim.step(nav(sim))
+    assert list(nav.done) == [("r1", 0)]
+    assert 0.0 < nav.done[("r1", 0)] <= sim.time

@@ -470,3 +470,32 @@ def test_a_bad_dt_or_control_period_is_named(tmp_path, old, new, message):
     """Zero, negative and non-numbers are refused, with the key named."""
     with pytest.raises(WorldError, match=message):
         load(tmp_path, GOOD.replace(old, new))
+
+
+def test_a_task_may_ask_to_stop_and_to_wait(tmp_path):
+    """`stop` and `wait` are read; without them the task has no opinion and no wait."""
+    plain = load(tmp_path, GOOD).tasks[0]
+    assert (plain.stop, plain.wait) == (None, 0.0)
+    head, tail = GOOD.split("[[task]]")
+    text = (
+        head
+        + "[[task]]"
+        + tail.replace('robot = "r1"', 'robot = "r1"\nstop = false\nwait = 2.5', 1)
+    )
+    task = load(tmp_path, text).tasks[0]
+    assert (task.stop, task.wait) == (False, 2.5)
+
+
+@pytest.mark.parametrize(
+    ("line", "message"),
+    [
+        ("stop = 1", "'stop' must be true or false"),
+        ("wait = 0", "'wait' must be positive"),
+    ],
+)
+def test_a_bad_stop_or_wait_is_named(tmp_path, line, message):
+    """Each mistake names the task and the key."""
+    head, tail = GOOD.split("[[task]]")
+    tail = tail.replace("goal = [9.0, 5.0, 0.0]", f"goal = [9.0, 5.0, 0.0]\n{line}", 1)
+    with pytest.raises(WorldError, match=message):
+        load(tmp_path, head + "[[task]]" + tail)
