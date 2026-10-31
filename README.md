@@ -28,7 +28,9 @@ Working today:
 - a planner and a controller for each robot, chosen in the file as `module:Class`;
   built in: `StraightLine` and `PurePursuit`;
 - a step length and a controller rate that you set apart (see "Time" below);
-- a top-down view, and GIF export from Python.
+- a top-down view, and GIF export from Python;
+- a result, printed with `--result` when the window closes: for each task, whether the
+  robot reached it and when, and the distance it drove.
 
 Not yet: collisions, noisy wheel encoders, a lidar, the other kinematic models
 (car-like, forklift, mecanum, skid-steer), and a runner that compares controllers on
@@ -41,6 +43,17 @@ pip install -e ".[view]"
 demuvo examples/worlds/demo.toml     # a robot drives to the star; --no-trail hides its path
 demuvo examples/worlds/demo.toml --check   # check the file and open nothing
 ```
+
+Add `--result` and demuvo prints how the run went when you close the window. After the
+demo robot has driven to the star it reads:
+
+```
+r1 task 1: reached at 19.26 s
+r1 drove 8.86 m
+```
+
+A task that is not done says how far the robot is from it. The distance is the exact
+length of the path, and the time is simulated time, so the same seed gives the same lines.
 
 A robot that has a task gets a path from its planner, and its controller follows it.
 Several tasks for one robot, in file order, are waypoints:

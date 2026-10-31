@@ -8,6 +8,7 @@ import os
 import sys
 from pathlib import Path
 
+from ..evaluation import result_lines
 from ..nav.navigation import Navigation
 from ..sim.simulation import Simulation
 from ..world import load_world
@@ -43,6 +44,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--no-trail", action="store_true", help="do not draw the path of each robot"
     )
+    parser.add_argument(
+        "--result",
+        action="store_true",
+        help="print what each robot did when the window closes",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -77,4 +83,9 @@ def main(argv: list[str] | None = None) -> int:
         caption=f"demuvo - {Path(args.world).name}",
         trail=0 if args.no_trail else view.TRAIL,
     )
+    if args.result:
+        commands.judge.update(sim)  # count the last step
+        lines = result_lines(sim, commands.judge)
+        if lines:
+            print("\n".join(lines))
     return 0

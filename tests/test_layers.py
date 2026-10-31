@@ -29,7 +29,7 @@ ALLOWED = {
         "world",
     },
     "view": {"models", "sim", "world"},
-    "run": {"nav", "sim", "world"},
+    "run": {"evaluation", "nav", "sim", "world"},
 }
 
 

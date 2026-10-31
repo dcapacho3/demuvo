@@ -104,3 +104,21 @@ def test_a_period_below_dt_is_reported_before_the_window(capsys):
     """--dt 0.1 is above the demo's 0.05 s control period, so the run is refused."""
     assert main([DEMO, "--dt", "0.1", "--check"]) == 1
     assert "control_period" in capsys.readouterr().err
+
+
+def drive_to_the_goal(sim, commands, **_):
+    """A stand-in for the window: run the demo to its goal."""
+    for _ in range(2500):
+        sim.step(commands(sim))
+
+
+def test_the_result_is_printed_only_when_asked(monkeypatch, capsys):
+    """With --result, each task and the distance driven go to stdout; else nothing."""
+    pytest.importorskip("pygame")
+    monkeypatch.setattr("demuvo.view.play", drive_to_the_goal)
+    assert main([DEMO]) == 0
+    assert capsys.readouterr().out == ""
+    assert main([DEMO, "--result"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0].startswith("r1 task 1: reached at ")
+    assert lines[1].startswith("r1 drove ")

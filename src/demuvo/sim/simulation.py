@@ -27,7 +27,11 @@ class Simulation:
             `xyt` is (x, y, angle).
         steps: number of steps taken.
         velocity: how each robot moved in the last step, by name, as
-            (vx, vy, wz) in its own frame; zeros before the first step.
+            (vx, vy, wz) in its own frame: the constant twist that takes the
+            old pose to the new one. Zeros before the first step.
+        driven: metres each robot has driven, by name. Each step adds the
+            length of that twist's arc, `hypot(vx, vy) * dt`, so for a model
+            that steps along exact arcs the sum is the exact path length.
     """
 
     def __init__(self, world: World, dt: float | None = None) -> None:
@@ -48,6 +52,7 @@ class Simulation:
         self.poses: dict[str, Transform2D] = {r.name: r.pose for r in world.robots}
         self.steps = 0
         self.velocity = {r.name: np.zeros(3) for r in world.robots}
+        self.driven = {r.name: 0.0 for r in world.robots}
 
     @property
     def time(self) -> float:
@@ -72,9 +77,14 @@ class Simulation:
             name: model.step(self.poses[name], commands.get(name, Twist()), self.dt)
             for name, model in self.models.items()
         }
-        self.velocity = {
+        velocity = {
             name: pose.rminus(self.poses[name]) / self.dt
             for name, pose in moved.items()
         }
+        self.driven = {
+            name: self.driven[name] + math.hypot(v[0], v[1]) * self.dt
+            for name, v in velocity.items()
+        }
+        self.velocity = velocity
         self.poses.update(moved)
         self.steps += 1

@@ -19,15 +19,18 @@ from ..world import Task
 STOPPED = (0.01, 0.01)
 
 
-def reached(pose: Transform2D, task: Task) -> bool:
-    """True if the pose is within the task's distance and angle of its goal."""
-    xy_tolerance, yaw_tolerance = task.goal_tolerance
+def goal_error(pose: Transform2D, task: Task) -> tuple[float, float]:
+    """Distance in metres and angle in radians between a pose and the task's goal."""
     x, y, yaw = pose.xyt
     gx, gy, gyaw = task.goal.xyt
-    return (
-        math.hypot(gx - x, gy - y) <= xy_tolerance
-        and abs(wrap_angle(gyaw - yaw)) <= yaw_tolerance
-    )
+    return math.hypot(gx - x, gy - y), abs(float(wrap_angle(gyaw - yaw)))
+
+
+def reached(pose: Transform2D, task: Task) -> bool:
+    """True if the pose is within the task's distance and angle of its goal."""
+    distance, angle = goal_error(pose, task)
+    xy_tolerance, yaw_tolerance = task.goal_tolerance
+    return distance <= xy_tolerance and angle <= yaw_tolerance
 
 
 class Judge:

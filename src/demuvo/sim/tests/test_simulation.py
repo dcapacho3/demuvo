@@ -125,3 +125,30 @@ def test_velocity_is_the_motion_of_the_last_step(world):
     assert sim.velocity["r1"] == pytest.approx([0.5, 0.0, 0.2])
     sim.step({})
     assert sim.velocity["r1"] == pytest.approx([0.0, 0.0, 0.0], abs=1e-12)
+
+
+def test_driven_is_the_exact_length_of_the_path(world):
+    """A circle of radius 0.5 m for 6 s at 0.5 m/s is 3 m, not the shorter chords."""
+    sim = Simulation(world, dt=0.1)
+    for _ in range(60):
+        sim.step({"r1": Twist(vx=0.5, wz=1.0)})
+    assert sim.driven["r1"] == pytest.approx(3.0, abs=1e-9)
+
+
+def test_turning_on_the_spot_and_standing_still_drive_nothing(world):
+    """Only motion of the robot's origin counts."""
+    sim = Simulation(world, dt=0.1)
+    assert sim.driven["r1"] == 0.0
+    for _ in range(10):
+        sim.step({"r1": Twist(wz=1.0)})
+    assert sim.driven["r1"] == pytest.approx(0.0, abs=1e-12)
+
+
+def test_a_failed_step_does_not_change_driven(world):
+    """The step is refused before anything is added."""
+    sim = Simulation(world, dt=0.1)
+    sim.step({"r1": Twist(vx=1.0)})
+    before = dict(sim.driven)
+    with pytest.raises(ValueError, match="no robot named"):
+        sim.step({"ghost": Twist(vx=1.0)})
+    assert sim.driven == before
