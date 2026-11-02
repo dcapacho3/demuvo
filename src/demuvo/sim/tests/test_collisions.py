@@ -1,12 +1,15 @@
 """Tests for the collision checker, and for what Simulation does with contacts."""
 
 import math
+from dataclasses import dataclass
+from typing import ClassVar
 
 import pytest
 from robomath import Transform2D
 
 from demuvo import Simulation, Twist, load_world
 from demuvo.sim.collisions import ALL, Checker
+from demuvo.world.shapes import SHAPES, Part
 
 HEAD = """
 version = 1
@@ -172,3 +175,83 @@ def test_a_robot_sent_back_is_not_landed_on_by_another(tmp_path):
     assert sim.poses["A"].xyt[:2] == pytest.approx((4.5, 3.0))
     assert sim.poses["B"].xyt[:2] == pytest.approx((3.5, 3.0))
     assert sim.checker.check(sim.poses) == []
+
+
+def test_robots_already_overlapping_are_left_where_they_are(tmp_path, monkeypatch):
+    """When going back does not clear a contact, the step gives up and ends."""
+    monkeypatch.setattr("demuvo.sim.simulation.MAX_PASSES", 0)
+    sim = Simulation(world(tmp_path, robot("a", 2, 3), robot("b", 6, 3)))
+    sim.poses["b"] = Transform2D.from_xyt((2.5, 3.0, 0.0))
+    before = {n: tuple(p.xyt) for n, p in sim.poses.items()}
+    sim.step({})
+    assert {n: tuple(p.xyt) for n, p in sim.poses.items()} == before
+
+
+@pytest.mark.parametrize(
+    "parts, message",
+    [
+        ((robot("a", 2, 3), robot("b", 2.5, 3)), "'a' starts inside 'b'"),
+        ((WALL, robot("a", 5, 3)), "'a' starts inside 'obstacle 1'"),
+    ],
+)
+def test_a_robot_cannot_start_inside_anything(tmp_path, parts, message):
+    """A robot that starts in a robot or an obstacle is refused."""
+    with pytest.raises(ValueError, match=message):
+        Simulation(world(tmp_path, *parts))
+
+
+@dataclass(frozen=True)
+class Triangle:
+    """A plugin shape: a triangle with corners (-1,-1), (1,-1), (0,1) times scale."""
+
+    scale: float
+
+    name: ClassVar[str] = "triangle"
+    keys: ClassVar[set[str]] = {"scale"}
+    closed: ClassVar[bool] = True
+    pose_optional: ClassVar[bool] = False
+
+    @classmethod
+    def parse(cls, data, _label):
+        """Read the scale."""
+        return cls(float(data["scale"]))
+
+    def points(self, at):
+        """The corners in the world."""
+        x, y, angle = at.xyt
+        c, s = math.cos(angle), math.sin(angle)
+        corners = [(-1, -1), (1, -1), (0, 1)]
+        return [
+            (x + self.scale * (c * u - s * v), y + self.scale * (s * u + c * v))
+            for u, v in corners
+        ]
+
+    def parts(self, at):
+        """One convex part."""
+        return [Part(tuple(self.points(at)))]
+
+
+def test_a_new_shape_needs_no_change_to_the_checker(tmp_path, monkeypatch):
+    """A triangle robot meets a triangle obstacle and never overlaps it."""
+    monkeypatch.setitem(SHAPES, "triangle", Triangle)
+    path = tmp_path / "w.toml"
+    path.write_text(
+        HEAD
+        + """
+[[obstacle]]
+pose = [6.0, 3.0, 0.0]
+shape = { name = "triangle", scale = 0.5 }
+
+[[robot]]
+name = "t"
+model = "diff_drive"
+shape = { name = "triangle", scale = 0.5 }
+pose = [2.0, 3.0, 0.0]
+"""
+    )
+    sim = Simulation(load_world(path))
+    for _ in range(100):
+        sim.step({"t": Twist(vx=1.0)})
+        assert sim.checker.check(sim.poses) == []
+    assert sim.collisions[0].a == "t"
+    assert sim.collisions[0].b == "obstacle 1"

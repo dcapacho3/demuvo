@@ -52,8 +52,6 @@ def _nearest(simplex: list[Vec]) -> tuple[Vec, list[Vec]] | None:
 
     Returns None if the origin is inside a triangle.
     """
-    if len(simplex) == 1:
-        return simplex[0], simplex
     if len(simplex) == 2:
         return _on_segment(*simplex)
     a, b, c = simplex

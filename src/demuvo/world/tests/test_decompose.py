@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from demuvo.world.decompose import convex_pieces
+from demuvo.world.decompose import convex_pieces, triangulate
 
 U = ((0, 0), (4, 0), (4, 4), (3, 4), (3, 1), (1, 1), (1, 4), (0, 4))
 
@@ -55,3 +55,19 @@ def test_pieces_cover_the_polygon_and_are_convex():
         for piece in pieces:
             hull = shapely.geometry.MultiPoint(piece).convex_hull
             assert hull.area == pytest.approx(area(piece))
+
+
+def test_a_corner_with_another_corner_inside_it_is_not_cut_first():
+    """In an arrow shape the tip of the dent blocks the first corner."""
+    arrow = [(0, 0), (4, 0), (4, 4), (2, 1), (0, 4)]
+    triangles = triangulate(arrow)
+    assert len(triangles) == 3
+    assert sum(area([arrow[i] for i in t]) for t in triangles) == pytest.approx(
+        area(arrow)
+    )
+
+
+def test_a_polygon_that_crosses_itself_is_refused():
+    """No corner of a self-crossing polygon can be cut off."""
+    with pytest.raises(ValueError, match="not simple"):
+        triangulate([(0, 2), (1, 0), (0, 1), (1, 3), (3, 0)])

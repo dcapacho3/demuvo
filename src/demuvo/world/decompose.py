@@ -40,6 +40,10 @@ def triangulate(points: list[Point]) -> list[tuple[int, int, int]]:
 
     Returns:
         Triangles as index triples into `points`, each counter-clockwise.
+
+    Raises:
+        ValueError: if no corner can be cut off, which a polygon that crosses
+            itself causes.
     """
     ring = list(range(len(points)))
     triangles = []
@@ -56,17 +60,7 @@ def triangulate(points: list[Point]) -> list[tuple[int, int, int]]:
             del ring[k]
             break
         else:
-            straight = [
-                k
-                for k in range(n)
-                if _cross(
-                    points[ring[k - 1]], points[ring[k]], points[ring[(k + 1) % n]]
-                )
-                == 0
-            ]
-            if not straight:
-                raise ValueError("the polygon is not simple")
-            del ring[straight[0]]
+            raise ValueError("the polygon is not simple")
     if len(ring) == 3 and _cross(*(points[i] for i in ring)) > 0:
         triangles.append(tuple(ring))
     return triangles

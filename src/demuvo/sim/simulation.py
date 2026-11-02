@@ -50,6 +50,10 @@ class Simulation:
         Args:
             world: the world to run.
             dt: length of a step in seconds, positive; None takes the world's.
+
+        Raises:
+            ValueError: if dt is not positive, or if a robot starts inside an
+                obstacle, the border or another robot.
         """
         if dt is None:
             dt = world.dt
@@ -66,6 +70,11 @@ class Simulation:
         self.collisions: list[Collision] = []
         self.checker = Checker(world)
         self._touching: set[tuple[str, str]] = set()
+        if overlaps := self.checker.check(self.poses):
+            raise ValueError(
+                f"'{overlaps[0].a}' starts inside '{overlaps[0].b}'; "
+                "move one of them in the world file"
+            )
 
     @property
     def time(self) -> float:

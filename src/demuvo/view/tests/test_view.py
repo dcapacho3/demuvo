@@ -330,3 +330,9 @@ def test_the_window_draws_between_steps_and_the_pose_now_when_paused(
     assert all(0.0 <= f <= 1.0 for f in running)
     assert paused
     assert set(paused) == {1.0}
+
+
+def test_a_step_that_takes_too_long_ends_the_frame(window, monkeypatch):
+    """With no time budget, each frame takes one step and drops the backlog."""
+    monkeypatch.setattr("demuvo.view.window.STEP_BUDGET", -1.0)
+    assert 0 < window([[]] * 10).steps <= 10

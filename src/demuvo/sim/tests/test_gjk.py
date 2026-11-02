@@ -5,6 +5,7 @@ import math
 import numpy as np
 import pytest
 
+from demuvo.sim import gjk
 from demuvo.sim.gjk import hull_gap, touch
 from demuvo.world.shapes import Part
 
@@ -98,9 +99,8 @@ def random_part(rng):
 
 def as_shapely(part):
     """As shapely."""
-    from shapely.geometry import (
-        MultiPoint,  # pylint: disable=import-error,import-outside-toplevel
-    )
+    # pylint: disable-next=import-error,import-outside-toplevel
+    from shapely.geometry import MultiPoint
 
     return MultiPoint(part.vertices).convex_hull.buffer(part.radius, 64)
 
@@ -132,3 +132,25 @@ def test_it_agrees_with_shapely_on_random_parts():
         assert touch(a, moved) is None
         checked += 1
     assert checked > 50
+
+
+def test_a_point_inside_a_triangle_overlaps_it():
+    """GJK ends on a triangle that holds the origin, and reports an overlap."""
+    triangle = Part(((0, 0), (4, 0), (0, 4)))
+    assert hull_gap(triangle, Part(((1, 1),))) is None
+
+
+def test_the_gap_between_two_triangles_is_found():
+    """The nearest points are a vertex of one and a point on an edge of the other."""
+    a = Part(((1, 6), (1, 0), (4, 5)))
+    b = Part(((9, 3), (7, 0), (12, 6)))
+    gap = hull_gap(a, b)
+    assert math.hypot(*gap) == pytest.approx(30 / math.sqrt(34))
+
+
+def test_the_search_stops_at_the_round_limit(monkeypatch):
+    """With too few rounds it returns the best vector so far, not None."""
+    monkeypatch.setattr(gjk, "_MAX_ROUNDS", 1)
+    a = Part(((1, 6), (1, 0), (4, 5)))
+    b = Part(((9, 3), (7, 0), (12, 6)))
+    assert hull_gap(a, b) is not None
