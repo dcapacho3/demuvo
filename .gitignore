@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local stress tests and timing scripts; not part of the package.
+stress_examples/

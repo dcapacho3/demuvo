@@ -12,11 +12,14 @@ Each shape class says:
     parse: builds the shape from its table and checks it.
     points: the corners (or the ends of a line) in the world; the loader checks
         that they lie inside the world.
+    parts: the convex parts in the world, for collisions. A shape that is not
+        convex cuts itself once and keeps the pieces.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import cached_property
 from typing import ClassVar, Protocol
 
 from robomath import Transform2D, act_se2
@@ -30,8 +33,34 @@ from ..verify import (
     table,
     text,
 )
+from .decompose import convex_pieces
 
 Point = tuple[float, float]
+
+
+@dataclass(frozen=True)
+class Part:
+    """A convex piece of a body: a polygon swelled by a disc.
+
+    A circle is one vertex with its radius, a box is four vertices with radius
+    0, a wall segment is two vertices with radius 0.
+
+    Attributes:
+        vertices: corners of the convex hull in the world, counter-clockwise
+            for three or more; one point for a disc, two for a segment.
+        radius: how far the part reaches beyond its vertices, at least 0.
+    """
+
+    vertices: tuple[Point, ...]
+    radius: float = 0.0
+
+    @property
+    def box(self) -> tuple[float, float, float, float]:
+        """The axis-aligned box around the part: (xmin, ymin, xmax, ymax)."""
+        xs = [v[0] for v in self.vertices]
+        ys = [v[1] for v in self.vertices]
+        r = self.radius
+        return min(xs) - r, min(ys) - r, max(xs) + r, max(ys) + r
 
 
 def _place(pose: Transform2D, points) -> list[Point]:
@@ -132,6 +161,10 @@ class Circle:
         r = self.radius
         return [(x - r, y - r), (x + r, y + r)]
 
+    def parts(self, pose: Transform2D) -> list[Part]:
+        """One vertex, the centre, with the radius."""
+        return [Part((tuple(pose.translation.tolist()),), self.radius)]
+
 
 @dataclass(frozen=True)
 class Box:
@@ -157,6 +190,10 @@ class Box:
         """The four corners, in order around the box."""
         hx, hy = self.size[0] / 2, self.size[1] / 2
         return _place(pose, [(-hx, -hy), (hx, -hy), (hx, hy), (-hx, hy)])
+
+    def parts(self, pose: Transform2D) -> list[Part]:
+        """The four corners, as one part."""
+        return [Part(tuple(self.points(pose)))]
 
 
 @dataclass(frozen=True)
@@ -185,6 +222,15 @@ class Polygon:
         """The vertices in the world."""
         return _place(pose, self.vertices)
 
+    @cached_property
+    def pieces(self) -> list[tuple[Point, ...]]:
+        """The convex pieces in the frame of the pose; cut once, then kept."""
+        return convex_pieces(self.vertices)
+
+    def parts(self, pose: Transform2D) -> list[Part]:
+        """The convex pieces in the world."""
+        return [Part(tuple(_place(pose, piece))) for piece in self.pieces]
+
 
 @dataclass(frozen=True)
 class LineString:
@@ -210,6 +256,11 @@ class LineString:
         """The vertices in the world."""
         return _place(pose, self.vertices)
 
+    def parts(self, pose: Transform2D) -> list[Part]:
+        """One part for each segment."""
+        world = self.points(pose)
+        return [Part((a, b)) for a, b in zip(world, world[1:])]
+
 
 class Shape(Protocol):
     """What every shape class offers; see the module docstring."""
@@ -225,6 +276,9 @@ class Shape(Protocol):
 
     def points(self, pose: Transform2D) -> list[Point]:
         """Where the shape lies in the world."""
+
+    def parts(self, pose: Transform2D) -> list[Part]:
+        """The convex parts of the shape in the world; see `Part`."""
 
 
 # The one place that lists the shapes, a new shape class needs only an entry here.

@@ -1,0 +1,66 @@
+version = 1
+
+[world]
+size = [12.0, 8.0]        # metres
+seed = 1
+dt = 0.01
+
+# A slanted wall and a box. Both are solid: a robot that meets one stops
+# against it, or slides along it if it arrives at an angle.
+[[obstacle]]
+shape = { name = "linestring", vertices = [[5.0, 7.5], [8.0, 5.0]] }
+
+[[obstacle]]
+pose = [6.0, 2.0, 0.4]
+shape = { name = "box", size = [1.2, 0.6] }
+
+# Two robots drive at each other along y = 4. Both stop where they meet.
+[[robot]]
+name = "r1"
+model = "diff_drive"
+shape = { name = "circle", radius = 0.3 }
+pose = [1.0, 4.0, 0.0]
+controller = "demuvo.controllers:PurePursuit"
+controller_params = { speed = 0.8, lookahead = 0.6 }
+
+[[robot]]
+name = "r2"
+model = "diff_drive"
+shape = { name = "box", size = [0.8, 0.5] }
+pose = [11.0, 4.0, 3.14159]
+controller = "demuvo.controllers:PurePursuit"
+controller_params = { speed = 0.8, lookahead = 0.6 }
+
+# This one meets the slanted wall on its way to the goal.
+[[robot]]
+name = "r3"
+model = "diff_drive"
+shape = { name = "circle", radius = 0.3 }
+pose = [1.0, 7.0, -0.2]
+controller = "demuvo.controllers:PurePursuit"
+controller_params = { speed = 0.8, lookahead = 0.6 }
+
+# This one meets the box.
+[[robot]]
+name = "r4"
+model = "diff_drive"
+shape = { name = "circle", radius = 0.3 }
+pose = [1.0, 1.5, 0.0]
+controller = "demuvo.controllers:PurePursuit"
+controller_params = { speed = 0.8, lookahead = 0.6 }
+
+[[task]]
+robot = "r1"
+goal = [11.0, 4.0, 0.0]
+
+[[task]]
+robot = "r2"
+goal = [1.0, 4.0, 3.14159]
+
+[[task]]
+robot = "r3"
+goal = [11.0, 5.0, 0.0]
+
+[[task]]
+robot = "r4"
+goal = [11.0, 2.5, 0.0]

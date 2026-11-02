@@ -72,4 +72,5 @@ max-args = 6
 # A controller is a class with one method.
 min-public-methods = 1
 max-locals = 20
-max-attributes = 13
+# View keeps its pose, trail and font state in one place.
+max-attributes = 15

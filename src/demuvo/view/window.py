@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pygame
 from pygame.locals import (
     K_DOWN,
@@ -19,6 +21,8 @@ from .style import (
     SPEEDS,
     TRAIL,
 )
+
+STEP_BUDGET = 0.010
 
 
 def _change_speed(speed: float, up: bool) -> float:
@@ -76,12 +80,14 @@ def _window(view: View, commands: Commands, steps: int | None, caption: str) -> 
             owed = 0.0
         else:
             owed = min(owed + view.speed * elapsed / sim.dt, 20.0)
+        deadline = time.perf_counter() + STEP_BUDGET
         while owed >= 1.0 and (steps is None or sim.steps < steps):
             view.step(commands)
             owed -= 1.0
+            if time.perf_counter() > deadline:
+                owed = min(owed, 1.0)
+                break
         view.done = steps is not None and sim.steps >= steps
-        # Paused, stepping by hand or finished: draw the pose now. Otherwise draw
-        # between the last two steps, as far along as the time left over.
         fraction = 1.0 if view.paused or view.done else min(owed, 1.0)
         screen.blit(view.render(fraction), (0, 0))
         pygame.display.flip()

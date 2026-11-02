@@ -1,7 +1,8 @@
 """Sizes and colours of the view."""
 
 SS = 2
-TRAIL = 4000  # past positions kept for each robot's trail
+TRAIL = 4000
+TRAIL_DRAWN = 400
 HUD = 34
 MARGIN = 0.35
 TILE = 1.0

@@ -10,6 +10,13 @@ from robomath import Transform2D
 
 from ..models import MODELS, Twist
 from ..world import World
+from .collisions import Checker, Collision, Contact
+
+# How many times a push out of one contact may uncover another before the robots
+# involved are put back where they were.
+MAX_PASSES = 4
+# Extra distance, in metres, so a pushed robot ends clear and not exactly on the edge.
+CLEARANCE = 1e-7
 
 
 class Simulation:
@@ -32,6 +39,9 @@ class Simulation:
         driven: metres each robot has driven, by name. Each step adds the
             length of that twist's arc, `hypot(vx, vy) * dt`, so for a model
             that steps along exact arcs the sum is the exact path length.
+        collisions: every collision so far, in order. A collision is a pair
+            that was not in contact in the step before; a robot that keeps
+            pressing on a wall counts once.
     """
 
     def __init__(self, world: World, dt: float | None = None) -> None:
@@ -53,6 +63,9 @@ class Simulation:
         self.steps = 0
         self.velocity = {r.name: np.zeros(3) for r in world.robots}
         self.driven = {r.name: 0.0 for r in world.robots}
+        self.collisions: list[Collision] = []
+        self.checker = Checker(world)
+        self._touching: set[tuple[str, str]] = set()
 
     @property
     def time(self) -> float:
@@ -61,6 +74,11 @@ class Simulation:
 
     def step(self, commands: Mapping[str, Twist]) -> None:
         """Advance every robot by one step; a robot with no command stops.
+
+        A robot whose new pose would overlap an obstacle, the border or another
+        robot is pushed back out along the contact normal, so it slides along
+        what it hit and its motion into it stops. If pushing does not clear
+        every contact, the robots still in contact keep their old pose.
 
         Nothing changes if this raises.
 
@@ -77,6 +95,7 @@ class Simulation:
             name: model.step(self.poses[name], commands.get(name, Twist()), self.dt)
             for name, model in self.models.items()
         }
+        moved = self._resolve(moved)
         velocity = {
             name: pose.rminus(self.poses[name]) / self.dt
             for name, pose in moved.items()
@@ -88,3 +107,55 @@ class Simulation:
         self.velocity = velocity
         self.poses.update(moved)
         self.steps += 1
+
+    def _resolve(self, moved: dict[str, Transform2D]) -> dict[str, Transform2D]:
+        """Push the proposed poses out of every overlap and record collisions."""
+        poses = dict(moved)
+        contacts = self.checker.check(poses)
+        pairs = {(c.a, c.b) for c in contacts}
+        time = (self.steps + 1) * self.dt
+        self.collisions += [
+            Collision(time, a, b) for a, b in sorted(pairs - self._touching)
+        ]
+        self._touching = pairs
+        for _ in range(MAX_PASSES):
+            if not contacts:
+                return poses
+            pushes = _pushes(contacts)
+            for name, push in pushes.items():
+                x, y, angle = poses[name].xyt
+                poses[name] = Transform2D.from_xyt(
+                    np.array([x + push[0], y + push[1], angle])
+                )
+            contacts = self.checker.check(poses, pushes)
+        while contacts:
+            back = {n for c in contacts for n in (c.a, c.b if c.b_moves else c.a)}
+            back = {n for n in back if poses[n] is not self.poses[n]}
+            if not back:
+                break
+            poses.update({n: self.poses[n] for n in back})
+            contacts = self.checker.check(poses, back)
+        return poses
+
+
+def _pushes(contacts: list[Contact]) -> dict[str, tuple[float, float]]:
+    """The push that clears the deepest contact of each robot.
+
+    A robot against the world takes the whole depth; two robots share it, so the
+    result does not depend on which one is listed first.
+    """
+    best: dict[str, tuple[float, tuple[float, float]]] = {}
+
+    def offer(name: str, depth: float, direction: tuple[float, float]) -> None:
+        if name not in best or depth > best[name][0]:
+            best[name] = (depth, direction)
+
+    for c in contacts:
+        share = c.depth / 2 if c.b_moves else c.depth
+        offer(c.a, share, (-c.normal[0], -c.normal[1]))
+        if c.b_moves:
+            offer(c.b, share, c.normal)
+    return {
+        name: (d[0] * (depth + CLEARANCE), d[1] * (depth + CLEARANCE))
+        for name, (depth, d) in best.items()
+    }

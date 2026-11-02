@@ -6,6 +6,7 @@ from robomath import Transform2D
 
 from demuvo import Simulation, Task, load_world
 from demuvo.evaluation import Judge, goal_error, result_lines
+from demuvo.sim.collisions import Collision
 
 DEMO = Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml"
 
@@ -37,6 +38,7 @@ def test_a_reached_task_says_when():
     assert result_lines(sim, judge) == [
         "r1 task 1: reached at 0.10 s",
         "r1 drove 0.00 m",
+        "0 collisions",
     ]
 
 
@@ -47,6 +49,7 @@ def test_the_task_in_progress_says_how_far_the_robot_is():
         "r1 task 1: not reached, 2.00 m and 0.00 rad away",
         "r1 task 2: not reached",
         "r1 drove 0.00 m",
+        "0 collisions",
     ]
 
 
@@ -57,6 +60,7 @@ def test_a_task_done_earlier_stays_reached_when_the_robot_moves_on():
         "r1 task 1: reached at 0.10 s",
         "r1 task 2: not reached, 4.00 m and 0.00 rad away",
         "r1 drove 0.00 m",
+        "0 collisions",
     ]
 
 
@@ -64,3 +68,10 @@ def test_a_robot_with_no_task_gives_no_lines():
     """Nothing to report."""
     sim, judge = judged()
     assert not result_lines(sim, judge)
+
+
+def test_the_collision_count_is_last_and_is_singular_for_one():
+    """A run with one collision says "1 collision"."""
+    sim, judge = judged(goal(1.0))
+    sim.collisions.append(Collision(0.5, "r1", "border"))
+    assert result_lines(sim, judge)[-1] == "1 collision"

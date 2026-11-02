@@ -83,3 +83,16 @@ def test_a_line_string_may_cross_itself_but_not_repeat_a_point():
     shape(name="linestring", vertices=[[0, 0], [2, 2], [2, 0], [0, 2]])
     with pytest.raises(WorldError, match="two vertices in a row"):
         shape(name="linestring", vertices=[[0, 0], [1, 1], [1, 1]])
+
+
+def test_parts_of_each_shape():
+    """A circle is one vertex and a radius; a box four corners; a line its segments."""
+    pose = Transform2D.from_xyt((1.0, 2.0, 0.0))
+    (disc,) = Circle(0.5).parts(pose)
+    assert disc.vertices == ((1.0, 2.0),) and disc.radius == 0.5
+    (box,) = Box((2.0, 1.0)).parts(pose)
+    assert box.vertices == ((0.0, 1.5), (2.0, 1.5), (2.0, 2.5), (0.0, 2.5))
+    wall = LineString(((0.0, 0.0), (1.0, 0.0), (1.0, 1.0)))
+    assert len(wall.parts(pose)) == 2
+    u = Polygon(((0, 0), (4, 0), (4, 4), (3, 4), (3, 1), (1, 1), (1, 4), (0, 4)))
+    assert len(u.parts(pose)) == 3

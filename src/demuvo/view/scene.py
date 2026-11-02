@@ -32,6 +32,7 @@ from .style import (
     TEXT,
     TILE,
     TRAIL,
+    TRAIL_DRAWN,
     WALL,
 )
 
@@ -98,7 +99,7 @@ class View:
         )
         self.size = (self._scene[0], self._scene[1] + HUD)
         self.trails = {
-            name: deque([tuple(pose.translation)], maxlen=trail)
+            name: deque([tuple(pose.translation.tolist())], maxlen=trail)
             for name, pose in sim.poses.items()
         }
         self.reach = {r.name: _reach(r.shape) for r in sim.world.robots}
@@ -121,8 +122,12 @@ class View:
         return ((x + MARGIN) * self.scale * k, (h + MARGIN - y) * self.scale * k)
 
     def _points(self, points, k: int = SS) -> list[tuple[float, float]]:
-        """Many points from metres to pixels."""
-        return [self.to_pixel(x, y, k) for x, y in points]
+        """Many points from metres to pixels; one numpy pass, as trails are long."""
+        xy = np.asarray(points, dtype=float).reshape(-1, 2)
+        h = self.sim.world.size[1]
+        px = (xy[:, 0] + MARGIN) * self.scale * k
+        py = (h + MARGIN - xy[:, 1]) * self.scale * k
+        return list(zip(px.tolist(), py.tolist()))
 
     def _layer(self, alpha: bool = False) -> pygame.Surface:
         """A blank surface for the scene at SS times the size."""
@@ -202,7 +207,7 @@ class View:
         self.sim.step(commands(self.sim))
         self._seen = dict(self.sim.poses)
         for name, pose in self.sim.poses.items():
-            self.trails[name].append(tuple(pose.translation))
+            self.trails[name].append(tuple(pose.translation.tolist()))
 
     def render(self, fraction: float = 1.0) -> pygame.Surface:
         """The picture of the simulation as it is now.
@@ -221,8 +226,10 @@ class View:
                 trail = (*pygame.Color(color)[:3], 170)
                 trail_points = list(self.trails[robot.name])
                 if poses[robot.name] is not self.sim.poses[robot.name]:
-                    trail_points[-1] = tuple(poses[robot.name].translation)
-                points = self._points(trail_points)
+                    trail_points[-1] = tuple(poses[robot.name].translation.tolist())
+                # A long trail is drawn from every few points; the line looks the same.
+                stride = max(1, len(trail_points) // TRAIL_DRAWN)
+                points = self._points([*trail_points[::stride], trail_points[-1]])
                 pygame.draw.lines(layer, trail, False, points, width)
             for goal in self.goals[robot.name]:
                 self._draw_goal(layer, goal, color)

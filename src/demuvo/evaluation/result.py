@@ -9,6 +9,9 @@ from .judge import Judge, goal_error
 def result_lines(sim: Simulation, judge: Judge) -> list[str]:
     """What each robot did, one line per task and one for the distance driven.
 
+    A last line counts the collisions of the whole run; it is left out when there
+    are no other lines and no collisions.
+
     A task is "reached at" the time the robot first met all its conditions, even
     if it has moved on since. The task a robot is on, if not done, says how far
     it is from the goal. Robots with no tasks give no lines.
@@ -34,4 +37,7 @@ def result_lines(sim: Simulation, judge: Judge) -> list[str]:
             else:
                 lines.append(f"{label} not reached")
         lines.append(f"{name} drove {sim.driven[name]:.2f} m")
+    count = len(sim.collisions)
+    if lines or count:
+        lines.append(f"{count} collision{'' if count == 1 else 's'}")
     return lines
