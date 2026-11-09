@@ -14,6 +14,7 @@ from ..models import Twist
 from ..planners import Planner
 from ..plugins import load_class
 from ..sim.simulation import Simulation
+from ..smoothers import Smoother
 from ..world import DEFAULT_GOAL_TOLERANCE, Task, World, WorldError
 
 DEFAULT_PLANNER = "demuvo.planners:StraightLine"
@@ -32,8 +33,9 @@ class Navigation:
     robot is to the goal. The `judge` says when a task is done and moves the
     robot on to the next; the last goal stays, so the controller holds the robot
     there.
+    A robot's smoother, if it has one, improves each path the planner makes.
     `set_path` gives a robot a path made elsewhere, such as a Nav2 plan, and the
-    planner then stays out of it.
+    planner and smoother then stay out of it.
 
     A robot's controller runs once every `control_period` seconds, as the Nav2
     controller does, and its last command stays in force between runs. Run k
@@ -50,7 +52,7 @@ class Navigation:
     """
 
     def __init__(self, world: World) -> None:
-        """Build the planner and controller each robot names.
+        """Build the planner, controller and smoother each robot names.
 
         A robot with no planner uses `DEFAULT_PLANNER`.
 
@@ -67,6 +69,7 @@ class Navigation:
         self._path_changes = dict.fromkeys(self.tasks, 0)
         self._planners: dict[str, Planner] = {}
         self._configured: set[str] = set()
+        self._smoothers: dict[str, Smoother] = {}
         self._controllers: dict[str, Controller] = {}
         self._periods = {r.name: r.control_period for r in world.robots}
         self._runs = dict.fromkeys(self._periods, 0)
@@ -90,6 +93,14 @@ class Navigation:
                 "planner",
                 ("configure", "plan"),
             )
+            if robot.smoother is not None:
+                self._smoothers[robot.name] = load_class(
+                    robot.smoother,
+                    robot.smoother_params,
+                    robot.name,
+                    "smoother",
+                    ("configure", "smooth"),
+                )
 
     def check(self, dt: float) -> None:
         """Check every control period against the simulation step `dt`.
@@ -180,10 +191,16 @@ class Navigation:
                 self._planned[name] = self.judge.current[name]
                 if task is not None:
                     planner = self._planners[name]
+                    smoother = self._smoothers.get(name)
                     if name not in self._configured:
-                        planner.configure(sim.estimates[name].map)
+                        costmap = sim.estimates[name].map
+                        planner.configure(costmap)
+                        if smoother:
+                            smoother.configure(costmap)
                         self._configured.add(name)
                     path = planner.plan(pose, task.goal)
+                    if smoother and len(path):
+                        path = smoother.smooth(path)
                     self.paths[name] = path
                 self._path_changes[name] += 1
             path = self.paths[name]

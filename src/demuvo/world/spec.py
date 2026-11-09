@@ -51,6 +51,9 @@ class RobotSpec:
         control_pose: the pose the controller and planner see: "estimate" (the
             estimator's) or "truth" (the true pose, while the estimator still
             runs and is scored).
+        smoother: "module:Class" of the smoother that improves the planner's
+            path, or None for none.
+        smoother_params: keyword arguments for the smoother class.
     """
 
     name: str
@@ -66,6 +69,8 @@ class RobotSpec:
     estimator: str = "ground_truth"
     sensors: dict = field(default_factory=dict)
     control_pose: str = "estimate"
+    smoother: str | None = None
+    smoother_params: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

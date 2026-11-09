@@ -19,6 +19,7 @@ ALLOWED = {
     "costmap": {"verify", "world"},
     "sim": {"costmap", "models", "sensing", "world"},
     "planners": {"costmap", "plugins", "world"},
+    "smoothers": {"costmap"},
     "controllers": {"models", "plugins"},
     "evaluation": {"sim", "world"},
     "nav": {
@@ -28,6 +29,7 @@ ALLOWED = {
         "planners",
         "plugins",
         "sim",
+        "smoothers",
         "world",
     },
     "view": {"models", "sim", "world"},
