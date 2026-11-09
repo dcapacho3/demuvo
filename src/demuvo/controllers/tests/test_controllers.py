@@ -84,18 +84,18 @@ def test_the_final_turn_takes_the_short_way_round():
     assert command.wz > 0.0
 
 
-@pytest.mark.parametrize(
-    "obs",
-    [
-        look((1.0, 1.0, 0.0), (5.0, 1.0, 0.0), path=np.empty((0, 3))),
-        Observation(
-            0.0, 0.05, Transform2D.identity(), np.zeros((2, 3)), None, (0.1, 0.1)
-        ),
-    ],
-)
-def test_a_missing_goal_or_path_is_an_error(obs):
-    """There is nothing to follow."""
-    with pytest.raises(ValueError, match="needs a goal and a path"):
+def test_an_empty_path_gives_a_zero_command():
+    """There is nothing to follow, so the robot stays still."""
+    obs = look((1.0, 1.0, 0.0), (5.0, 1.0, 0.0), path=np.empty((0, 3)))
+    assert PurePursuit().command(obs) == Twist()
+
+
+def test_a_path_with_no_goal_is_an_error():
+    """A path that leads nowhere is a mistake, and the message says so."""
+    obs = Observation(
+        0.0, 0.05, Transform2D.identity(), np.zeros((2, 3)), None, (0.1, 0.1)
+    )
+    with pytest.raises(ValueError, match="needs a goal to follow a path"):
         PurePursuit().command(obs)
 
 

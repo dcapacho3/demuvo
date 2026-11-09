@@ -61,11 +61,15 @@ class PurePursuit:
     def command(self, obs: Observation) -> Twist:
         """Drive along the path, then stop, then turn to the goal's angle.
 
+        With an empty path there is nothing to follow, so the robot stays still.
+
         Raises:
-            ValueError: if the robot has no goal or the path is empty.
+            ValueError: if there is a path but no goal.
         """
-        if obs.goal is None or len(obs.path) == 0:
-            raise ValueError("PurePursuit needs a goal and a path")
+        if len(obs.path) == 0:
+            return Twist()
+        if obs.goal is None:
+            raise ValueError("PurePursuit needs a goal to follow a path")
         to_robot = obs.pose.inverse()
         distance = float(np.hypot(*(to_robot @ obs.goal.translation)))
         xy_tolerance, yaw_tolerance = obs.goal_tolerance
