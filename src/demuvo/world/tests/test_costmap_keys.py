@@ -59,7 +59,7 @@ def test_a_setting_for_a_layer_that_is_not_used_warns(tmp_path):
 
 
 def test_the_settings_come_back_as_written(tmp_path):
-    """Resolution and inflation settings reach the spec; no table gives Nav2's."""
+    """Resolution and inflation settings reach the spec; no table gives the defaults."""
     default = world(tmp_path).costmap
     assert (default.resolution, default.inflation_radius) == (0.05, 0.55)
     assert default.cost_scaling_factor == 10.0 and default.enabled

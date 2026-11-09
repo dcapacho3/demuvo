@@ -9,15 +9,16 @@ ROOT = Path(__file__).resolve().parents[1] / "src" / "demuvo"
 
 # Each part and the parts it may import. A new part must be added here, on
 # purpose. Nothing imports `run` or `view`, and planners and controllers never
-# import `sim`: they see the world and the observation, not the simulation.
+# import `sim`: they see the costmap and the observation, not the simulation.
 ALLOWED = {
     "verify": set(),
     "plugins": {"verify"},
     "models": {"plugins", "verify"},
     "sensing": {"models"},
     "world": {"verify", "models", "sensing"},
-    "sim": {"models", "sensing", "world"},
-    "planners": {"plugins", "world"},
+    "costmap": {"verify", "world"},
+    "sim": {"costmap", "models", "sensing", "world"},
+    "planners": {"costmap", "plugins", "world"},
     "controllers": {"models", "plugins"},
     "evaluation": {"sim", "world"},
     "nav": {

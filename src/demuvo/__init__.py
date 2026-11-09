@@ -1,6 +1,7 @@
 """A small, deterministic 2D world for robots."""
 
 from .controllers import Controller, Observation, PurePursuit
+from .costmap import Costmap
 from .models import MODELS, DiffDrive, Twist
 from .nav import Navigation
 from .planners import Planner, StraightLine
@@ -16,6 +17,7 @@ __all__ = [
     "Box",
     "Circle",
     "Controller",
+    "Costmap",
     "DiffDrive",
     "Estimate",
     "Estimator",
