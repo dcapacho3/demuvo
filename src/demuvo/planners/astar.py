@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import heapq
+import logging
 import math
 from dataclasses import dataclass, field
 
@@ -10,6 +11,8 @@ import numpy as np
 from robomath import Transform2D
 
 from ..costmap import INSCRIBED, MAX_NON_OBSTACLE, Costmap
+
+LOGGER = logging.getLogger(__name__)
 
 # The 4 and 8 neighbours of a cell as (row step, column step).
 _STEPS_4 = ((0, 1), (1, 0), (0, -1), (-1, 0))
@@ -71,17 +74,29 @@ class AStar:
         if self._costmap is None:
             raise ValueError("AStar is not configured; call configure first")
         costmap = self._costmap
-        rows, cols = costmap.data.shape
         first = costmap.world_to_cell(*start.xyt[:2])
         last = costmap.world_to_cell(*goal.xyt[:2])
+        if not _on_map(costmap, first):
+            return _no_path("the start (%.2f, %.2f) is off the map", *start.xyt[:2])
+        if not _on_map(costmap, last):
+            return _no_path("the goal (%.2f, %.2f) is off the map", *goal.xyt[:2])
         blocked = costmap.data >= INSCRIBED
-        inside = all(0 <= r < rows and 0 <= c < cols for r, c in (first, last))
-        if not inside or blocked[last]:
-            return np.empty((0, 3))
+        if blocked[last]:
+            return _no_path(
+                "the goal cell %s is blocked (cost %d), so the robot's centre "
+                "cannot be there",
+                last,
+                costmap.data[last],
+            )
         price = 1.0 + self.cost_weight * costmap.data / MAX_NON_OBSTACLE
         cells = self._search(blocked, price, first, last)
         if cells is None:
-            return np.empty((0, 3))
+            return _no_path(
+                "no way from the start %s to the goal %s; one of them is "
+                "walled in by blocked cells",
+                first,
+                last,
+            )
         middle = [costmap.cell_to_world(r, c) for r, c in cells[1:-1]]
         points = np.array([start.xyt[:2], *middle, goal.xyt[:2]])
         return _with_headings(points, goal.xyt[2])
@@ -129,6 +144,17 @@ class AStar:
                     heapq.heappush(queue, (cost + h, h, found, neighbour))
                     found += 1
         return None
+
+
+def _on_map(costmap: Costmap, cell) -> bool:
+    """True if the (row, column) lies on the costmap."""
+    return 0 <= cell[0] < costmap.data.shape[0] and 0 <= cell[1] < costmap.data.shape[1]
+
+
+def _no_path(reason: str, *values) -> np.ndarray:
+    """Say why there is no path, and give the empty path."""
+    LOGGER.warning("AStar: " + reason, *values)
+    return np.empty((0, 3))
 
 
 def _trace(came_from, cell):

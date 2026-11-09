@@ -1,5 +1,6 @@
 """Tests for a run in which the planner finds no path."""
 
+import logging
 from pathlib import Path
 
 from demuvo import Navigation, Simulation, load_world
@@ -7,7 +8,9 @@ from demuvo import Navigation, Simulation, load_world
 DEMO = Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml"
 
 
-def test_a_goal_inside_an_obstacle_leaves_the_robot_still_and_the_run_going(tmp_path):
+def test_a_goal_inside_an_obstacle_leaves_the_robot_still_and_the_run_going(
+    tmp_path, caplog
+):
     """A* finds no path to a goal inside the box; the run goes on and nothing moves."""
     text = DEMO.read_text()
     text = text.replace("demuvo.planners:StraightLine", "demuvo.planners:AStar")
@@ -18,9 +21,17 @@ def test_a_goal_inside_an_obstacle_leaves_the_robot_still_and_the_run_going(tmp_
     sim = Simulation(world, dt=0.05)
     commands = Navigation(world)
     start = sim.poses["r1"].xyt
-    for _ in range(100):
-        sim.step(commands(sim))
+    with caplog.at_level(logging.WARNING):
+        for _ in range(100):
+            sim.step(commands(sim))
     commands.judge.update(sim)
     assert commands.paths["r1"].shape == (0, 3)
     assert tuple(sim.poses["r1"].xyt) == tuple(start)
     assert not commands.judge.done
+    # the planner says why and the navigation says who, each once for the whole run
+    assert len(caplog.messages) == 2
+    assert "AStar: the goal cell (90, 80) is blocked (cost 254)" in caplog.messages[0]
+    assert caplog.messages[1] == (
+        "robot 'r1': no path for task 1, from (1.00, 1.00) to (4.00, 4.50); "
+        "it stays still"
+    )

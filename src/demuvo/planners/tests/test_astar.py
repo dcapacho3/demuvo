@@ -1,5 +1,6 @@
 """Tests for the A* planner."""
 
+import logging
 import math
 
 import numpy as np
@@ -157,3 +158,34 @@ def test_bad_settings_are_refused(options, message):
     """A bad setting is refused when the planner is built."""
     with pytest.raises(ValueError, match=message):
         AStar(**options)
+
+
+@pytest.mark.parametrize(
+    ("start", "goal", "message"),
+    [
+        (
+            (0.55, 0.55),
+            (2.55, 1.05),
+            "AStar: the goal cell (10, 25) is blocked (cost 254), "
+            "so the robot's centre cannot be there",
+        ),
+        ((0.55, 0.55), (9.0, 1.0), "AStar: the goal (9.00, 1.00) is off the map"),
+        ((-1.0, 0.5), (1.0, 1.0), "AStar: the start (-1.00, 0.50) is off the map"),
+        (
+            (0.55, 0.55),
+            (1.05, 1.05),
+            "AStar: no way from the start (5, 5) to the goal (10, 10); "
+            "one of them is walled in by blocked cells",
+        ),
+    ],
+    ids=["blocked goal", "goal off the map", "start off the map", "walled in"],
+)
+def test_no_path_says_why(caplog, start, goal, message):
+    """Each reason for an empty path is logged once, in words."""
+    data = grid()
+    data[10, 25] = LETHAL
+    data[8:13, 8:13] = LETHAL
+    data[10, 10] = 0
+    with caplog.at_level(logging.WARNING):
+        assert plan(data, start, goal).shape == (0, 3)
+    assert caplog.messages == [message]

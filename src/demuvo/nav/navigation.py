@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import warnings
 
@@ -17,6 +18,7 @@ from ..sim.simulation import Simulation
 from ..smoothers import Smoother
 from ..world import DEFAULT_GOAL_TOLERANCE, Task, World, WorldError
 
+LOGGER = logging.getLogger(__name__)
 DEFAULT_PLANNER = "demuvo.planners:StraightLine"
 
 
@@ -199,7 +201,9 @@ class Navigation:
                             smoother.configure(costmap)
                         self._configured.add(name)
                     path = planner.plan(pose, task.goal)
-                    if smoother and len(path):
+                    if len(path) == 0:
+                        _warn_no_path(name, self.judge.current[name], pose, task.goal)
+                    elif smoother:
                         path = smoother.smooth(path)
                     self.paths[name] = path
                 self._path_changes[name] += 1
@@ -227,3 +231,15 @@ class Navigation:
             self._runs[name] += 1
             self._last_run[name] = sim.steps
         return commands
+
+
+def _warn_no_path(name: str, index: int, start: Transform2D, goal: Transform2D) -> None:
+    """Say that a robot's planner found no path, and that the robot stays still."""
+    LOGGER.warning(
+        "robot '%s': no path for task %d, from (%.2f, %.2f) to (%.2f, %.2f); "
+        "it stays still",
+        name,
+        index + 1,
+        *start.xyt[:2],
+        *goal.xyt[:2],
+    )
