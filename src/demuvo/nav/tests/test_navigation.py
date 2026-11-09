@@ -10,6 +10,7 @@ from demuvo import Navigation, Simulation, Task, Twist, WorldError, load_world
 from demuvo.evaluation import reached
 
 DEMO = Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml"
+ASTAR = DEMO.with_name("astar.toml")
 PURE_PURSUIT = 'controller = "demuvo.controllers:PurePursuit"'
 
 
@@ -436,3 +437,15 @@ def test_the_last_task_notes_the_time_it_was_first_met():
         sim.step(nav(sim))
     assert list(nav.judge.done) == [("r1", 0)]
     assert 0.0 < nav.judge.done[("r1", 0)] <= sim.time
+
+
+def test_astar_takes_both_robots_round_the_boxes_without_a_collision():
+    """The A* example: an 8-neighbour and a 4-neighbour robot both reach their goals."""
+    world = load_world(ASTAR)
+    sim = Simulation(world, dt=0.05)
+    commands = Navigation(world)
+    for _ in range(450):
+        sim.step(commands(sim))
+    commands.judge.update(sim)
+    assert not sim.collisions
+    assert set(commands.judge.done) == {("r1", 0), ("r2", 0)}

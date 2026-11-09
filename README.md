@@ -30,7 +30,8 @@ Working today:
 - wheel encoders with noise, and a dead-reckoning estimator that a robot can use in
   place of its true pose (`estimator = "dead_reckoning"`);
 - a planner and a controller for each robot, chosen in the file as `module:Class`;
-  built in: `StraightLine` and `PurePursuit`;
+  built in: `StraightLine` and `AStar` (planners), `LineOfSight` (smoother) and
+  `PurePursuit` (controller);
 - a global costmap, built from the obstacles or read from a `map.yaml` (see
   "Costmap" below);
 - a step length and a controller rate that you set apart (see "Time" below);
@@ -84,12 +85,37 @@ still (below 0.01 m/s and 0.01 rad/s) for `wait` seconds. `stop = true` or `fals
 the standing-still test; the default is yes for a robot's last task and for a task with
 a `wait`, and no for the waypoints in between.
 
-To use your own, write a class with one method and name it in the file. A planner has
+`StraightLine` fills the segment from start to goal and ignores the costmap. `AStar`
+searches the cells of the costmap and goes round obstacles; a cell of cost 253 or more
+is blocked, and a costlier cell makes a step dearer, so the path keeps off walls. Its
+settings go in `planner_params`:
+
+- `connectivity`: 8 (the default) or 4, which gives paths with only 90-degree turns;
+- `cost_weight`: 2.0 by default, how much cost raises the price of a step; 0 gives the
+  shortest path;
+- `tolerance`: 0 by default, in metres. A blocked goal then gives no path. A larger
+  value lets the path end at the nearest free cell within that distance of the goal.
+
+When there is no path, the robot stays still and the run says why in plain words, once
+for the task, for example `AStar: the goal cell (90, 80) is blocked (cost 254), so the
+robot's centre cannot be there` and `robot 'r1': no path for task 1, from (1.00, 1.00)
+to (4.00, 4.50); it stays still`. The messages go through Python's `logging`, on the
+`demuvo` logger.
+
+A path of cell steps has corners. A smoother, named as `smoother = "module:Class"` in
+the robot, with `smoother_params`, improves each path after the planner. `LineOfSight`
+(`demuvo.smoothers.line_of_sight`) takes the farthest straight line that is clear of
+blocked cells and no costlier than the stretch it replaces, and spaces the points
+`spacing` metres apart (0.05 by default). `examples/worlds/astar.toml` has two robots
+going round two boxes: 8-neighbour A* with a smoother, and 4-neighbour A* without.
+
+To use your own, write a class and name it in the file. A planner has
 `configure(costmap)`, which the navigation calls once with the robot's costmap, and
-`plan(start, goal)`, which returns an array of shape (N, 3) of x, y, angle. A
-controller has `command(obs)` and returns a `Twist`; it sees only the observation (its
-pose, the path, the goal), not the simulation. From Python, `Navigation` also takes a
-goal or a path from outside with `set_goal` and `set_path`.
+`plan(start, goal)`, which returns an array of shape (N, 3) of x, y, angle, or one of
+shape (0, 3) if there is no path. A smoother has `configure(costmap)` and
+`smooth(path)`. A controller has `command(obs)` and returns a `Twist`; it sees only the
+observation (its pose, the path, the goal), not the simulation. From Python,
+`Navigation` also takes a goal or a path from outside with `set_goal` and `set_path`.
 
 ## Costmap
 
