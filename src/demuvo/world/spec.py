@@ -93,6 +93,28 @@ class Task:
 
 
 @dataclass(frozen=True)
+class CostmapSpec:
+    """How the global costmap is built.
+
+    Attributes:
+        enabled: False gives no costmap, and a planner gets None.
+        resolution: side of a cell in metres. A map read from a file keeps its own.
+        plugins: the layers to use, "static" then "inflation".
+        source: "generate" (from the obstacles of the world) or the path of a
+            `map.yaml`.
+        inflation_radius: how far cost spreads from an obstacle, in metres.
+        cost_scaling_factor: how fast cost falls with distance, higher is faster.
+    """
+
+    enabled: bool = True
+    resolution: float = 0.05
+    plugins: tuple[str, ...] = ("static", "inflation")
+    source: str = "generate"
+    inflation_radius: float = 0.55
+    cost_scaling_factor: float = 10.0
+
+
+@dataclass(frozen=True)
 class World:
     """Everything in a world file.
 
@@ -105,6 +127,7 @@ class World:
         dt: length of a simulation step in seconds.
         sensors: default settings of the sensors of every robot, by sensor
             name, such as {"encoders": {"noise": 0.01, "ticks_per_rev": 2048}}.
+        costmap: how the global costmap is built.
     """
 
     size: tuple[float, float]
@@ -114,3 +137,4 @@ class World:
     tasks: tuple[Task, ...] = ()
     dt: float = DEFAULT_DT
     sensors: dict = field(default_factory=dict)
+    costmap: CostmapSpec = field(default_factory=CostmapSpec)

@@ -26,6 +26,7 @@ from .spec import (
     DEFAULT_CONTROL_PERIOD,
     DEFAULT_DT,
     DEFAULT_GOAL_TOLERANCE,
+    CostmapSpec,
     Obstacle,
     RobotSpec,
     Task,
@@ -194,6 +195,59 @@ def _parse_task(item: dict, index: int, size, robots: dict[str, RobotSpec]) -> T
     return Task(name, goal, tolerance, stop, wait)
 
 
+def _parse_costmap(value, base: Path) -> CostmapSpec:
+    """Check the `[costmap]` table, a map path is taken relative to `base`."""
+    data = table(value, "costmap")
+    check_keys(data, {"global"}, "costmap")
+    label = "costmap.global"
+    g = table(data.get("global", {}), label)
+    check_keys(g, {"enabled", "resolution", "plugins", "static", "inflation"}, label)
+    default = CostmapSpec()
+    enabled = g.get("enabled", default.enabled)
+    if not isinstance(enabled, bool):
+        raise WorldError(f"{label}: 'enabled' must be true or false")
+    resolution = (
+        number(g, "resolution", label) if "resolution" in g else default.resolution
+    )
+    plugins = g.get("plugins", list(default.plugins))
+    if not isinstance(plugins, list) or not set(plugins) <= {"static", "inflation"}:
+        raise WorldError(f"{label}: 'plugins' must list 'static' and 'inflation'")
+    if plugins != [p for p in ("static", "inflation") if p in plugins]:
+        raise WorldError(
+            f"{label}: 'plugins' names a layer twice or puts inflation before static"
+        )
+    static = table(g.get("static", {}), f"{label}.static")
+    check_keys(static, {"source"}, f"{label}.static")
+    source = (
+        text(static, "source", f"{label}.static") if "source" in static else "generate"
+    )
+    if source != "generate":
+        path = base / source
+        if not path.is_file():
+            raise WorldError(f"{label}.static: no map file '{path}'")
+        source = str(path)
+    inflation = table(g.get("inflation", {}), f"{label}.inflation")
+    check_keys(
+        inflation, {"inflation_radius", "cost_scaling_factor"}, f"{label}.inflation"
+    )
+    for layer, settings in (("static", static), ("inflation", inflation)):
+        if settings and layer not in plugins:
+            warnings.warn(
+                f"{label}: {layer} is set but not in 'plugins', so it has no effect"
+            )
+    radius = (
+        number(inflation, "inflation_radius", label)
+        if "inflation_radius" in inflation
+        else default.inflation_radius
+    )
+    scaling = (
+        number(inflation, "cost_scaling_factor", label)
+        if "cost_scaling_factor" in inflation
+        else default.cost_scaling_factor
+    )
+    return CostmapSpec(enabled, resolution, tuple(plugins), source, radius, scaling)
+
+
 def load_world(path: str | Path) -> World:
     """Read a world file and check it.
 
@@ -220,7 +274,9 @@ def load_world(path: str | Path) -> World:
             f"file: version {version} is not supported, expected {FORMAT_VERSION}"
         )
     check_keys(
-        data, {"version", "world", "obstacle", "robot", "task", "sensors"}, "file"
+        data,
+        {"version", "world", "obstacle", "robot", "task", "sensors", "costmap"},
+        "file",
     )
 
     world = table(require_key(data, "world", "file"), "world")
@@ -250,4 +306,5 @@ def load_world(path: str | Path) -> World:
         for i, item in enumerate(items(data, "task"), start=1)
     )
     sensors = _parse_sensors(data.get("sensors", {}), "file")
-    return World(size, seed, obstacles, robots, tasks, dt, sensors)
+    costmap = _parse_costmap(data.get("costmap", {}), Path(path).resolve().parent)
+    return World(size, seed, obstacles, robots, tasks, dt, sensors, costmap)
