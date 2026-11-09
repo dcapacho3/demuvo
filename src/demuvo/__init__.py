@@ -4,7 +4,7 @@ from .controllers import Controller, Observation, PurePursuit
 from .costmap import Costmap
 from .models import MODELS, DiffDrive, Twist
 from .nav import Navigation
-from .planners import Planner, StraightLine
+from .planners import AStar, Planner, StraightLine
 from .sensing import Estimate, Estimator, Reading, Sensor
 from .sim import Simulation
 from .world import Obstacle, RobotSpec, Task, World, WorldError, load_world
@@ -14,6 +14,7 @@ __all__ = [
     "MODELS",
     "Navigation",
     "SHAPES",
+    "AStar",
     "Box",
     "Circle",
     "Controller",
