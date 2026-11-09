@@ -133,8 +133,6 @@ def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
     planner = _plugin(item, "planner", label)
     controller_params = _plugin_params(item, "controller_params", "controller", label)
     planner_params = _plugin_params(item, "planner_params", "planner", label)
-    smoother = _plugin(item, "smoother", label)
-    smoother_params = _plugin_params(item, "smoother_params", "smoother", label)
     period = DEFAULT_CONTROL_PERIOD
     if "control_period" in item:
         period = number(item, "control_period", label)
@@ -175,8 +173,8 @@ def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
         estimator,
         sensors,
         control_pose,
-        smoother,
-        smoother_params,
+        _plugin(item, "smoother", label),
+        _plugin_params(item, "smoother_params", "smoother", label),
     )
 
 

@@ -2,29 +2,14 @@
 
 import pytest
 
-from demuvo.world import WorldError, load_world
+from demuvo.world import WorldError
 
-WORLD = """
-version = 1
-
-[world]
-size = [4.0, 3.0]
-seed = 1
-
-[[robot]]
-name = "a"
-model = "diff_drive"
-shape = {{ name = "circle", radius = 0.1 }}
-pose = [1.0, 1.0, 0.0]
-{extra}
-"""
+from .small_world import small_world
 
 
 def robot(tmp_path, extra=""):
     """Load a small world whose robot has the extra lines, and return the robot."""
-    path = tmp_path / "w.toml"
-    path.write_text(WORLD.format(extra=extra))
-    return load_world(path).robots[0]
+    return small_world(tmp_path, extra).robots[0]
 
 
 def test_a_robot_has_no_smoother_unless_it_names_one(tmp_path):

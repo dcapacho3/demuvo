@@ -86,23 +86,32 @@ class AStar:
         points = np.array([start.xyt[:2], *middle, goal.xyt[:2]])
         return _with_headings(points, goal.xyt[2])
 
+    def _heuristic(self, cell, last):
+        """The distance from a cell to the goal cell if nothing were in the way."""
+        dr, dc = abs(cell[0] - last[0]), abs(cell[1] - last[1])
+        if self.connectivity == 4:
+            return self._costmap.resolution * (dr + dc)
+        return self._costmap.resolution * (dr + dc + (math.sqrt(2) - 2) * min(dr, dc))
+
+    def _neighbours(self, cell, blocked):
+        """The free cells a step from `cell` reaches, with the length of the step."""
+        rows, cols = blocked.shape
+        steps = _STEPS_8 if self.connectivity == 8 else _STEPS_4
+        for dr, dc in steps:
+            r, c = cell[0] + dr, cell[1] + dc
+            if not (0 <= r < rows and 0 <= c < cols) or blocked[r, c]:
+                continue
+            if dr and dc and (blocked[cell[0] + dr, cell[1]] or blocked[cell[0], c]):
+                continue  # a diagonal step may not cut a corner
+            yield (r, c), self._costmap.resolution * math.hypot(dr, dc)
+
     def _search(self, blocked, price, first, last):
         """The cells from first to last as a list, or None if last cannot be reached."""
-        resolution = self._costmap.resolution
-        steps = _STEPS_8 if self.connectivity == 8 else _STEPS_4
-        rows, cols = blocked.shape
-
-        def heuristic(r, c):
-            dr, dc = abs(r - last[0]), abs(c - last[1])
-            if self.connectivity == 4:
-                return resolution * (dr + dc)
-            return resolution * (dr + dc + (math.sqrt(2) - 2) * min(dr, dc))
-
         best = {first: 0.0}
         came_from = {first: None}
         # (estimate, distance still to go, order found, cell): a tie goes to the
         # cell nearer the goal, then to the one found first, so a run repeats.
-        start_estimate = heuristic(*first)
+        start_estimate = self._heuristic(first, last)
         queue = [(start_estimate, start_estimate, 0, first)]
         found = 1
         while queue:
@@ -110,29 +119,25 @@ class AStar:
             if estimate - remaining > best[cell] + 1e-9:
                 continue  # a cheaper way to this cell was found after this entry
             if cell == last:
-                path = []
-                while cell is not None:
-                    path.append(cell)
-                    cell = came_from[cell]
-                return path[::-1]
-            for dr, dc in steps:
-                r, c = cell[0] + dr, cell[1] + dc
-                if not (0 <= r < rows and 0 <= c < cols) or blocked[r, c]:
-                    continue
-                if (
-                    dr
-                    and dc
-                    and (blocked[cell[0] + dr, cell[1]] or blocked[cell[0], c])
-                ):
-                    continue
-                cost = best[cell] + resolution * math.hypot(dr, dc) * price[r, c]
-                if cost < best.get((r, c), math.inf):
-                    best[(r, c)] = cost
-                    came_from[(r, c)] = cell
-                    h = heuristic(r, c)
-                    heapq.heappush(queue, (cost + h, h, found, (r, c)))
+                return _trace(came_from, cell)
+            for neighbour, length in self._neighbours(cell, blocked):
+                cost = best[cell] + length * price[neighbour]
+                if cost < best.get(neighbour, math.inf):
+                    best[neighbour] = cost
+                    came_from[neighbour] = cell
+                    h = self._heuristic(neighbour, last)
+                    heapq.heappush(queue, (cost + h, h, found, neighbour))
                     found += 1
         return None
+
+
+def _trace(came_from, cell):
+    """The cells from the first to `cell`, by following where each came from."""
+    path = []
+    while cell is not None:
+        path.append(cell)
+        cell = came_from[cell]
+    return path[::-1]
 
 
 def _with_headings(points: np.ndarray, goal_yaw: float) -> np.ndarray:

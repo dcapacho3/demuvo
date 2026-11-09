@@ -4,29 +4,9 @@ import warnings
 
 import pytest
 
-from demuvo.world import WorldError, load_world
+from demuvo.world import WorldError
 
-WORLD = """
-version = 1
-
-[world]
-size = [4.0, 3.0]
-seed = 1
-
-[[robot]]
-name = "a"
-model = "diff_drive"
-shape = {{ name = "circle", radius = 0.1 }}
-pose = [1.0, 1.0, 0.0]
-{extra}
-"""
-
-
-def world(tmp_path, extra=""):
-    """Load a small world with extra text at the end of the file."""
-    path = tmp_path / "w.toml"
-    path.write_text(WORLD.format(extra=extra))
-    return load_world(path)
+from .small_world import small_world as world
 
 
 @pytest.mark.parametrize(
