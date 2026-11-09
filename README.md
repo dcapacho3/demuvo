@@ -25,16 +25,21 @@ Working today:
 - a world file (TOML) with a world size, obstacles (box, circle, polygon, wall) and
   robots, checked when it loads;
 - one kinematic model, differential drive, driven by a ROS-style `Twist` command;
+- solid obstacles: a robot that would enter an obstacle, the border or another robot is
+  pushed back out and slides along it;
+- wheel encoders with noise, and a dead-reckoning estimator that a robot can use in
+  place of its true pose (`estimator = "dead_reckoning"`);
 - a planner and a controller for each robot, chosen in the file as `module:Class`;
   built in: `StraightLine` and `PurePursuit`;
+- a global costmap, built from the obstacles or read from a `map.yaml` (see
+  "Costmap" below);
 - a step length and a controller rate that you set apart (see "Time" below);
 - a top-down view, and GIF export from Python;
 - a result, printed with `--result` when the window closes: for each task, whether the
-  robot reached it and when, and the distance it drove.
+  robot reached it and when, the distance it drove, and the number of collisions.
 
-Not yet: collisions, noisy wheel encoders, a lidar, the other kinematic models
-(car-like, forklift, mecanum, skid-steer), and a runner that compares controllers on
-the same worlds and seeds.
+Not yet: a lidar, the other kinematic models (car-like, forklift, mecanum,
+skid-steer), and a runner that compares controllers on the same worlds and seeds.
 
 ## Try it
 
@@ -80,10 +85,39 @@ the standing-still test; the default is yes for a robot's last task and for a ta
 a `wait`, and no for the waypoints in between.
 
 To use your own, write a class with one method and name it in the file. A planner has
-`plan(world, start, goal)` and returns an array of shape (N, 3) of x, y, angle. A
+`configure(costmap)`, which the navigation calls once with the robot's costmap, and
+`plan(start, goal)`, which returns an array of shape (N, 3) of x, y, angle. A
 controller has `command(obs)` and returns a `Twist`; it sees only the observation (its
 pose, the path, the goal), not the simulation. From Python, `Navigation` also takes a
 goal or a path from outside with `set_goal` and `set_path`.
+
+## Costmap
+
+A planner searches a costmap, a grid of costs: free 0, lethal 254 (an obstacle), 253
+where the robot's centre cannot go, 255 unknown, and costs between that fall off with
+distance from an obstacle. It has two layers: `static` (the obstacles and the border
+as cells) and `inflation` (cost spread out by the robot's radius). Robots of one radius
+share a costmap, and a robot's estimate carries it as `Estimate.map`. Every setting is
+optional:
+
+```toml
+[costmap.global]
+enabled = true                  # false: no costmap, planners get None
+resolution = 0.05               # metres per cell
+plugins = ["static", "inflation"]
+
+[costmap.global.static]
+source = "generate"             # or the path of a map.yaml, relative to this file
+
+[costmap.global.inflation]
+inflation_radius = 0.55         # metres
+cost_scaling_factor = 10.0
+```
+
+A `map.yaml` and its `.pgm` image (the files a ROS map saver writes) replace the
+generated map, so a planner can be developed with no SLAM first. The image must be a
+PGM; the `mode` and `free_thresh` keys are ignored and unknown space counts as free.
+A map read from a file keeps its own resolution and origin.
 
 ## Time
 
@@ -129,7 +163,7 @@ pre-commit install
 python -m pytest
 ```
 
-Each part of the code is a folder under `src/demuvo/` (`world`, `models`, `sim`, `planners`,
+Each part of the code is a folder under `src/demuvo/` (`world`, `models`, `costmap`, `sim`, `planners`,
 `controllers`, `nav`, `evaluation`, `run`, `view`), and its tests sit in a `tests` folder inside it.
 
 Pose maths comes from [robomath](https://github.com/dcapacho3/robomath).
