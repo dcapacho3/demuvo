@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import tomllib
+import warnings
 from pathlib import Path
 
 from robomath import Transform2D
 
 from ..models import MODELS, parse_params
+from ..sensing import ESTIMATORS, SENSORS, resolve_estimator
 from ..verify import (
     WorldError,
     check_keys,
@@ -73,6 +75,23 @@ def _plugin_params(item: dict, key: str, plugin: str, label: str) -> dict:
     return dict(table(item[key], f"{label} {key}"))
 
 
+def _parse_sensors(value, label: str) -> dict[str, dict[str, float]]:
+    """Check a `sensors` table: sensor names, each with its own settings."""
+    data = table(value, f"{label} sensors")
+    check_keys(data, set(SENSORS), f"{label} sensors")
+    result = {}
+    for kind, settings in data.items():
+        where = f"{label} sensors.{kind}"
+        settings = table(settings, where)
+        check_keys(settings, set(SENSORS[kind].options), where)
+        for key in settings:
+            numbers([settings[key]], 1, where, key)  # finite; zero is allowed
+            if settings[key] < 0:
+                raise WorldError(f"{where}: '{key}' must not be negative")
+        result[kind] = {key: float(v) for key, v in settings.items()}
+    return result
+
+
 def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
     """Build and check one `[[robot]]`; `names` holds the names read so far."""
     item = table(item, f"robot {index}")
@@ -94,6 +113,9 @@ def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
             "controller_params",
             "params",
             "control_period",
+            "estimator",
+            "sensors",
+            "control_pose",
         },
         label,
     )
@@ -113,6 +135,27 @@ def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
         period = number(item, "control_period", label)
     if not inside(shape.points(pose), size):
         raise WorldError(f"{label}: 'pose' must lie inside the world")
+    estimator = (
+        text(item, "estimator", label) if "estimator" in item else "ground_truth"
+    )
+    if estimator not in ESTIMATORS:
+        known = ", ".join(ESTIMATORS)
+        raise WorldError(
+            f"{label}: unknown estimator '{estimator}', expected one of {known}"
+        )
+    estimator = resolve_estimator(estimator, model, MODELS[model], label)
+    sensors = _parse_sensors(item.get("sensors", {}), label)
+    for kind in sensors:
+        if kind not in ESTIMATORS[estimator].needs:
+            warnings.warn(
+                f"{label}: sensors.{kind} is set but estimator '{estimator}' "
+                "does not read it, so the setting has no effect"
+            )
+    control_pose = (
+        text(item, "control_pose", label) if "control_pose" in item else "estimate"
+    )
+    if control_pose not in ("estimate", "truth"):
+        raise WorldError(f"{label}: 'control_pose' must be 'estimate' or 'truth'")
     return RobotSpec(
         name,
         model,
@@ -124,6 +167,9 @@ def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
         controller_params,
         planner_params,
         period,
+        estimator,
+        sensors,
+        control_pose,
     )
 
 
@@ -173,7 +219,9 @@ def load_world(path: str | Path) -> World:
         raise WorldError(
             f"file: version {version} is not supported, expected {FORMAT_VERSION}"
         )
-    check_keys(data, {"version", "world", "obstacle", "robot", "task"}, "file")
+    check_keys(
+        data, {"version", "world", "obstacle", "robot", "task", "sensors"}, "file"
+    )
 
     world = table(require_key(data, "world", "file"), "world")
     check_keys(world, {"size", "seed", "dt"}, "world")
@@ -201,4 +249,5 @@ def load_world(path: str | Path) -> World:
         _parse_task(item, i, size, by_name)
         for i, item in enumerate(items(data, "task"), start=1)
     )
-    return World(size, seed, obstacles, robots, tasks, dt)
+    sensors = _parse_sensors(data.get("sensors", {}), "file")
+    return World(size, seed, obstacles, robots, tasks, dt, sensors)

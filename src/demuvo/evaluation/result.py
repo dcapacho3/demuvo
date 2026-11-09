@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import math
+
 from ..sim.simulation import Simulation
 from .judge import Judge, goal_error
 
 
 def result_lines(sim: Simulation, judge: Judge) -> list[str]:
     """What each robot did, one line per task and one for the distance driven.
+
+    A robot whose estimator is not ground truth also gets a line that names the
+    estimator and how far its estimate ended from the true pose.
 
     A last line counts the collisions of the whole run; it is left out when there
     are no other lines and no collisions.
@@ -37,6 +42,14 @@ def result_lines(sim: Simulation, judge: Judge) -> list[str]:
             else:
                 lines.append(f"{label} not reached")
         lines.append(f"{name} drove {sim.driven[name]:.2f} m")
+        robot = sim.robots[name]
+        if robot.spec.estimator != "ground_truth":
+            true, believed = sim.poses[name].xyt, robot.estimate.pose.xyt
+            error = math.hypot(true[0] - believed[0], true[1] - believed[1])
+            lines.append(
+                f"{name} pose from {robot.spec.estimator}, "
+                f"{error:.2f} m from the true pose at the end"
+            )
     count = len(sim.collisions)
     if lines or count:
         lines.append(f"{count} collision{'' if count == 1 else 's'}")

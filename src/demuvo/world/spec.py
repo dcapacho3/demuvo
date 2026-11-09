@@ -42,6 +42,15 @@ class RobotSpec:
         planner_params: keyword arguments for the planner class.
         control_period: seconds between two runs of the controller; at least
             the simulation step. The command stays in force between runs.
+        estimator: name of the estimator that gives the controller its pose,
+            "ground_truth" (the true pose) or "dead_reckoning" (from the
+            encoders). A name the model cannot run was already replaced by
+            "ground_truth" when the file was read.
+        sensors: settings of this robot's sensors by sensor name, such as
+            {"encoders": {"noise": 0.01}}; they replace the world's, key by key.
+        control_pose: the pose the controller and planner see: "estimate" (the
+            estimator's) or "truth" (the true pose, while the estimator still
+            runs and is scored).
     """
 
     name: str
@@ -54,6 +63,9 @@ class RobotSpec:
     controller_params: dict = field(default_factory=dict)
     planner_params: dict = field(default_factory=dict)
     control_period: float = DEFAULT_CONTROL_PERIOD
+    estimator: str = "ground_truth"
+    sensors: dict = field(default_factory=dict)
+    control_pose: str = "estimate"
 
 
 @dataclass(frozen=True)
@@ -91,6 +103,8 @@ class World:
         robots: the robots, in file order.
         tasks: what the robots are to do, in file order.
         dt: length of a simulation step in seconds.
+        sensors: default settings of the sensors of every robot, by sensor
+            name, such as {"encoders": {"noise": 0.01, "ticks_per_rev": 2048}}.
     """
 
     size: tuple[float, float]
@@ -99,3 +113,4 @@ class World:
     robots: tuple[RobotSpec, ...]
     tasks: tuple[Task, ...] = ()
     dt: float = DEFAULT_DT
+    sensors: dict = field(default_factory=dict)

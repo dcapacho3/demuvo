@@ -9,8 +9,10 @@ import numpy as np
 from robomath import Transform2D
 
 from ..models import MODELS, Twist
+from ..sensing import Estimate, StepTruth
 from ..world import World
 from .collisions import Checker, Collision, Contact
+from .robot import Robot
 
 # How many times a push out of one contact may uncover another before the robots
 # involved are put back where they were.
@@ -30,6 +32,9 @@ class Simulation:
         dt: length of a step in seconds.
         rng: random generator, seeded with the world seed.
         models: the kinematic model of each robot, by name.
+        robots: the sensors and estimator of each robot, by name.
+        estimates: what each robot believes its pose is, by name; the same as
+            `poses` for a robot whose estimator is ground truth.
         poses: current pose of each robot, by name, as a Transform2D; its
             `xyt` is (x, y, angle).
         steps: number of steps taken.
@@ -63,6 +68,10 @@ class Simulation:
         self.dt = dt
         self.rng = np.random.default_rng(world.seed)
         self.models = {r.name: MODELS[r.model](**r.params) for r in world.robots}
+        self.robots = {
+            r.name: Robot(r, self.models[r.name], world.seed, world.sensors)
+            for r in world.robots
+        }
         self.poses: dict[str, Transform2D] = {r.name: r.pose for r in world.robots}
         self.steps = 0
         self.velocity = {r.name: np.zeros(3) for r in world.robots}
@@ -75,6 +84,11 @@ class Simulation:
                 f"'{overlaps[0].a}' starts inside '{overlaps[0].b}'; "
                 "move one of them in the world file"
             )
+
+    @property
+    def estimates(self) -> dict[str, Estimate]:
+        """What each robot believes about its pose."""
+        return {name: robot.estimate for name, robot in self.robots.items()}
 
     @property
     def time(self) -> float:
@@ -100,8 +114,12 @@ class Simulation:
         for name in commands:
             if name not in self.models:
                 raise ValueError(f"no robot named '{name}'")
+        clipped = {
+            name: model.clip(commands.get(name, Twist()))
+            for name, model in self.models.items()
+        }
         moved = {
-            name: model.step(self.poses[name], commands.get(name, Twist()), self.dt)
+            name: model.step(self.poses[name], clipped[name], self.dt)
             for name, model in self.models.items()
         }
         moved = self._resolve(moved)
@@ -116,6 +134,10 @@ class Simulation:
         self.velocity = velocity
         self.poses.update(moved)
         self.steps += 1
+        for name, robot in self.robots.items():
+            robot.observe(
+                StepTruth(self.time, self.poses[name], clipped[name], self.dt)
+            )
 
     def _resolve(self, moved: dict[str, Transform2D]) -> dict[str, Transform2D]:
         """Push the proposed poses out of every overlap and record collisions."""

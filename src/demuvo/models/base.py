@@ -46,3 +46,13 @@ class Model(Protocol):
 
     def step(self, pose: Transform2D, command: Twist, dt: float) -> Transform2D:
         """The pose after dt seconds of command."""
+
+
+class WheeledModel(Model, Protocol):
+    """A model that also knows its wheels, so an estimator can read encoders."""
+
+    def encoders(self, command: Twist, dt: float):
+        """The wheel increments for a clipped command over dt, as an array."""
+
+    def from_encoders(self, readings):
+        """The (x, y, angle) step for wheel increments, for `Transform2D.rplus`."""

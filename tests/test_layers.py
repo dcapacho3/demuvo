@@ -13,9 +13,10 @@ ROOT = Path(__file__).resolve().parents[1] / "src" / "demuvo"
 ALLOWED = {
     "verify": set(),
     "plugins": {"verify"},
-    "models": {"verify"},
-    "world": {"verify", "models"},
-    "sim": {"models", "world"},
+    "models": {"plugins", "verify"},
+    "sensing": {"models"},
+    "world": {"verify", "models", "sensing"},
+    "sim": {"models", "sensing", "world"},
     "planners": {"plugins", "world"},
     "controllers": {"models", "plugins"},
     "evaluation": {"sim", "world"},

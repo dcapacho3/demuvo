@@ -92,3 +92,42 @@ def test_a_command_the_robot_can_follow_gives_no_warning(recwarn):
     """The warning is only for a nonzero field the model does not use."""
     drive((0.0, 0.0, 0.0), Twist(vx=1.0, wz=0.5), 1.0)
     assert not recwarn
+
+
+def wheels(command, dt=1.0, **params):
+    """The (left, right) wheel angles of a diff-drive for a command."""
+    return DiffDrive(**params).encoders(command, dt)
+
+
+def test_a_straight_command_turns_both_wheels_alike():
+    """1 m/s for 1 s on wheels of radius 0.1 m is 10 rad on each."""
+    assert wheels(Twist(vx=1.0), wheel_radius=0.1) == pytest.approx([10.0, 10.0])
+
+
+def test_a_spin_turns_the_wheels_opposite_ways():
+    """Wz = 1 on a track of 0.4 m: each wheel moves 0.2 m, left back, right on."""
+    assert wheels(Twist(wz=1.0), wheel_radius=0.1, track=0.4) == pytest.approx(
+        [-2.0, 2.0]
+    )
+
+
+@pytest.mark.parametrize(
+    ("readings", "step"),
+    [
+        ([0.5, 0.5], (0.05, 0.0, 0.0)),  # both wheels 0.5 rad: 5 cm straight
+        ([0.5, 0.3], (0.04, 0.0, -0.05)),  # right slower: a turn to the right
+    ],
+)
+def test_wheel_increments_give_the_body_step(readings, step):
+    """Wheel radius 0.1 m and track 0.4 m, worked by hand."""
+    model = DiffDrive(wheel_radius=0.1, track=0.4)
+    assert model.from_encoders(readings) == pytest.approx(step)
+
+
+@pytest.mark.parametrize("bad", [0.0, -0.1, float("nan"), float("inf")])
+def test_a_wheel_size_must_be_a_positive_number(bad):
+    """Radius and track are divided by, so they cannot be zero."""
+    with pytest.raises(ValueError, match="wheel_radius"):
+        DiffDrive(wheel_radius=bad)
+    with pytest.raises(ValueError, match="track"):
+        DiffDrive(track=bad)

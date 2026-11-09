@@ -100,7 +100,7 @@ pose = [3.0, 3.0, 0.0]
     def fail(*_):
         raise ValueError("broken")
 
-    sim.models["r2"] = SimpleNamespace(step=fail)
+    sim.models["r2"] = SimpleNamespace(step=fail, clip=lambda command: command)
     before = dict(sim.poses)
     with pytest.raises(ValueError, match="broken"):
         sim.step({"r1": Twist(vx=1.0)})

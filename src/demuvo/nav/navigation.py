@@ -63,6 +63,8 @@ class Navigation:
         self.paths: dict[str, np.ndarray] = {}
         self.judge = Judge(self.tasks)
         self._planned: dict[str, int] = {}
+        self._on_truth = {r.name for r in world.robots if r.control_pose == "truth"}
+        self._path_changes = dict.fromkeys(self.tasks, 0)
         self._planners: dict[str, Planner] = {}
         self._controllers: dict[str, Controller] = {}
         self._periods = {r.name: r.control_period for r in world.robots}
@@ -146,6 +148,7 @@ class Navigation:
         if not np.isfinite(array).all():
             raise ValueError("path must hold finite numbers")
         self.paths[name] = array
+        self._path_changes[name] += 1
 
     def _check(self, name: str) -> None:
         """Refuse a name that is not a robot of the world."""
@@ -165,7 +168,9 @@ class Navigation:
             if sim.steps < self._due(name, sim.dt):
                 commands[name] = self._held[name]
                 continue
-            pose = sim.poses[name]
+            pose = (
+                sim.poses[name] if name in self._on_truth else sim.estimates[name].pose
+            )
             task = self.judge.task(name)
             if self._planned.get(name, 0) != self.judge.current[name]:
                 self.paths.pop(name, None)  # the robot moved on to its next task
@@ -175,6 +180,7 @@ class Navigation:
                 if task is not None:
                     path = self._planners[name].plan(sim.world, pose, task.goal)
                     self.paths[name] = path
+                self._path_changes[name] += 1
             path = self.paths[name]
             goal = task.goal if task else None
             if goal is None and len(path) > 0:
@@ -193,6 +199,7 @@ class Navigation:
                     path=path,
                     goal=goal,
                     goal_tolerance=tolerance,
+                    path_changes=self._path_changes[name],
                 )
             )
             self._runs[name] += 1

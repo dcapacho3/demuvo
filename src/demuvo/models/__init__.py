@@ -12,10 +12,13 @@ Each model class includes:
     uses: the Twist fields it follows
     clip: the command limited to what the robot can do
     step: the pose after `dt` seconds of a constant command.
+
+A model that can also give its wheel increments has `encoders` and
+`from_encoders` (see `WheeledModel`); only then can a robot use dead reckoning.
 """
 
-from .base import Model, Twist
+from .base import Model, Twist, WheeledModel
 from .diff_drive import DiffDrive
 from .registry import MODELS, parse_params
 
-__all__ = ["MODELS", "DiffDrive", "Model", "Twist", "parse_params"]
+__all__ = ["MODELS", "DiffDrive", "Model", "Twist", "WheeledModel", "parse_params"]

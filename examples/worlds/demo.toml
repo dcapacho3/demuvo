@@ -25,8 +25,14 @@ planner = "demuvo.planners:StraightLine"      # optional; this is the default
 controller = "demuvo.controllers:PurePursuit" # optional; module:Class
 controller_params = { speed = 0.5, lookahead = 0.6 }   # optional
 control_period = 0.05     # optional: seconds between controller runs
+# estimator = "dead_reckoning"   # optional: the pose the controller sees; default "ground_truth"
+# control_pose = "truth"        # optional: the controller sees the true pose while the estimator still runs
+# sensors = { encoders = { noise = 0.01, ticks_per_rev = 2048 } }   # optional settings
 
 [[task]]                  # what a robot is to do; several for one robot are waypoints
 robot = "r1"
 goal = [9.0, 5.0, 0.0]
 goal_tolerance = [0.1, 0.1]                   # optional: metres, radians
+
+# [sensors.encoders]      # optional: default sensor settings for every robot
+# noise = 0.01

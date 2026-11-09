@@ -19,15 +19,16 @@ class Observation:
         time: simulated time in seconds.
         dt: seconds since the controller last ran; its control period on
             the first run.
-        pose: where the robot believes it is. Today this is the true pose, with
-            no noise, because demuvo has no odometry model yet; it will be the
-            estimate of the odometry or of a filter, and the true pose stays in
-            the simulation for collisions and scoring.
+        pose: where the robot believes it is: the estimate of its estimator
+        or the true pose if the robot's `control_pose` is "truth".
         path: the path to follow, shape (N, 3) of (x, y, angle); empty if the
             robot has no goal.
         goal: the goal, or None.
         goal_tolerance: distance in metres and angle in radians within which
             the robot counts as at its goal.
+        path_changes: how many times the robot's path has been replaced.
+        A controller that keeps state about the path
+        starts over when this number changes.
     """
 
     time: float
@@ -36,6 +37,7 @@ class Observation:
     path: np.ndarray
     goal: Transform2D | None
     goal_tolerance: tuple[float, float]
+    path_changes: int = 0
 
 
 class Controller(Protocol):
