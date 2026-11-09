@@ -39,14 +39,24 @@ def load_class(
     return obj
 
 
-def check_positive(obj, *names: str) -> None:
-    """Raise ValueError unless every named attribute of obj is a positive number."""
+def _check_numbers(obj, names, allowed, wording: str) -> None:
+    """Raise ValueError unless each attribute is a finite number `allowed` accepts."""
     for name in names:
         value = getattr(obj, name)
         if (
             not isinstance(value, int | float)
             or isinstance(value, bool)
             or not math.isfinite(value)
-            or value <= 0
+            or not allowed(value)
         ):
-            raise ValueError(f"{name} must be a positive number, got {value!r}")
+            raise ValueError(f"{name} must be {wording}, got {value!r}")
+
+
+def check_positive(obj, *names: str) -> None:
+    """Raise ValueError unless every named attribute of obj is a positive number."""
+    _check_numbers(obj, names, lambda value: value > 0, "a positive number")
+
+
+def check_not_negative(obj, *names: str) -> None:
+    """Raise ValueError unless every named attribute of obj is 0 or more."""
+    _check_numbers(obj, names, lambda value: value >= 0, "0 or more")

@@ -11,6 +11,7 @@ import numpy as np
 from robomath import Transform2D
 
 from ..costmap import INSCRIBED, MAX_NON_OBSTACLE, Costmap
+from ..plugins import check_not_negative
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,17 +32,24 @@ class AStar:
     path never cuts a corner.
 
     The start cell is always allowed, since a robot against a wall can sit in a
-    blocked cell. A goal that is blocked or off the map gives no path.
+    blocked cell. A goal off the map gives no path. A goal that is blocked gives
+    no path either, unless `tolerance` allows the path to end at the nearest free
+    cell within that distance of the goal; the run says so when it does. A goal that
+    is free but walled in gives no path.
 
     Attributes:
         connectivity: 8 moves to the four sides and the four diagonals; 4 only
             to the four sides, which gives paths of 90-degree turns.
         cost_weight: how much a cell's cost raises the price of a step, 0 or more.
             0 gives the shortest path whatever the costs.
+        tolerance: how far from a blocked goal, in metres, the path may end; 0 or
+            more. The default 0 gives no path to a blocked goal, so a result never
+            hides that the goal was out of reach.
     """
 
     connectivity: int = 8
     cost_weight: float = 2.0
+    tolerance: float = 0.0
     _costmap: Costmap | None = field(
         default=None, init=False, repr=False, compare=False
     )
@@ -50,14 +58,7 @@ class AStar:
         """Check the settings."""
         if self.connectivity not in (4, 8):
             raise ValueError(f"connectivity must be 4 or 8, got {self.connectivity!r}")
-        weight = self.cost_weight
-        if (
-            not isinstance(weight, int | float)
-            or isinstance(weight, bool)
-            or not math.isfinite(weight)
-            or weight < 0
-        ):
-            raise ValueError(f"cost_weight must be 0 or more, got {weight!r}")
+        check_not_negative(self, "cost_weight", "tolerance")
 
     def configure(self, costmap: Costmap | None) -> None:
         """Take the costmap to search.
@@ -81,12 +82,20 @@ class AStar:
         if not _on_map(costmap, last):
             return _no_path("the goal (%.2f, %.2f) is off the map", *goal.xyt[:2])
         blocked = costmap.data >= INSCRIBED
+        end = goal.xyt[:2]
         if blocked[last]:
-            return _no_path(
-                "the goal cell %s is blocked (cost %d), so the robot's centre "
-                "cannot be there",
+            wanted, near = last, self._nearest_free(blocked, goal.xyt[:2])
+            if near is None:
+                return _no_path(*self._blocked_goal(wanted))
+            last = near
+            end = costmap.cell_to_world(*last)
+            LOGGER.warning(
+                "AStar: the goal cell %s is blocked (cost %d), so the path ends at "
+                "the nearest free cell %s, %.2f m from the goal",
+                wanted,
+                costmap.data[wanted],
                 last,
-                costmap.data[last],
+                math.dist(end, goal.xyt[:2]),
             )
         price = 1.0 + self.cost_weight * costmap.data / MAX_NON_OBSTACLE
         cells = self._search(blocked, price, first, last)
@@ -98,8 +107,43 @@ class AStar:
                 last,
             )
         middle = [costmap.cell_to_world(r, c) for r, c in cells[1:-1]]
-        points = np.array([start.xyt[:2], *middle, goal.xyt[:2]])
+        points = np.array([start.xyt[:2], *middle, end])
         return _with_headings(points, goal.xyt[2])
+
+    def _blocked_goal(self, cell):
+        """The message and values that say why a blocked goal has no path."""
+        cost = self._costmap.data[cell]
+        if self.tolerance == 0:
+            return (
+                "the goal cell %s is blocked (cost %d), so the robot's centre "
+                "cannot be there",
+                cell,
+                cost,
+            )
+        return (
+            "the goal cell %s is blocked (cost %d) and no free cell lies within "
+            "%.2f m of it",
+            cell,
+            cost,
+            self.tolerance,
+        )
+
+    def _nearest_free(self, blocked, goal_xy):
+        """The free cell nearest the goal within `tolerance` of it, or None."""
+        costmap = self._costmap
+        row, col = costmap.world_to_cell(*goal_xy)
+        reach = math.ceil(round(self.tolerance / costmap.resolution, 9))
+        rows = np.arange(max(0, row - reach), min(blocked.shape[0], row + reach + 1))
+        cols = np.arange(max(0, col - reach), min(blocked.shape[1], col + reach + 1))
+        rr, cc = np.meshgrid(rows, cols, indexing="ij")
+        x = costmap.origin[0] + (cc + 0.5) * costmap.resolution
+        y = costmap.origin[1] + (rr + 0.5) * costmap.resolution
+        distance = np.hypot(x - goal_xy[0], y - goal_xy[1])
+        distance[blocked[rr, cc] | (distance > self.tolerance)] = np.inf
+        nearest = int(distance.argmin())  # the first of equals in row order
+        if not np.isfinite(distance.flat[nearest]):
+            return None
+        return int(rr.flat[nearest]), int(cc.flat[nearest])
 
     def _heuristic(self, cell, last):
         """The distance from a cell to the goal cell if nothing were in the way."""

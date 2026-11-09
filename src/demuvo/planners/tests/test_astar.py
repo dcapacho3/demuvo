@@ -152,6 +152,8 @@ def test_the_costmap_is_required():
         ({"cost_weight": -1.0}, "cost_weight"),
         ({"cost_weight": math.nan}, "cost_weight"),
         ({"cost_weight": True}, "cost_weight"),
+        ({"tolerance": -0.1}, "tolerance"),
+        ({"tolerance": math.inf}, "tolerance"),
     ],
 )
 def test_bad_settings_are_refused(options, message):
@@ -189,3 +191,30 @@ def test_no_path_says_why(caplog, start, goal, message):
     with caplog.at_level(logging.WARNING):
         assert plan(data, start, goal).shape == (0, 3)
     assert caplog.messages == [message]
+
+
+def test_a_tolerance_ends_the_path_at_the_nearest_free_cell(caplog):
+    """A goal inside a block: the path ends beside it and the run says so."""
+    data = grid()
+    data[8:13, 23:28] = LETHAL
+    with caplog.at_level(logging.WARNING):
+        path = plan(data, (0.55, 0.55, 0.0), (2.55, 1.05, 0.7), tolerance=0.5)
+    assert path[-1, 2] == 0.7
+    assert math.dist(path[-1, :2], (2.55, 1.05)) == pytest.approx(0.3, abs=1e-6)
+    assert data[int(path[-1, 1] / 0.1), int(path[-1, 0] / 0.1)] == 0
+    (message,) = caplog.messages
+    assert message.startswith("AStar: the goal cell (10, 25) is blocked (cost 254), ")
+    assert message.endswith(", 0.30 m from the goal")
+
+
+def test_a_tolerance_too_small_gives_no_path_and_says_so(caplog):
+    """No free cell within reach: the message gives the distance."""
+    data = grid()
+    data[8:13, 23:28] = LETHAL
+    with caplog.at_level(logging.WARNING):
+        path = plan(data, (0.55, 0.55, 0.0), (2.55, 1.05, 0.0), tolerance=0.1)
+    assert path.shape == (0, 3)
+    assert caplog.messages == [
+        "AStar: the goal cell (10, 25) is blocked (cost 254) and no free cell "
+        "lies within 0.10 m of it"
+    ]
