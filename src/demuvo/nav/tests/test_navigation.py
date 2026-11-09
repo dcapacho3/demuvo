@@ -81,10 +81,13 @@ def user_module(tmp_path, monkeypatch):
         "import numpy as np\n"
         "from demuvo import Twist\n"
         "calls = []\n"
+        "configured = []\n"
         "class Points:\n"
         "    def __init__(self, n=2):\n"
         "        self.n = n\n"
-        "    def plan(self, world, start, goal):\n"
+        "    def configure(self, costmap):\n"
+        "        configured.append(costmap)\n"
+        "    def plan(self, start, goal):\n"
         "        calls.append((tuple(start.xyt), tuple(goal.xyt)))\n"
         "        return np.zeros((self.n, 3))\n"
         "class Count:\n"
@@ -100,6 +103,7 @@ def user_module(tmp_path, monkeypatch):
     import my_nav  # pylint: disable=import-error,import-outside-toplevel
 
     my_nav.calls.clear()  # the module stays loaded between tests
+    my_nav.configured.clear()
     my_nav.seen.clear()
     return my_nav
 
@@ -123,6 +127,7 @@ def test_the_planner_runs_once_and_its_path_reaches_the_controller(
     commands = Navigation(sim.world)
     assert [commands(sim) for _ in range(3)] == [{"r1": Twist(vx=7.0)}] * 3
     assert my_nav.calls == [((1.0, 1.0, 0.0), (9.0, 5.0, 0.0))]
+    assert my_nav.configured == [sim.costmaps["r1"]]  # once, with the robot's costmap
 
 
 def test_a_robot_with_no_task_gets_an_empty_path(tmp_path, monkeypatch):
@@ -243,7 +248,7 @@ def test_a_goal_or_path_for_an_unknown_robot_is_refused(tmp_path, monkeypatch):
         (
             {"demuvo.planners:StraightLine": "demuvo.controllers:PurePursuit"},
             "planner",
-            "plan",
+            "configure",
         ),
     ],
 )

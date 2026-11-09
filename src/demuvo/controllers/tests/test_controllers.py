@@ -13,7 +13,7 @@ def look(pose, goal, tolerance=(0.1, 0.1), path=None):
     """An Observation for a robot at pose with a straight path to goal."""
     pose, goal = Transform2D.from_xyt(pose), Transform2D.from_xyt(goal)
     if path is None:
-        path = StraightLine().plan(None, pose, goal)
+        path = StraightLine().plan(pose, goal)
     return Observation(
         time=0.0,
         dt=0.05,

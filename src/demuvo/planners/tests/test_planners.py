@@ -12,7 +12,7 @@ from demuvo import StraightLine
 def plan(start, goal, **options):
     """The path of a StraightLine from an (x, y, angle) to another."""
     start, goal = Transform2D.from_xyt(start), Transform2D.from_xyt(goal)
-    return StraightLine(**options).plan(None, start, goal)
+    return StraightLine(**options).plan(start, goal)
 
 
 def test_the_path_runs_from_the_start_to_the_goal():

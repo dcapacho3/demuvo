@@ -9,7 +9,9 @@ from importlib import import_module
 from .verify import WorldError
 
 
-def load_class(path: str, params: Mapping, robot: str, kind: str, method: str):
+def load_class(
+    path: str, params: Mapping, robot: str, kind: str, method: str | tuple[str, ...]
+):
     """Build the class `path` ("module:Class") with `params` as keyword arguments.
 
     Args:
@@ -17,7 +19,7 @@ def load_class(path: str, params: Mapping, robot: str, kind: str, method: str):
         params: keyword arguments for the class.
         robot: name of the robot that asked for it, for the error message.
         kind: "planner" or "controller", for the error message.
-        method: the method the object must have, such as "command".
+        method: the method the object must have, such as "command", or several.
 
     Raises:
         WorldError: if the module, the class or its arguments do not work, or
@@ -31,8 +33,9 @@ def load_class(path: str, params: Mapping, robot: str, kind: str, method: str):
         raise WorldError(
             f"robot '{robot}': cannot load {kind} '{path}': {error}"
         ) from error
-    if not callable(getattr(obj, method, None)):
-        raise WorldError(f"robot '{robot}': {kind} '{path}' has no '{method}' method")
+    for name in (method,) if isinstance(method, str) else method:
+        if not callable(getattr(obj, name, None)):
+            raise WorldError(f"robot '{robot}': {kind} '{path}' has no '{name}' method")
     return obj
 
 

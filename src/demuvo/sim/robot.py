@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from ..sensing import ESTIMATORS, SENSORS, Estimate, StepTruth, stream
 
 if TYPE_CHECKING:
+    from ..costmap import Costmap
     from ..world import RobotSpec
 
 
@@ -22,6 +24,8 @@ class Robot:
         seed: the seed of the world, which sets every random stream.
         defaults: the sensor settings of the world, by sensor name; the robot's
             own settings replace them key by key.
+        costmap: the robot's global costmap, or None. The estimate carries it
+            unless the estimator built a map of its own.
 
     Attributes:
         spec: the robot's spec.
@@ -31,7 +35,14 @@ class Robot:
         estimate: the latest estimate; the start pose before the first step.
     """
 
-    def __init__(self, spec: RobotSpec, model, seed: int, defaults: dict) -> None:
+    def __init__(
+        self,
+        spec: RobotSpec,
+        model,
+        seed: int,
+        defaults: dict,
+        costmap: Costmap | None = None,
+    ) -> None:
         """Build the estimator and the sensors it needs."""
         self.spec = spec
         self.model = model
@@ -41,10 +52,14 @@ class Robot:
             options = {**defaults.get(kind, {}), **spec.sensors.get(kind, {})}
             rng = stream(seed, spec.name, kind)
             self.sensors.append(SENSORS[kind](model, rng, **options))
-        self.estimate = Estimate(spec.pose)
+        self.costmap = costmap
+        self.estimate = Estimate(spec.pose, map=costmap)
 
     def observe(self, truth: StepTruth) -> Estimate:
         """Sense the step and update the estimate."""
         readings = [sensor.read(truth) for sensor in self.sensors]
-        self.estimate = self.estimator.update(truth.command, truth.dt, readings)
-        return self.estimate
+        estimate = self.estimator.update(truth.command, truth.dt, readings)
+        if estimate.map is None:
+            estimate = replace(estimate, map=self.costmap)
+        self.estimate = estimate
+        return estimate

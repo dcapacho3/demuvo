@@ -8,6 +8,7 @@ from collections.abc import Mapping
 import numpy as np
 from robomath import Transform2D
 
+from ..costmap import build_costmaps
 from ..models import MODELS, Twist
 from ..sensing import Estimate, StepTruth
 from ..world import World
@@ -32,6 +33,8 @@ class Simulation:
         dt: length of a step in seconds.
         rng: random generator, seeded with the world seed.
         models: the kinematic model of each robot, by name.
+        costmaps: the global costmap of each robot, by name; None for all if the
+            world turns the costmap off. Robots of one radius share a costmap.
         robots: the sensors and estimator of each robot, by name.
         estimates: what each robot believes its pose is, by name; the same as
             `poses` for a robot whose estimator is ground truth.
@@ -68,8 +71,11 @@ class Simulation:
         self.dt = dt
         self.rng = np.random.default_rng(world.seed)
         self.models = {r.name: MODELS[r.model](**r.params) for r in world.robots}
+        self.costmaps = build_costmaps(world)
         self.robots = {
-            r.name: Robot(r, self.models[r.name], world.seed, world.sensors)
+            r.name: Robot(
+                r, self.models[r.name], world.seed, world.sensors, self.costmaps[r.name]
+            )
             for r in world.robots
         }
         self.poses: dict[str, Transform2D] = {r.name: r.pose for r in world.robots}

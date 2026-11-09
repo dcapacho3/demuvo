@@ -66,6 +66,7 @@ class Navigation:
         self._on_truth = {r.name for r in world.robots if r.control_pose == "truth"}
         self._path_changes = dict.fromkeys(self.tasks, 0)
         self._planners: dict[str, Planner] = {}
+        self._configured: set[str] = set()
         self._controllers: dict[str, Controller] = {}
         self._periods = {r.name: r.control_period for r in world.robots}
         self._runs = dict.fromkeys(self._periods, 0)
@@ -87,7 +88,7 @@ class Navigation:
                 robot.planner_params,
                 robot.name,
                 "planner",
-                "plan",
+                ("configure", "plan"),
             )
 
     def check(self, dt: float) -> None:
@@ -178,7 +179,11 @@ class Navigation:
                 self.paths[name] = np.empty((0, 3))
                 self._planned[name] = self.judge.current[name]
                 if task is not None:
-                    path = self._planners[name].plan(sim.world, pose, task.goal)
+                    planner = self._planners[name]
+                    if name not in self._configured:
+                        planner.configure(sim.estimates[name].map)
+                        self._configured.add(name)
+                    path = planner.plan(pose, task.goal)
                     self.paths[name] = path
                 self._path_changes[name] += 1
             path = self.paths[name]
