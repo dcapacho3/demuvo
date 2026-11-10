@@ -9,7 +9,7 @@ from pathlib import Path
 from robomath import Transform2D
 
 from ..models import MODELS, parse_params
-from ..sensing import ESTIMATORS, SENSORS, resolve_estimator
+from ..sensing import ESTIMATORS, PAYLOAD, SENSORS, resolve_estimator
 from ..verify import (
     WorldError,
     check_keys,
@@ -76,21 +76,60 @@ def _plugin_params(item: dict, key: str, plugin: str, label: str) -> dict:
     return dict(table(item[key], f"{label} {key}"))
 
 
-def _parse_sensors(value, label: str) -> dict[str, dict[str, float]]:
-    """Check a `sensors` table: sensor names, each with its own settings."""
+def _sensor_kind(name: str, settings: dict, label: str, named: bool) -> str:
+    """The kind of sensor a `sensors` entry is: its `type` if named, else its key."""
+    if named and "type" in settings:
+        kind = settings["type"]
+        if kind not in PAYLOAD:
+            known = ", ".join(sorted(PAYLOAD))
+            raise WorldError(
+                f"{label} sensors.{name}: 'type' must be one of {known}, got {kind!r}"
+            )
+        return kind
+    if name not in SENSORS:
+        hint = ", or give it a 'type'" if named else ""
+        raise WorldError(f"{label} sensors: unknown key '{name}'{hint}")
+    return name
+
+
+def _parse_sensors(value, label: str, named: bool = False) -> dict[str, dict]:
+    """Check a `sensors` table: sensors, each with its own settings.
+
+    A sensor is named by its kind. With `named`, a lidar may have any name and a
+    `type`, so a robot can carry several.
+    """
     data = table(value, f"{label} sensors")
-    check_keys(data, set(SENSORS), f"{label} sensors")
     result = {}
-    for kind, settings in data.items():
-        where = f"{label} sensors.{kind}"
+    for name, settings in data.items():
+        where = f"{label} sensors.{name}"
         settings = table(settings, where)
-        check_keys(settings, set(SENSORS[kind].options), where)
-        for key in settings:
-            numbers([settings[key]], 1, where, key)  # finite; zero is allowed
-            if settings[key] < 0:
+        kind = _sensor_kind(name, settings, label, named)
+        cls = SENSORS[kind]
+        check_keys(settings, set(cls.options) | ({"type"} if named else set()), where)
+        checked = {"type": kind} if "type" in settings else {}
+        for key, number_or_list in settings.items():
+            if key == "type":
+                continue
+            if key in getattr(cls, "vectors", {}):
+                checked[key] = numbers(number_or_list, cls.vectors[key], where, key)
+                continue
+            numbers([number_or_list], 1, where, key)  # finite; zero is allowed
+            if number_or_list < 0:
                 raise WorldError(f"{where}: '{key}' must not be negative")
-        result[kind] = {key: float(v) for key, v in settings.items()}
+            checked[key] = float(number_or_list)
+        result[name] = checked
     return result
+
+
+def _warn_ignored_sensors(sensors: dict, estimator: str, label: str) -> None:
+    """Warn about a sensor setting that nothing reads: the estimator or a payload."""
+    for sensor, settings in sensors.items():
+        kind = settings.get("type", sensor)
+        if kind not in ESTIMATORS[estimator].needs and kind not in PAYLOAD:
+            warnings.warn(
+                f"{label}: sensors.{sensor} is set but estimator '{estimator}' "
+                "does not read it, so the setting has no effect"
+            )
 
 
 def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
@@ -147,13 +186,8 @@ def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
             f"{label}: unknown estimator '{estimator}', expected one of {known}"
         )
     estimator = resolve_estimator(estimator, model, MODELS[model], label)
-    sensors = _parse_sensors(item.get("sensors", {}), label)
-    for kind in sensors:
-        if kind not in ESTIMATORS[estimator].needs:
-            warnings.warn(
-                f"{label}: sensors.{kind} is set but estimator '{estimator}' "
-                "does not read it, so the setting has no effect"
-            )
+    sensors = _parse_sensors(item.get("sensors", {}), label, named=True)
+    _warn_ignored_sensors(sensors, estimator, label)
     control_pose = (
         text(item, "control_pose", label) if "control_pose" in item else "estimate"
     )

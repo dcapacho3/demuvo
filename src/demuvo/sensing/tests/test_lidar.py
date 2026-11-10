@@ -172,3 +172,9 @@ def test_the_settings_are_the_ones_the_world_file_may_name():
     }
     sensor = lidar(mount=[1, 2, 3])
     assert sensor.mount == (1.0, 2.0, 3.0)
+
+
+def test_a_whole_number_of_beams_given_as_a_float_is_taken():
+    """A world file gives every number as a float, so 4.0 means 4."""
+    assert len(lidar(beams=4.0).angles) == 4
+    assert len(lidar(beams=4.0, fov=1.0).angles) == 4

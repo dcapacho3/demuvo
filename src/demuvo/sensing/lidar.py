@@ -57,6 +57,7 @@ class LidarSettings:
         if len(self.mount) != 3 or not all(math.isfinite(v) for v in self.mount):
             raise ValueError(f"mount must be (x, y, angle), got {self.mount!r}")
         object.__setattr__(self, "mount", tuple(float(v) for v in self.mount))
+        object.__setattr__(self, "beams", int(self.beams))  # a world file gives 4.0
 
 
 class Lidar:
@@ -99,7 +100,7 @@ class Lidar:
         elif self._settings.fov >= math.tau:
             self.angles = np.linspace(-math.pi, math.pi, self._settings.beams, False)
         else:
-            self.angles = np.linspace(-half, half, int(self._settings.beams))
+            self.angles = np.linspace(-half, half, self._settings.beams)
         self.mount = self._settings.mount
         self.max_range = self._settings.max_range
         self.min_range = self._settings.min_range

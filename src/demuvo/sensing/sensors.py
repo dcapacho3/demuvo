@@ -8,6 +8,7 @@ from typing import ClassVar
 import numpy as np
 
 from .base import Reading, StepTruth
+from .lidar import Lidar
 
 
 class PerfectPose:
@@ -79,4 +80,9 @@ class Encoders:
         return Reading(self.name, truth.time, step)
 
 
-SENSORS = {cls.name: cls for cls in (PerfectPose, Encoders)}
+SENSORS = {cls.name: cls for cls in (PerfectPose, Encoders, Lidar)}
+
+# Sensors a robot carries when its `sensors` table names them, under a name of its
+# own if it likes, so a robot can have several. Every other sensor is built
+# because the robot's estimator reads it.
+PAYLOAD = frozenset({"lidar"})

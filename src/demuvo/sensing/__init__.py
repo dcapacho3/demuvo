@@ -12,11 +12,12 @@ from .base import Estimate, Estimator, Reading, Sensor, StepTruth
 from .estimators import ESTIMATORS, DeadReckoning, GroundTruth, resolve_estimator
 from .lidar import Lidar
 from .raycast import Scene, cast
-from .sensors import SENSORS, Encoders, PerfectPose
+from .sensors import PAYLOAD, SENSORS, Encoders, PerfectPose
 from .streams import stream
 
 __all__ = [
     "ESTIMATORS",
+    "PAYLOAD",
     "SENSORS",
     "DeadReckoning",
     "Encoders",

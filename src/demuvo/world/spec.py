@@ -46,8 +46,10 @@ class RobotSpec:
             "ground_truth" (the true pose) or "dead_reckoning" (from the
             encoders). A name the model cannot run was already replaced by
             "ground_truth" when the file was read.
-        sensors: settings of this robot's sensors by sensor name, such as
+        sensors: settings of this robot's sensors by name, such as
             {"encoders": {"noise": 0.01}}; they replace the world's, key by key.
+            A lidar can have a name of its own and a "type" of "lidar", so a robot
+            can carry several.
         control_pose: the pose the controller and planner see: "estimate" (the
             estimator's) or "truth" (the true pose, while the estimator still
             runs and is scored).
