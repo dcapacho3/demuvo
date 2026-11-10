@@ -17,7 +17,8 @@ import numpy as np
 
 from ..world.shapes import Circle, LineString
 from . import look
-from .raster import Canvas, rgba
+from .raster import Canvas, is_convex, rgba
+from .robots import draw_robots, footprint, robot_at, robot_boxes
 from .sprites import SpriteCache
 from .strokes import polyline, polylines, segments
 from .view import View
@@ -42,13 +43,6 @@ PATH_CHECK = 0.35
 GOAL_ARROW = 0.62
 # The layers that go into the cut-out.
 STATIC = ("floor", "costmap", "obstacles", "paths", "goals")
-
-
-def is_convex(points: np.ndarray) -> bool:
-    """True if a polygon's corners turn the same way all round."""
-    edge = np.roll(points, -1, axis=0) - points
-    cross = edge[:, 0] * np.roll(edge[:, 1], -1) - edge[:, 1] * np.roll(edge[:, 0], -1)
-    return bool((cross >= -1e-9).all() or (cross <= 1e-9).all())
 
 
 @dataclass
@@ -97,6 +91,7 @@ class SceneDraw:
         selected: the name of the selected robot, or None.
         trails: the recent places of each robot, by name.
         colors: the colour of each robot, by name.
+        feet: the footprint of each robot, by name.
         sprites: the cache of small pictures.
     """
 
@@ -125,6 +120,8 @@ class SceneDraw:
         self.colors = {
             r.name: look.robot_color(i) for i, r in enumerate(self.world.robots)
         }
+        self.feet = {r.name: footprint(r.shape) for r in self.world.robots}
+        self._last_boxes: dict[str, tuple[int, int, int, int]] | None = None
         self._cutout = _Cutout()
         self._local.clear()
         self.sprites.clear()
@@ -403,6 +400,61 @@ class SceneDraw:
                 segments(
                     canvas, ends, 1.0, rgba(self.colors[robot.name], 0.45 * opacity)
                 )
+
+    def robot_at(self, sx: float, sy: float) -> str | None:
+        """The robot under a pixel, or None."""
+        return robot_at(self, sx, sy)
+
+    def draw(self, canvas: Canvas) -> None:
+        """Draw the whole scene inside the canvas's clip, which may be a part of it.
+
+        The cached layers come first, then, inside the board, the layers that
+        change every step, and last the robots, which may spill over the board.
+        """
+        x, y, width, height = self.view.rect
+        saved = canvas.clip
+        self.refresh_poses()
+        left, top = max(saved[0], int(x)), max(saved[1], int(y))
+        right, bottom = min(saved[2], int(x + width)), min(saved[3], int(y + height))
+        if right <= left or bottom <= top:
+            return
+        canvas.set_clip(left, top, right, bottom)
+        self.draw_cutout(canvas)
+        board = (round(v) for v in self.view.board())
+        b0, b1, b2, b3 = board
+        canvas.set_clip(max(left, b0), max(top, b1), min(right, b2), min(bottom, b3))
+        self.draw_overlays(canvas)
+        canvas.set_clip(left, top, right, bottom)
+        if self.layers.alpha("robots") > 0.001:
+            draw_robots(self, canvas, self.layers.alpha("robots"))
+        canvas.clip = saved
+
+    def dirty_rect(self) -> tuple[int, int, int, int]:
+        """The smallest box that holds what changed since the last call.
+
+        That is where each robot was and is now. The whole scene is returned for the
+        first call, and when something global changed: the cached layers, the rays,
+        the local costmap, or the robots.
+        """
+        x, y, width, height = self.view.rect
+        full = (int(x), int(y), int(x + width), int(y + height))
+        self.refresh_poses()
+        _, key = self.cutout_key()
+        boxes = robot_boxes(self)
+        last, self._last_boxes = self._last_boxes, boxes
+        everything = (
+            last is None
+            or key != self._cutout.key
+            or self.layers.alpha("rays") > 0.001
+            or self.layers.alpha("local") > 0.001
+            or set(last) != set(boxes)
+        )
+        if everything:
+            return full
+        every = [last[n] for n in boxes] + list(boxes.values())
+        x0, y0 = min(b[0] for b in every), min(b[1] for b in every)
+        x1, y1 = max(b[2] for b in every), max(b[3] for b in every)
+        return (max(x0, full[0]), max(y0, full[1]), min(x1, full[2]), min(y1, full[3]))
 
     def draw_overlays(self, canvas: Canvas) -> None:
         """Draw the layers that change every step, inside the board and the clip."""

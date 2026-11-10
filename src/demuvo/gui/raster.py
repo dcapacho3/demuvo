@@ -42,6 +42,13 @@ def _box_distance(px, py, box: Box, radius: float):
     return outside + np.minimum(np.maximum(qx, qy), 0) - r
 
 
+def is_convex(points: np.ndarray) -> bool:
+    """True if a polygon's corners all turn the same way."""
+    edge = np.roll(points, -1, axis=0) - points
+    cross = edge[:, 0] * np.roll(edge[:, 1], -1) - edge[:, 1] * np.roll(edge[:, 0], -1)
+    return bool((cross >= -1e-9).all() or (cross <= 1e-9).all())
+
+
 def _ring(distance: np.ndarray, width: float) -> np.ndarray:
     """The coverage of a line `width` wide that runs just inside a distance of zero."""
     return np.clip(0.5 - (np.abs(distance + width / 2) - width / 2), 0, 1)

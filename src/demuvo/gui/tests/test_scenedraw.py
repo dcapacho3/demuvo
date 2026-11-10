@@ -11,7 +11,7 @@ import pytest
 from demuvo import Run
 from demuvo.gui import look, scenedraw
 from demuvo.gui.raster import Canvas, rgba
-from demuvo.gui.scenedraw import SceneDraw, arrow, is_convex
+from demuvo.gui.scenedraw import SceneDraw, arrow
 
 from .fakes import ink
 
@@ -93,13 +93,6 @@ def at(scene, x, y):
     """The pixel of a world point."""
     sx, sy = scene.view.to_screen(x, y)
     return round(float(sx)), round(float(sy))
-
-
-def test_a_convex_polygon_is_told_from_a_concave_one():
-    """A square is convex; an L is not; the turn direction does not matter."""
-    square = np.array([[0, 0], [1, 0], [1, 1], [0, 1]], float)
-    ell = np.array([[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]], float)
-    assert is_convex(square) and is_convex(square[::-1]) and not is_convex(ell)
 
 
 def test_the_floor_is_a_chess_board_on_the_window_colour(scene):

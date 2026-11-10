@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from demuvo.gui import font
-from demuvo.gui.raster import Canvas, rgba
+from demuvo.gui.raster import Canvas, is_convex, rgba
 
 BLACK = rgba("#000000")
 WHITE = rgba("#ffffff")
@@ -195,3 +195,10 @@ def test_a_picture_can_be_magnified_by_different_amounts_and_cut_by_the_clip():
     before = canvas.px.copy()
     canvas.image_scaled(image, (30, 30), 5)
     assert np.array_equal(canvas.px, before)
+
+
+def test_a_convex_polygon_is_told_from_a_concave_one():
+    """A square is convex either way round; an L is not."""
+    square = np.array([[0, 0], [1, 0], [1, 1], [0, 1]], float)
+    ell = np.array([[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]], float)
+    assert is_convex(square) and is_convex(square[::-1]) and not is_convex(ell)
