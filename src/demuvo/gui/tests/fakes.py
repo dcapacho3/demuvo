@@ -11,6 +11,7 @@ import pytest
 from demuvo.gui.widgets import Event
 
 SRC = Path(__file__).resolve().parents[3]
+EXAMPLES = Path(__file__).resolve().parents[4] / "examples" / "worlds"
 
 
 class FakeHost:
