@@ -136,3 +136,11 @@ def test_the_cache_draws_each_key_once_and_forgets_all_when_it_is_full():
     assert len(cache) == 1
     cache.clear()
     assert len(cache) == 0
+
+
+def test_a_sprite_can_be_wider_than_it_is_tall():
+    """A pair of sizes gives a sprite of exactly those sizes."""
+    sprite = render_sprite(
+        (30, 10), lambda c, x, y: c.rect((0, 0, 40, 40), rgba("#000000"))
+    )
+    assert (sprite.width, sprite.height) == (30, 10)

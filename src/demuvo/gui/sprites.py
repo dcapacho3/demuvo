@@ -114,7 +114,7 @@ def draw_sprites(
         _draw_batch(canvas, [(sprites[i], xs[i], ys[i]) for i in members], opacity)
 
 
-def render_sprite(size: float, draw) -> Sprite:
+def render_sprite(size: float | tuple[float, float], draw) -> Sprite:
     """A sprite from a drawing function.
 
     The function is called as `draw(canvas, cx, cy)`. It draws once on black and
@@ -122,13 +122,18 @@ def render_sprite(size: float, draw) -> Sprite:
     pixel, and the black picture divided by it gives the colour.
 
     Args:
-        size: the sprite is about this many pixels across, made odd.
+        size: one number for a square about that many pixels across, made odd so
+            its centre is the middle of a pixel; or (width, height) in whole pixels,
+            used as they are, so an edge on the centre line stays crisp.
         draw: the drawing function, which draws at the centre (cx, cy).
     """
-    side = math.ceil(size) | 1
-    black, white = Canvas(side, side, "#000000"), Canvas(side, side, "#ffffff")
+    if isinstance(size, tuple):
+        width, height = (math.ceil(v) for v in size)
+    else:
+        width = height = math.ceil(size) | 1
+    black, white = Canvas(width, height, "#000000"), Canvas(width, height, "#ffffff")
     for canvas in (black, white):
-        draw(canvas, side / 2, side / 2)
+        draw(canvas, width / 2, height / 2)
     alpha = np.clip(1.0 - (white.px - black.px).mean(axis=2), 0.0, 1.0)
     color = black.px / np.maximum(alpha, 1e-4)[..., None]
     rgba = np.concatenate([np.clip(color, 0, 1), alpha[..., None]], axis=2)
