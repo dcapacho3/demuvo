@@ -6,15 +6,36 @@ from pathlib import Path
 
 import pytest
 
+from demuvo.run import cli
 from demuvo.run.cli import main
 
 DEMO = str(Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml")
 
 
-def test_check_reads_the_file_and_opens_nothing(capsys):
+@pytest.fixture(name="windows")
+def stand_in_window(monkeypatch):
+    """Replace the window with a function that notes the session and returns 0."""
+    shown = []
+
+    def show(session, seconds):
+        shown.append((session.mode, session.world.robots[0].name, seconds))
+        return 0
+
+    monkeypatch.setattr(cli, "show", show)
+    return shown
+
+
+def test_check_reads_the_file_and_opens_nothing(capsys, windows):
     """--check prints a summary and returns 0."""
     assert main([DEMO, "--check"]) == 0
     assert "3 obstacles, 1 robot" in capsys.readouterr().out
+    assert windows == []
+
+
+def test_check_needs_a_file(capsys):
+    """With no file there is nothing to check."""
+    assert main(["--check"]) == 1
+    assert capsys.readouterr().err == "demuvo: --check needs a world file\n"
 
 
 def test_a_wrong_file_names_the_problem(tmp_path, capsys):
@@ -33,53 +54,51 @@ def test_a_missing_file_is_reported(tmp_path, capsys):
     assert "nothing.toml" in capsys.readouterr().err
 
 
+def test_a_benchmark_needs_a_file(capsys):
+    """--bench alone is refused in plain words."""
+    assert main(["--bench"]) == 1
+    assert capsys.readouterr().err == "demuvo: a benchmark needs a world file\n"
+
+
 def test_a_bad_step_length_is_reported(capsys):
     """--dt 0 is refused by the simulation and reported."""
     assert main([DEMO, "--dt", "0"]) == 1
     assert "dt" in capsys.readouterr().err
 
 
-def test_the_window_opens_with_the_file_name(monkeypatch):
-    """With no options the view gets the simulation and a caption."""
-    view = pytest.importorskip("demuvo.view")
-    calls = []
-    monkeypatch.setattr("demuvo.view.play", lambda *a, **k: calls.append((a, k)))
-    assert main([DEMO]) == 0
-    assert len(calls) == 1
-    args, kwargs = calls[0]
-    assert len(args) == 2
-    assert kwargs == {"caption": "demuvo - demo.toml", "trail": view.TRAIL}
-    commands = args[1]
-    assert list(commands(args[0])) == ["r1"]
+def test_the_window_opens_on_the_sandbox_by_default(windows):
+    """A file opens editable; the time limit is passed on."""
+    assert main([DEMO, "--seconds", "3"]) == 0
+    assert windows == [("sandbox", "r1", 3.0)]
 
 
-def test_no_trail_turns_the_path_off(monkeypatch):
-    """--no-trail asks the view for a trail of 0 points."""
-    pytest.importorskip("pygame")
-    calls = []
-    monkeypatch.setattr("demuvo.view.play", lambda *a, **k: calls.append(k))
-    assert main([DEMO, "--no-trail"]) == 0
-    assert calls[0]["trail"] == 0
+def test_bench_opens_a_fixed_benchmark_and_no_file_a_blank_sandbox(windows):
+    """The mode follows the option; a blank world has its starter robot."""
+    assert main([DEMO, "--bench"]) == 0
+    assert main([]) == 0
+    assert windows == [("benchmark", "r1", None), ("sandbox", "r1", None)]
 
 
-def test_without_pygame_the_message_says_how_to_install(monkeypatch, capsys):
-    """A missing package is a hint on stderr that names it, not a traceback."""
-    for name in [n for n in sys.modules if n.startswith("demuvo.view")]:
-        monkeypatch.delitem(sys.modules, name)
-    monkeypatch.setitem(sys.modules, "pygame", None)
-    assert main([DEMO]) == 1
-    err = capsys.readouterr().err
-    assert "'pygame'" in err
-    assert "'view' extra" in err
+def test_dt_replaces_the_step_length_of_the_file(monkeypatch):
+    """The session is made with the new step."""
+    steps = []
+    monkeypatch.setattr(
+        cli, "show", lambda session, seconds: steps.append(session.run.sim.dt) or 0
+    )
+    assert main([DEMO, "--dt", "0.025"]) == 0
+    assert steps == [0.025]
+
+
+def test_a_window_that_cannot_open_gives_its_exit_code(monkeypatch):
+    """The code of the window is the code of the command, and no result is printed."""
+    monkeypatch.setattr(cli, "show", lambda session, seconds: 1)
+    assert main([DEMO, "--result"]) == 1
 
 
 def test_a_bad_option_ends_with_code_2():
     """Argparse refuses a step length that is not a number."""
     with pytest.raises(SystemExit) as info:
         main([DEMO, "--dt", "abc"])
-    assert info.value.code == 2
-    with pytest.raises(SystemExit) as info:
-        main([])
     assert info.value.code == 2
 
 
@@ -92,7 +111,7 @@ def test_python_dash_m_runs_the_command(monkeypatch):
 
 
 def test_a_controller_that_cannot_load_is_reported(tmp_path, capsys):
-    """--check stops on a controller the file names but demuvo cannot find."""
+    """The file names a controller demuvo cannot find."""
     text = Path(DEMO).read_text(encoding="utf-8").replace("PurePursuit", "Nothing")
     path = tmp_path / "bad.toml"
     path.write_text(text)
@@ -106,19 +125,25 @@ def test_a_period_below_dt_is_reported_before_the_window(capsys):
     assert "control_period" in capsys.readouterr().err
 
 
-def drive_to_the_goal(sim, commands, **_):
-    """A stand-in for the window: run the demo to its goal."""
-    for _ in range(2500):
-        sim.step(commands(sim))
-
-
 def test_the_result_is_printed_only_when_asked(monkeypatch, capsys):
     """With --result, each task and the distance driven go to stdout; else nothing."""
-    pytest.importorskip("pygame")
-    monkeypatch.setattr("demuvo.view.play", drive_to_the_goal)
+
+    def drive_to_the_goal(session, seconds):
+        assert seconds is None
+        session.run.until_done(60.0)
+        return 0
+
+    monkeypatch.setattr(cli, "show", drive_to_the_goal)
     assert main([DEMO]) == 0
     assert capsys.readouterr().out == ""
     assert main([DEMO, "--result"]) == 0
     lines = capsys.readouterr().out.splitlines()
     assert lines[0].startswith("r1 task 1: reached at ")
     assert lines[1].startswith("r1 drove ")
+
+
+def test_with_nothing_done_no_result_lines_are_printed(monkeypatch, capsys):
+    """A blank world has no task, so there is nothing to say."""
+    monkeypatch.setattr(cli, "show", lambda session, seconds: 0)
+    assert main(["--result"]) == 0
+    assert capsys.readouterr().out == ""

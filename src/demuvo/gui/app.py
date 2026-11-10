@@ -1,17 +1,9 @@
-"""The `demuvo gui` command - open the sandbox window.
-
-    demuvo gui [world.toml] [--bench]
-
-With no file the sandbox starts with a blank world to build in. With `--bench` the
-world is a fixed benchmark: nothing can be edited, and Reset repeats the run.
-"""
+"""Opening the window - show a session in a native window until it is closed."""
 
 from __future__ import annotations
 
-import argparse
 import sys
 
-from ..verify import WorldError
 from .sandbox import Sandbox
 from .session import Session
 from .shell import Shell
@@ -20,33 +12,22 @@ from .window import Window
 WIDTH, HEIGHT = 1280, 780
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Run the command.
+def show(session: Session, seconds: float | None = None) -> int:
+    """Open the window on a session and run it until it is closed.
 
     Args:
-        argv: the arguments after `gui`; None reads them from the command line.
+        session: the world and its mode.
+        seconds: close after this many seconds; None waits for the user.
 
     Returns:
-        0 on success, 1 if the world cannot be read or the window cannot open.
+        0 when the window was shown and closed, 1 if GLFW or OpenGL is missing,
+        there is no display, or the window cannot open.
     """
-    parser = argparse.ArgumentParser(
-        prog="demuvo gui", description=__doc__.split("\n", maxsplit=1)[0]
-    )
-    parser.add_argument(
-        "world", nargs="?", help="a world file; none starts a blank sandbox"
-    )
-    parser.add_argument(
-        "--bench", action="store_true", help="open the world as a fixed benchmark"
-    )
-    parser.add_argument("--seconds", type=float, help="close after this many seconds")
-    args = parser.parse_args(argv)
-    mode = "benchmark" if args.bench else "sandbox"
     try:
-        session = Session(args.world, mode)
-        window = Window(f"demuvo - {mode}", WIDTH, HEIGHT)
-    except (WorldError, OSError, ValueError, RuntimeError) as error:
+        window = Window(f"demuvo - {session.mode}", WIDTH, HEIGHT)
+    except RuntimeError as error:
         print(f"demuvo: {error}", file=sys.stderr)
         return 1
     width, height = window.framebuffer_size()
-    window.run(Shell(Sandbox(session), width, height), args.seconds)
+    window.run(Shell(Sandbox(session), width, height), seconds)
     return 0

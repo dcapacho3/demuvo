@@ -33,17 +33,12 @@ Homepage = "https://github.com/dcapacho3/demuvo"
 Source = "https://github.com/dcapacho3/demuvo"
 Issues = "https://github.com/dcapacho3/demuvo/issues"
 
-[project.optional-dependencies]
-view = ["pygame-ce>=2.5", "pillow>=10"]
-
 [dependency-groups]
 dev = [
   "pytest>=8",
   "pre-commit>=4.6.2",
   "pytest-cov>=7.1.0",
   "hypothesis>=6.100",
-  "pygame-ce>=2.5",
-  "pillow>=10",
   # Only the tests use it, to check our results against another library.
   "shapely>=2",
 ]
@@ -67,10 +62,6 @@ select = ["E", "F", "I", "N", "D"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
-
-[tool.pylint.main]
-# pygame is a compiled module, so pylint must load it to see its names.
-extension-pkg-allow-list = ["pygame"]
 
 [tool.pylint.design]
 max-args = 6

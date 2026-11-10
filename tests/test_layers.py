@@ -8,7 +8,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1] / "src" / "demuvo"
 
 # Each part and the parts it may import. A new part must be added here, on
-# purpose. Nothing imports `run` or `view`, and planners and controllers never
+# purpose. Nothing imports `run` or `gui`, apart from `run`, and planners never
 # import `sim`: they see the costmap and the observation, not the simulation.
 ALLOWED = {
     "verify": set(),
@@ -37,7 +37,6 @@ ALLOWED = {
     "options": {"models", "nav", "verify"},
     "runner": {"costmap", "evaluation", "nav", "sim", "verify", "world"},
     "edit": {"models", "nav", "options", "plugins", "sim", "verify", "world"},
-    "view": {"models", "sim", "world"},
     "run": {"evaluation", "gui", "nav", "sim", "world"},
 }
 
@@ -95,7 +94,7 @@ def test_the_reader_sees_relative_and_absolute_imports():
     )
     assert areas_imported(source, 2) == {"sim", "world", "nav"}
     assert areas_imported("from .verify import A\nfrom .. import x\n", 1) == {"verify"}
-    assert areas_imported("from demuvo.view import play\n", 2) == {"view"}
+    assert areas_imported("from demuvo.gui import app\n", 2) == {"gui"}
 
 
 def test_every_part_is_in_the_rule():

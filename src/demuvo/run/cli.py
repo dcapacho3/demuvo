@@ -1,22 +1,49 @@
-"""The demuvo command - open a world file and watch it."""
+"""The demuvo command - open a world file in the sandbox window.
+
+demuvo [world.toml] [--bench] [--check] [--dt S] [--result] [--seconds S]
+"""
 
 from __future__ import annotations
 
 import argparse
-import importlib
-import os
 import sys
-from pathlib import Path
+from dataclasses import replace
 
-from ..evaluation import result_lines
-from ..nav.navigation import Navigation
-from ..sim.simulation import Simulation
+from ..gui.app import show
+from ..gui.session import Session
 from ..world import load_world
 
 
 def _count(n: int, word: str) -> str:
     """'1 robot', '2 robots'."""
     return f"{n} {word}" + ("" if n == 1 else "s")
+
+
+def _parser() -> argparse.ArgumentParser:
+    """The command line."""
+    parser = argparse.ArgumentParser(
+        prog="demuvo",
+        description="Open a world file in the sandbox window, or a blank world.",
+    )
+    parser.add_argument("world", nargs="?", help="path of the world file (TOML)")
+    parser.add_argument(
+        "--bench", action="store_true", help="open the world as a fixed benchmark"
+    )
+    parser.add_argument(
+        "--check", action="store_true", help="check the file and open nothing"
+    )
+    parser.add_argument(
+        "--dt", type=float, help="step length in s; the default is the file's"
+    )
+    parser.add_argument(
+        "--result",
+        action="store_true",
+        help="print what each robot did when the window closes",
+    )
+    parser.add_argument(
+        "--seconds", type=float, help="close the window after this long"
+    )
+    return parser
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -27,69 +54,31 @@ def main(argv: list[str] | None = None) -> int:
             command line.
 
     Returns:
-        The exit code: 0 on success, 1 if the file or the step length is wrong.
-        A missing or malformed option ends the program with code 2, as argparse
-        does.
+        The exit code: 0 on success, 1 if the file, the step length or the window
+        is wrong. A malformed option ends the program with code 2, as argparse does.
     """
-    parser = argparse.ArgumentParser(
-        prog="demuvo", description="Open a world file and watch it."
-    )
-    parser.add_argument("world", help="path of the world file (TOML)")
-    parser.add_argument(
-        "--check", action="store_true", help="check the file and open nothing"
-    )
-    parser.add_argument(
-        "--dt", type=float, help="step length in s; the default is the file's"
-    )
-    parser.add_argument(
-        "--no-trail", action="store_true", help="do not draw the path of each robot"
-    )
-    parser.add_argument(
-        "--result",
-        action="store_true",
-        help="print what each robot did when the window closes",
-    )
-    if argv is None:
-        argv = sys.argv[1:]
-    if argv[:1] == ["gui"]:  # the sandbox window, in its own package
-        return importlib.import_module("demuvo.gui.app").main(argv[1:])
-    args = parser.parse_args(argv)
-
+    args = _parser().parse_args(argv)
+    where = f"{args.world}: " if args.world else ""
     try:
-        world = load_world(args.world)
-        sim = Simulation(world, args.dt)
-        commands = Navigation(world)
-        commands.check(sim.dt)
+        world = load_world(args.world) if args.world else None
+        if world is not None and args.dt is not None:
+            world = replace(world, dt=args.dt)
+        session = Session(world, "benchmark" if args.bench else "sandbox")
     except (OSError, ValueError) as error:
-        print(f"demuvo: {args.world}: {error}", file=sys.stderr)
+        print(f"demuvo: {where}{error}", file=sys.stderr)
         return 1
     if args.check:
+        if world is None:
+            print("demuvo: --check needs a world file", file=sys.stderr)
+            return 1
         print(
             f"{args.world}: ok, {_count(len(world.obstacles), 'obstacle')}, "
             f"{_count(len(world.robots), 'robot')}"
         )
         return 0
-
-    # The view is an optional extra, so it is loaded only when a window opens.
-    os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
-    try:
-        view = importlib.import_module("demuvo.view")
-    except ModuleNotFoundError as error:
-        print(
-            f"demuvo: the view needs the package '{error.name}': "
-            "install the 'view' extra of demuvo",
-            file=sys.stderr,
-        )
-        return 1
-    view.play(
-        sim,
-        commands,
-        caption=f"demuvo - {Path(args.world).name}",
-        trail=0 if args.no_trail else view.TRAIL,
-    )
-    if args.result:
-        commands.judge.update(sim)  # count the last step
-        lines = result_lines(sim, commands.judge)
+    code = show(session, args.seconds)
+    if code == 0 and args.result:
+        lines = session.run.result()
         if lines:
             print("\n".join(lines))
-    return 0
+    return code

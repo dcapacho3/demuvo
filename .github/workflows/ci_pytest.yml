@@ -20,6 +20,10 @@ jobs:
       uses: actions/setup-python@v7
       with:
         python-version: "3.12"
+    - name: Install the window libraries and a virtual display
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libglfw3 libgl1 xvfb
     - name: Install dependencies and upgrade pip
       run: |
         python -m pip install --upgrade pip
