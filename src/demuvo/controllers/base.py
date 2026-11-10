@@ -9,6 +9,7 @@ from typing import Protocol
 import numpy as np
 from robomath import Transform2D
 
+from ..costmap import Costmap
 from ..models import Twist
 from ..sensing import Scan
 
@@ -30,6 +31,8 @@ class Observation:
             the robot counts as at its goal.
         scans: the latest scan of each range sensor the robot carries, by the
             sensor's name; empty for a robot with none, and before its first scan.
+        costmap: the robot's local costmap, built from its scans, or None for a
+            robot with none and before its first update.
         path_changes: how many times the robot's path has been replaced.
         A controller that keeps state about the path
         starts over when this number changes.
@@ -43,6 +46,7 @@ class Observation:
     goal_tolerance: tuple[float, float]
     path_changes: int = 0
     scans: Mapping[str, Scan] = field(default_factory=dict)
+    costmap: Costmap | None = None
 
 
 class Controller(Protocol):

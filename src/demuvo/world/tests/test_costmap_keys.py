@@ -12,7 +12,7 @@ from .small_world import small_world as world
 @pytest.mark.parametrize(
     ("extra", "message"),
     [
-        ("[costmap]\nlocal = 1", "unknown key 'local'"),
+        ("[costmap]\nregional = 1", "unknown key 'regional'"),
         ("[costmap.global]\nenabled = 1", "'enabled' must be true or false"),
         ("[costmap.global]\nresolution = -1", "'resolution' must be positive"),
         ('[costmap.global]\nplugins = ["obstacle"]', "'plugins' must list"),

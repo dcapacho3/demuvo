@@ -13,9 +13,9 @@ from demuvo.costmap import (
     LETHAL,
     NO_INFORMATION,
     LocalCostmap,
-    LocalSettings,
 )
 from demuvo.sensing import Lidar, Scene, StepTruth
+from demuvo.world import LocalCostmapSpec
 
 
 def walls(*xs):
@@ -51,12 +51,12 @@ def lethal(costmap):
 def local(**settings):
     """A local costmap of a robot of inscribed radius 0.2; no inflation unless asked."""
     settings = {"window": 6.0, "resolution": 0.1, "plugins": ("obstacle",), **settings}
-    return LocalCostmap(0.2, LocalSettings(**settings))
+    return LocalCostmap(0.2, LocalCostmapSpec(**settings))
 
 
 def test_the_defaults_are_the_usual_local_costmap_and_none_exists_before_an_update():
     """3 m, 5 cm cells, 5 Hz, hits to 2.5 m, clearing to 3 m, the two layers."""
-    settings = LocalSettings()
+    settings = LocalCostmapSpec()
     assert (settings.window, settings.resolution, settings.period) == (3.0, 0.05, 0.2)
     assert (settings.obstacle_max_range, settings.raytrace_max_range) == (2.5, 3.0)
     assert (settings.inflation_radius, settings.cost_scaling_factor) == (0.55, 10.0)
@@ -213,4 +213,4 @@ def test_the_obstacles_are_inflated_by_the_robot_radius():
 def test_bad_settings_are_refused(settings):
     """A bad number or a bad list of layers is refused when the settings are made."""
     with pytest.raises(ValueError):
-        LocalSettings(**settings)
+        LocalCostmapSpec(**settings)

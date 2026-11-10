@@ -75,7 +75,12 @@ class Simulation:
         self.costmaps = build_costmaps(world)
         self.robots = {
             r.name: Robot(
-                r, self.models[r.name], world.seed, world.sensors, self.costmaps[r.name]
+                r,
+                self.models[r.name],
+                world.seed,
+                world.sensors,
+                costmap=self.costmaps[r.name],
+                local=world.local_costmap,
             )
             for r in world.robots
         }

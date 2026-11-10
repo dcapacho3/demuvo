@@ -14,7 +14,7 @@ from .grid import (
     NO_INFORMATION,
     Costmap,
 )
-from .local import LocalCostmap, LocalSettings
+from .local import LocalCostmap
 
 __all__ = [
     "FREE",
@@ -24,7 +24,6 @@ __all__ = [
     "NO_INFORMATION",
     "Costmap",
     "LocalCostmap",
-    "LocalSettings",
     "build_costmaps",
     "inscribed_radius",
 ]

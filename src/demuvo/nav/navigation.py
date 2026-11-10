@@ -227,6 +227,7 @@ class Navigation:
                     goal_tolerance=tolerance,
                     path_changes=self._path_changes[name],
                     scans=sim.robots[name].scans(),
+                    costmap=sim.robots[name].local_costmap,
                 )
             )
             self._runs[name] += 1

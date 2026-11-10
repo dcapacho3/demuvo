@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
+from ..costmap import LocalCostmap, inscribed_radius
 from ..sensing import (
     ESTIMATORS,
     PAYLOAD,
@@ -15,7 +16,7 @@ from ..sensing import (
     StepTruth,
     stream,
 )
-from ..world import WorldError
+from ..world import LocalCostmapSpec, WorldError
 
 if TYPE_CHECKING:
     from ..costmap import Costmap
@@ -36,6 +37,8 @@ class Robot:
             own settings replace them key by key.
         costmap: the robot's global costmap, or None. The estimate carries it
             unless the estimator built a map of its own.
+        local: how to build its local costmap, or None for none. A robot gets one
+            only if it carries a sensor that gives scans.
 
     Attributes:
         spec: the robot's spec.
@@ -45,6 +48,7 @@ class Robot:
             by name, such as a lidar.
         readings: the latest reading of each payload sensor, by name; empty until
             the first step.
+        local: its local costmap builder, or None if it has none.
         estimator: the estimator.
         estimate: the latest estimate; the start pose before the first step.
     """
@@ -55,7 +59,9 @@ class Robot:
         model,
         seed: int,
         defaults: dict,
+        *,
         costmap: Costmap | None = None,
+        local: LocalCostmapSpec | None = None,
     ) -> None:
         """Build the estimator and the sensors it needs."""
         self.spec = spec
@@ -71,6 +77,12 @@ class Robot:
             if settings.get("type", name) in PAYLOAD
         }
         self.readings: dict[str, Reading] = {}
+        scanning = any(hasattr(sensor, "scan") for sensor in self.payload.values())
+        self.local = (
+            LocalCostmap(inscribed_radius(spec.shape), local)
+            if local is not None and local.enabled and scanning
+            else None
+        )
         self.costmap = costmap
         self.estimate = Estimate(spec.pose, map=costmap)
 
@@ -84,6 +96,11 @@ class Robot:
             raise WorldError(
                 f"robot '{self.spec.name}': sensors.{name}: {error}"
             ) from error
+
+    @property
+    def local_costmap(self) -> Costmap | None:
+        """The latest local costmap, or None if the robot has none or no update yet."""
+        return None if self.local is None else self.local.costmap
 
     def scans(self) -> dict[str, Scan]:
         """The latest scan of each payload sensor that gives one, by name."""
@@ -102,4 +119,6 @@ class Robot:
         if estimate.map is None:
             estimate = replace(estimate, map=self.costmap)
         self.estimate = estimate
+        if self.local is not None:
+            self.local.update(estimate.pose, self.scans(), truth.time)
         return estimate

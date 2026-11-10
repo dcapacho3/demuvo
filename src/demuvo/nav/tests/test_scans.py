@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from demuvo import Navigation, Simulation, load_world
+from demuvo.costmap import Costmap
 
 DEMO = Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml"
 PLANNER = 'planner = "demuvo.planners:StraightLine"'
@@ -42,6 +43,7 @@ def test_a_controller_with_no_lidar_gets_an_empty_mapping(tmp_path, monkeypatch)
     sim, commands = Simulation(world), Navigation(world)
     sim.step(commands(sim))
     assert module.seen[0].scans == {}
+    assert module.seen[0].costmap is None
 
 
 def test_a_controller_is_given_the_latest_scan_of_its_robot(tmp_path, monkeypatch):
@@ -59,3 +61,17 @@ def test_a_controller_is_given_the_latest_scan_of_its_robot(tmp_path, monkeypatc
     assert len(scan.ranges) == 8
     assert scan.ranges == pytest.approx(sim.robots["r1"].readings["lidar"].data)
     assert np.isfinite(scan.ranges).any()
+
+
+def test_a_controller_is_given_the_local_costmap_of_its_robot(tmp_path, monkeypatch):
+    """After a step with a lidar the observation carries the local costmap."""
+    module, world = spy_world(
+        tmp_path, monkeypatch, "sensors = { lidar = { beams = 8, max_range = 20 } }"
+    )
+    sim = Simulation(world, dt=0.05)
+    commands = Navigation(world)
+    for _ in range(3):
+        sim.step(commands(sim))
+    assert module.seen[0].costmap is None  # no step had been taken yet
+    assert isinstance(module.seen[-1].costmap, Costmap)
+    assert module.seen[-1].costmap.data.shape == (60, 60)

@@ -27,6 +27,7 @@ from .spec import (
     DEFAULT_DT,
     DEFAULT_GOAL_TOLERANCE,
     CostmapSpec,
+    LocalCostmapSpec,
     Obstacle,
     RobotSpec,
     Task,
@@ -233,29 +234,62 @@ def _parse_task(item: dict, index: int, size, robots: dict[str, RobotSpec]) -> T
     return Task(name, goal, tolerance, stop, wait)
 
 
-def _parse_costmap(value, base: Path) -> CostmapSpec:
-    """Check the `[costmap]` table, a map path is taken relative to `base`."""
-    data = table(value, "costmap")
-    check_keys(data, {"global"}, "costmap")
-    label = "costmap.global"
-    g = table(data.get("global", {}), label)
-    check_keys(g, {"enabled", "resolution", "plugins", "static", "inflation"}, label)
-    default = CostmapSpec()
-    enabled = g.get("enabled", default.enabled)
+def _setting(table_: dict, key: str, label: str, default: float) -> float:
+    """A positive number from the table, or the default if the key is absent."""
+    return number(table_, key, label) if key in table_ else default
+
+
+def _layers(table_: dict, order: tuple[str, ...], label: str) -> tuple[str, ...]:
+    """The `plugins` of a costmap table: layers in the fixed order, each once."""
+    plugins = table_.get("plugins", list(order))
+    if not isinstance(plugins, list) or not set(plugins) <= set(order):
+        names = " and ".join(f"'{name}'" for name in order)
+        raise WorldError(f"{label}: 'plugins' must list {names}")
+    if plugins != [p for p in order if p in plugins]:
+        raise WorldError(
+            f"{label}: 'plugins' names a layer twice or puts "
+            f"{order[1]} before {order[0]}"
+        )
+    return tuple(plugins)
+
+
+def _layer_table(table_: dict, layer: str, keys: set[str], label: str) -> dict:
+    """The settings table of one layer, with its keys checked."""
+    settings = table(table_.get(layer, {}), f"{label}.{layer}")
+    check_keys(settings, keys, f"{label}.{layer}")
+    return settings
+
+
+def _warn_unused_layers(plugins: tuple[str, ...], layers: dict, label: str) -> None:
+    """Warn about the settings of a layer that is not in `plugins`."""
+    for layer, settings in layers.items():
+        if settings and layer not in plugins:
+            warnings.warn(
+                f"{label}: {layer} is set but not in 'plugins', so it has no effect"
+            )
+
+
+def _enabled(table_: dict, label: str, default: bool) -> bool:
+    """The `enabled` switch of a costmap table, which must be true or false."""
+    enabled = table_.get("enabled", default)
     if not isinstance(enabled, bool):
         raise WorldError(f"{label}: 'enabled' must be true or false")
-    resolution = (
-        number(g, "resolution", label) if "resolution" in g else default.resolution
-    )
-    plugins = g.get("plugins", list(default.plugins))
-    if not isinstance(plugins, list) or not set(plugins) <= {"static", "inflation"}:
-        raise WorldError(f"{label}: 'plugins' must list 'static' and 'inflation'")
-    if plugins != [p for p in ("static", "inflation") if p in plugins]:
-        raise WorldError(
-            f"{label}: 'plugins' names a layer twice or puts inflation before static"
-        )
-    static = table(g.get("static", {}), f"{label}.static")
-    check_keys(static, {"source"}, f"{label}.static")
+    return enabled
+
+
+INFLATION = {"inflation_radius", "cost_scaling_factor"}
+
+
+def _parse_global(value, base: Path) -> CostmapSpec:
+    """Check `[costmap.global]`; a map path is taken relative to `base`."""
+    label = "costmap.global"
+    g = table(value, label)
+    check_keys(g, {"enabled", "resolution", "plugins", "static", "inflation"}, label)
+    default = CostmapSpec()
+    plugins = _layers(g, ("static", "inflation"), label)
+    static = _layer_table(g, "static", {"source"}, label)
+    inflation = _layer_table(g, "inflation", INFLATION, label)
+    _warn_unused_layers(plugins, {"static": static, "inflation": inflation}, label)
     source = (
         text(static, "source", f"{label}.static") if "source" in static else "generate"
     )
@@ -264,26 +298,90 @@ def _parse_costmap(value, base: Path) -> CostmapSpec:
         if not path.is_file():
             raise WorldError(f"{label}.static: no map file '{path}'")
         source = str(path)
-    inflation = table(g.get("inflation", {}), f"{label}.inflation")
+    return CostmapSpec(
+        _enabled(g, label, default.enabled),
+        _setting(g, "resolution", label, default.resolution),
+        plugins,
+        source,
+        _setting(
+            inflation,
+            "inflation_radius",
+            f"{label}.inflation",
+            default.inflation_radius,
+        ),
+        _setting(
+            inflation,
+            "cost_scaling_factor",
+            f"{label}.inflation",
+            default.cost_scaling_factor,
+        ),
+    )
+
+
+def _parse_local(value) -> LocalCostmapSpec:
+    """Check `[costmap.local]`."""
+    label = "costmap.local"
+    local = table(value, label)
     check_keys(
-        inflation, {"inflation_radius", "cost_scaling_factor"}, f"{label}.inflation"
+        local,
+        {
+            "enabled",
+            "window",
+            "resolution",
+            "period",
+            "plugins",
+            "obstacle",
+            "inflation",
+        },
+        label,
     )
-    for layer, settings in (("static", static), ("inflation", inflation)):
-        if settings and layer not in plugins:
-            warnings.warn(
-                f"{label}: {layer} is set but not in 'plugins', so it has no effect"
-            )
-    radius = (
-        number(inflation, "inflation_radius", label)
-        if "inflation_radius" in inflation
-        else default.inflation_radius
+    default = LocalCostmapSpec()
+    plugins = _layers(local, ("obstacle", "inflation"), label)
+    obstacle = _layer_table(
+        local, "obstacle", {"obstacle_max_range", "raytrace_max_range"}, label
     )
-    scaling = (
-        number(inflation, "cost_scaling_factor", label)
-        if "cost_scaling_factor" in inflation
-        else default.cost_scaling_factor
+    inflation = _layer_table(local, "inflation", INFLATION, label)
+    _warn_unused_layers(plugins, {"obstacle": obstacle, "inflation": inflation}, label)
+    return LocalCostmapSpec(
+        enabled=_enabled(local, label, default.enabled),
+        window=_setting(local, "window", label, default.window),
+        resolution=_setting(local, "resolution", label, default.resolution),
+        period=_setting(local, "period", label, default.period),
+        obstacle_max_range=_setting(
+            obstacle,
+            "obstacle_max_range",
+            f"{label}.obstacle",
+            default.obstacle_max_range,
+        ),
+        raytrace_max_range=_setting(
+            obstacle,
+            "raytrace_max_range",
+            f"{label}.obstacle",
+            default.raytrace_max_range,
+        ),
+        inflation_radius=_setting(
+            inflation,
+            "inflation_radius",
+            f"{label}.inflation",
+            default.inflation_radius,
+        ),
+        cost_scaling_factor=_setting(
+            inflation,
+            "cost_scaling_factor",
+            f"{label}.inflation",
+            default.cost_scaling_factor,
+        ),
+        plugins=plugins,
     )
-    return CostmapSpec(enabled, resolution, tuple(plugins), source, radius, scaling)
+
+
+def _parse_costmaps(value, base: Path) -> tuple[CostmapSpec, LocalCostmapSpec]:
+    """Check the `[costmap]` table: the global costmap and the local one."""
+    data = table(value, "costmap")
+    check_keys(data, {"global", "local"}, "costmap")
+    return _parse_global(data.get("global", {}), base), _parse_local(
+        data.get("local", {})
+    )
 
 
 def load_world(path: str | Path) -> World:
@@ -344,5 +442,9 @@ def load_world(path: str | Path) -> World:
         for i, item in enumerate(items(data, "task"), start=1)
     )
     sensors = _parse_sensors(data.get("sensors", {}), "file")
-    costmap = _parse_costmap(data.get("costmap", {}), Path(path).resolve().parent)
-    return World(size, seed, obstacles, robots, tasks, dt, sensors, costmap)
+    costmap, local_costmap = _parse_costmaps(
+        data.get("costmap", {}), Path(path).resolve().parent
+    )
+    return World(
+        size, seed, obstacles, robots, tasks, dt, sensors, costmap, local_costmap
+    )

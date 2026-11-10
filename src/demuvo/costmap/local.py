@@ -4,61 +4,14 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from dataclasses import dataclass
 
 import numpy as np
 from robomath import Transform2D
 
-from ..plugins import check_positive
 from ..sensing import Scan
+from ..world import LocalCostmapSpec
 from .grid import LETHAL, Costmap
 from .layers import inflate
-
-LAYERS = ("obstacle", "inflation")
-
-
-@dataclass(frozen=True)
-class LocalSettings:
-    """How a local costmap is built.
-
-    Attributes:
-        window: side of the square window round the robot, in metres.
-        resolution: side of a cell in metres.
-        period: seconds between updates.
-        obstacle_max_range: the farthest a hit is marked as an obstacle, in metres.
-        raytrace_max_range: the farthest a beam clears cells, in metres; a beam
-            that hit nothing clears up to it.
-        inflation_radius: how far cost spreads from an obstacle, in metres.
-        cost_scaling_factor: how fast cost falls with distance; higher is faster.
-        plugins: the layers to use, "obstacle" then "inflation".
-    """
-
-    window: float = 3.0
-    resolution: float = 0.05
-    period: float = 0.2
-    obstacle_max_range: float = 2.5
-    raytrace_max_range: float = 3.0
-    inflation_radius: float = 0.55
-    cost_scaling_factor: float = 10.0
-    plugins: tuple[str, ...] = LAYERS
-
-    def __post_init__(self) -> None:
-        """Check the settings."""
-        check_positive(
-            self,
-            "window",
-            "resolution",
-            "period",
-            "obstacle_max_range",
-            "raytrace_max_range",
-            "inflation_radius",
-            "cost_scaling_factor",
-        )
-        if list(self.plugins) != [p for p in LAYERS if p in self.plugins]:
-            raise ValueError(
-                f"plugins must list 'obstacle' and 'inflation', in that order, "
-                f"each at most once, got {self.plugins!r}"
-            )
 
 
 class LocalCostmap:
@@ -81,11 +34,11 @@ class LocalCostmap:
     """
 
     def __init__(
-        self, inscribed_radius: float, settings: LocalSettings | None = None
+        self, inscribed_radius: float, settings: LocalCostmapSpec | None = None
     ) -> None:
         """Start with no costmap."""
         self._radius = inscribed_radius
-        self._settings = settings or LocalSettings()
+        self._settings = settings or LocalCostmapSpec()
         self._cells = round(self._settings.window / self._settings.resolution)
         self._marks = np.zeros((self._cells, self._cells), dtype=np.uint8)
         self._origin: tuple[float, float] | None = None
