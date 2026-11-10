@@ -11,6 +11,7 @@ import numpy as np
 from robomath import Transform2D
 
 from ..costmap import INSCRIBED, MAX_NON_OBSTACLE, Costmap
+from ..paths import with_headings
 from ..plugins import check_not_negative
 
 LOGGER = logging.getLogger(__name__)
@@ -108,7 +109,7 @@ class AStar:
             )
         middle = [costmap.cell_to_world(r, c) for r, c in cells[1:-1]]
         points = np.array([start.xyt[:2], *middle, end])
-        return _with_headings(points, goal.xyt[2])
+        return with_headings(points, goal.xyt[2])
 
     def _blocked_goal(self, cell):
         """The message and values that say why a blocked goal has no path."""
@@ -136,8 +137,7 @@ class AStar:
         rows = np.arange(max(0, row - reach), min(blocked.shape[0], row + reach + 1))
         cols = np.arange(max(0, col - reach), min(blocked.shape[1], col + reach + 1))
         rr, cc = np.meshgrid(rows, cols, indexing="ij")
-        x = costmap.origin[0] + (cc + 0.5) * costmap.resolution
-        y = costmap.origin[1] + (rr + 0.5) * costmap.resolution
+        x, y = costmap.centres(rr, cc)
         distance = np.hypot(x - goal_xy[0], y - goal_xy[1])
         distance[blocked[rr, cc] | (distance > self.tolerance)] = np.inf
         nearest = int(distance.argmin())  # the first of equals in row order
@@ -208,16 +208,3 @@ def _trace(came_from, cell):
         path.append(cell)
         cell = came_from[cell]
     return path[::-1]
-
-
-def _with_headings(points: np.ndarray, goal_yaw: float) -> np.ndarray:
-    """Poses (N, 3) from points (N, 2).
-
-    Each pose looks along its step, and the last has the goal's angle.
-    """
-    path = np.empty((len(points), 3))
-    path[:, :2] = points
-    step = np.diff(points, axis=0)
-    path[:-1, 2] = np.arctan2(step[:, 1], step[:, 0])
-    path[-1, 2] = goal_yaw
-    return path

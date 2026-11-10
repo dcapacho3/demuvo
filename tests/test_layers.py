@@ -12,14 +12,15 @@ ROOT = Path(__file__).resolve().parents[1] / "src" / "demuvo"
 # import `sim`: they see the costmap and the observation, not the simulation.
 ALLOWED = {
     "verify": set(),
+    "paths": set(),
     "plugins": {"verify"},
     "models": {"plugins", "verify"},
     "sensing": {"models"},
     "world": {"verify", "models", "sensing"},
     "costmap": {"verify", "world"},
     "sim": {"costmap", "models", "sensing", "world"},
-    "planners": {"costmap", "plugins", "world"},
-    "smoothers": {"costmap", "plugins"},
+    "planners": {"costmap", "paths", "plugins", "world"},
+    "smoothers": {"costmap", "paths", "plugins"},
     "controllers": {"models", "plugins", "sensing"},
     "evaluation": {"sim", "world"},
     "nav": {

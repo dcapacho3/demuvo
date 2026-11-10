@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 
 import numpy as np
 
 from ..costmap import INSCRIBED, Costmap
+from ..paths import with_headings
 from ..plugins import check_positive
 
 
@@ -78,40 +78,9 @@ class LineOfSight:
             i = j
         return self._resample(points[kept], path[-1, 2])
 
-    def _line_cells(
-        self, a: np.ndarray, b: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """The (rows, columns) of every cell the line from a to b passes through.
-
-        A line that goes exactly through a corner also gives the two cells that
-        touch it only there, so it cannot squeeze between two blocked cells.
-        """
-        costmap = self._costmap
-        start = (a - costmap.origin) / costmap.resolution
-        move = (b - costmap.origin) / costmap.resolution - start
-        crossings = []
-        for axis in (0, 1):  # where the line crosses each vertical, then horizontal
-            if move[axis] == 0:
-                crossings.append(np.empty(0))
-                continue
-            low, high = sorted((start[axis], start[axis] + move[axis]))
-            edges = np.arange(math.floor(low) + 1, math.ceil(high))
-            crossings.append(np.round((edges - start[axis]) / move[axis], 9))
-        times = np.unique(np.concatenate([[0.0, 1.0], *crossings]))
-        inside = start + ((times[:-1] + times[1:]) / 2)[:, None] * move
-        rows, cols = [np.floor(inside[:, 1])], [np.floor(inside[:, 0])]
-        for time in np.intersect1d(
-            crossings[0], crossings[1]
-        ):  # exactly through a corner
-            before = np.floor(start + (time - 1e-6) * move)
-            after = np.floor(start + (time + 1e-6) * move)
-            rows += [np.array([before[1], after[1]])]
-            cols += [np.array([after[0], before[0]])]
-        return np.concatenate(rows).astype(int), np.concatenate(cols).astype(int)
-
     def _clear(self, a: np.ndarray, b: np.ndarray, limit: int) -> bool:
         """True if the line from a to b crosses only free cells of cost up to limit."""
-        rows, cols = self._line_cells(a, b)
+        rows, cols = self._costmap.line_cells(a, b)
         first_row, first_col = self._costmap.cells(a[None])
         seen = self._costmap.data[rows, cols].astype(int)
         seen = seen[(rows != first_row[0]) | (cols != first_col[0])]
@@ -120,21 +89,10 @@ class LineOfSight:
     def _resample(self, corners: np.ndarray, goal_yaw: float) -> np.ndarray:
         """Poses spaced `spacing` apart along the corners; the last has goal_yaw."""
         step = np.diff(corners, axis=0)
-        lengths = np.hypot(step[:, 0], step[:, 1])
-        counts = np.maximum(1, np.ceil(lengths / self.spacing).astype(int))
+        counts = np.maximum(1, np.ceil(np.hypot(*step.T) / self.spacing).astype(int))
         pieces = [
             corners[k]
             + np.linspace(0.0, 1.0, counts[k], endpoint=False)[:, None] * step[k]
             for k in range(len(step))
         ]
-        headings = np.concatenate(
-            [
-                np.full(counts[k], np.arctan2(step[k, 1], step[k, 0]))
-                for k in range(len(step))
-            ]
-        )
-        path = np.empty((len(headings) + 1, 3))
-        path[:-1, :2] = np.concatenate(pieces)
-        path[:-1, 2] = headings
-        path[-1] = (*corners[-1], goal_yaw)
-        return path
+        return with_headings(np.vstack([*pieces, corners[-1:]]), goal_yaw)
