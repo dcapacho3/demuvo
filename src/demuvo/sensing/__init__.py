@@ -10,6 +10,7 @@ The `Robot` that joins them is in `demuvo.sim`.
 
 from .base import Estimate, Estimator, Reading, Sensor, StepTruth
 from .estimators import ESTIMATORS, DeadReckoning, GroundTruth, resolve_estimator
+from .lidar import Lidar
 from .raycast import Scene, cast
 from .sensors import SENSORS, Encoders, PerfectPose
 from .streams import stream
@@ -22,6 +23,7 @@ __all__ = [
     "Estimate",
     "Estimator",
     "GroundTruth",
+    "Lidar",
     "PerfectPose",
     "Reading",
     "Scene",
