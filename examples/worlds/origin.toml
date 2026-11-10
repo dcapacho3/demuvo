@@ -1,0 +1,31 @@
+# The demo world with its corner moved to (-5, -3), so the middle of the world is (0, 0).
+version = 1
+
+[world]
+size = [10.0, 6.0]        # metres
+origin = [-5.0, -3.0]     # x and y of the lower-left corner; every pose below is inside it
+seed = 7
+
+[[obstacle]]
+pose = [-1.0, 1.5, 0.0]
+shape = { name = "box", size = [1.0, 2.0] }
+
+[[obstacle]]
+pose = [2.0, -1.0, 0.0]
+shape = { name = "circle", radius = 0.5 }
+
+[[obstacle]]
+shape = { name = "linestring", vertices = [[-3.0, 2.0], [-3.0, 0.5]] }
+
+[[robot]]
+name = "r1"
+model = "diff_drive"
+shape = { name = "circle", radius = 0.2 }
+pose = [-4.0, -2.0, 0.0]
+controller = "demuvo.controllers:PurePursuit"
+controller_params = { speed = 0.5, lookahead = 0.6 }
+
+[[task]]
+robot = "r1"
+goal = [4.0, 2.0, 0.0]
+goal_tolerance = [0.1, 0.1]

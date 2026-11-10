@@ -218,6 +218,23 @@ On the author's computer the ray caster reads about 900,000 rays per second agai
 100 segments, and one update of the local costmap from a 360-beam scan takes about
 4 ms.
 
+## World origin
+
+A world spans from its lower-left corner, the origin, to the origin plus `size`. The
+origin is `[0.0, 0.0]` unless `[world]` sets it, and it may be negative, so a world can
+reach west and south of zero. The border, the costmap and the view all follow it. Every
+obstacle, robot start and goal must lie inside the box it gives:
+
+```toml
+[world]
+size = [10.0, 6.0]
+origin = [-5.0, -3.0]      # optional: x and y of the lower-left corner
+seed = 7
+```
+
+`examples/worlds/origin.toml` is the demo world with its corner at `[-5.0, -3.0]`:
+`demuvo examples/worlds/origin.toml`.
+
 ## Time
 
 The simulation moves in steps of `dt` seconds, set in `[world]` (default 0.01). Each

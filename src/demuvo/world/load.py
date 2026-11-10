@@ -416,9 +416,14 @@ def load_world(path: str | Path) -> World:
     )
 
     world = table(require_key(data, "world", "file"), "world")
-    check_keys(world, {"size", "seed", "dt"}, "world")
+    check_keys(world, {"size", "origin", "seed", "dt"}, "world")
     size = numbers(require_key(world, "size", "world"), 2, "world", "size", True)
-    bounds = (0.0, 0.0, size[0], size[1])
+    origin = (
+        numbers(world["origin"], 2, "world", "origin")
+        if "origin" in world
+        else (0.0, 0.0)
+    )
+    bounds = (origin[0], origin[1], origin[0] + size[0], origin[1] + size[1])
     seed = require_key(world, "seed", "world")
     if not isinstance(seed, int) or isinstance(seed, bool):
         raise WorldError("world: 'seed' must be an integer")
@@ -447,5 +452,14 @@ def load_world(path: str | Path) -> World:
         data.get("costmap", {}), Path(path).resolve().parent
     )
     return World(
-        size, seed, obstacles, robots, tasks, dt, sensors, costmap, local_costmap
+        size,
+        seed,
+        obstacles,
+        robots,
+        tasks,
+        dt,
+        sensors,
+        costmap,
+        local_costmap,
+        origin,
     )
