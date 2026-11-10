@@ -1,0 +1,243 @@
+"""A session - the world being looked at or edited, and the rules for changing it.
+
+There are two modes. In a benchmark the world is a fixed file: nothing can be edited,
+and Reset repeats the run exactly. In the sandbox the world is one you change: add
+robots, pick their parts, set goals, then run. Edits are allowed only while no run
+is in progress; Reset ends the run and unlocks them.
+
+A session has no widgets. Each change returns an error message in plain words, or
+None if it worked, and a window shows the message.
+"""
+
+from __future__ import annotations
+
+import math
+
+from .. import edit, options
+from ..runner import Run
+from ..verify import WorldError
+from ..world import World
+from .scenedraw import SceneDraw
+
+MODES = ("sandbox", "benchmark")
+# A robot dragged to the edge stops this far from it, in metres.
+EDGE = 0.25
+# One step of the Step button is about this long, in seconds.
+STEP_SECONDS = 0.05
+# The most real time one frame may count, in seconds, so a slow frame does not leap.
+MAX_FRAME = 0.1
+PART_TABLES = {
+    "planner": options.planners,
+    "smoother": options.smoothers,
+    "controller": options.controllers,
+}
+REFUSED = "That change cannot be made: {}"
+
+
+class Session:
+    """The world and its run, in one mode.
+
+    Args:
+        source: a world file, or a `World`; None in the sandbox starts a blank world.
+        mode: "sandbox" or "benchmark".
+
+    Attributes:
+        mode: "sandbox" or "benchmark".
+        run: the run, which the scene reads.
+        scene: the drawing of the run.
+        tool: "select" or "goal", the tool the pointer has.
+        playing: True while the run advances by itself.
+        speed: how many seconds of simulated time pass for each real second.
+
+    Raises:
+        ValueError: if the mode is unknown, or a benchmark has no world.
+    """
+
+    def __init__(
+        self, source: str | World | None = None, mode: str = "sandbox"
+    ) -> None:
+        """Open the world."""
+        if mode not in MODES:
+            raise ValueError(f"mode must be 'sandbox' or 'benchmark', not {mode!r}")
+        if mode == "benchmark" and source is None:
+            raise ValueError("a benchmark needs a world file")
+        self.mode = mode
+        self.run = Run(edit.new_world() if source is None else source)
+        self.scene = SceneDraw(self.run)
+        self.tool = "select"
+        self.playing = False
+        self.speed = 1.0
+
+    @property
+    def editable(self) -> bool:
+        """True if the world may be changed now: sandbox, at time zero, not playing."""
+        return self.mode == "sandbox" and self.run.time == 0 and not self.playing
+
+    @property
+    def state(self) -> str:
+        """The state: "bench", "edit" while editing, or "run" once a run began."""
+        if self.mode == "benchmark":
+            return "bench"
+        return "edit" if self.editable else "run"
+
+    @property
+    def world(self) -> World:
+        """The world that runs."""
+        return self.run.world
+
+    def apply(
+        self, world: World, *, rebuild: bool = False, select: str | None = None
+    ) -> str | None:
+        """Make a world the one that runs, unless it cannot run.
+
+        Args:
+            world: the edited world.
+            rebuild: True if the robots changed, which needs a new run and scene.
+            select: the robot to select afterwards; "" for none; None keeps the
+                selection.
+
+        Returns:
+            None if it worked, else why not; nothing then changes.
+        """
+        try:
+            edit.validate(world)
+        except ValueError as error:
+            return REFUSED.format(error)
+        keep = self.scene.selected if select is None else (select or None)
+        if rebuild:
+            old = self.scene
+            self.run = Run(world)
+            self.scene = SceneDraw(self.run)
+            self.scene.layers, self.scene.palette = old.layers, old.palette
+        else:
+            self.run.set_world(world)
+            self.scene.set_run(self.run)
+        self.scene.selected = keep
+        self.scene.fit(self.scene.view.rect)
+        return None
+
+    def select(self, name: str | None) -> bool:
+        """Select a robot, or none; True if the selection changed."""
+        if name == self.scene.selected:
+            return False
+        self.scene.selected = name
+        return True
+
+    def set_tool(self, tool: str) -> None:
+        """Choose the "select" or the "goal" tool."""
+        self.tool = tool
+
+    def _guard(self) -> str | None:
+        """The reason nothing can be edited now, or None."""
+        if self.editable:
+            return None
+        return (
+            "Press Reset (R) to edit again."
+            if self.mode == "sandbox"
+            else "A benchmark world is fixed."
+        )
+
+    def add_robot(self) -> str | None:
+        """Add a robot at a free place, and select it."""
+        if (why := self._guard()) is not None:
+            return why
+        taken = {r.name for r in self.world.robots}
+        name = next(f"r{k}" for k in range(1, 10_000) if f"r{k}" not in taken)
+        try:
+            world = edit.add_robot(self.world, name, edit.free_pose(self.world))
+        except WorldError as error:
+            return REFUSED.format(error)
+        return self.apply(world, rebuild=True, select=name)
+
+    def delete_robot(self) -> str | None:
+        """Delete the selected robot."""
+        name = self.scene.selected
+        if (why := self._guard()) is not None or name is None:
+            return why
+        try:
+            world = edit.remove_robot(self.world, name)
+        except WorldError as error:
+            return REFUSED.format(error)
+        return self.apply(world, rebuild=True, select="")
+
+    def move_robot(self, name: str, pose: tuple[float, float, float]) -> str | None:
+        """Move a robot to a pose, held inside the world's edge."""
+        x0, y0, x1, y1 = self.world.bounds
+        x = min(max(pose[0], x0 + EDGE), x1 - EDGE)
+        y = min(max(pose[1], y0 + EDGE), y1 - EDGE)
+        try:
+            world = edit.set_pose(self.world, name, (x, y, pose[2]))
+        except WorldError as error:
+            return REFUSED.format(error)
+        return self.apply(world)
+
+    def set_goal(self, name: str, goal: tuple[float, float, float]) -> str | None:
+        """Give a robot a goal."""
+        if (why := self._guard()) is not None:
+            return why
+        try:
+            world = edit.set_goal(self.world, name, goal)
+        except WorldError as error:
+            return REFUSED.format(error)
+        return self.apply(world, rebuild=True, select=name)
+
+    def choose(self, name: str, field: str, text: str) -> str | None:
+        """Change the model, planner, smoother or controller by its friendly name."""
+        if (why := self._guard()) is not None:
+            return why
+        try:
+            if field == "model":
+                world = edit.set_model(self.world, name, text)
+            else:
+                world = edit.set_part(
+                    self.world, name, field, PART_TABLES[field]()[text]
+                )
+        except WorldError as error:
+            return REFUSED.format(error)
+        return self.apply(world)
+
+    def set_settings(self, name: str, part: str, values: dict) -> str | None:
+        """Set the settings of one part of a robot."""
+        if (why := self._guard()) is not None:
+            return why
+        try:
+            world = edit.set_settings(self.world, name, part, values)
+        except WorldError as error:
+            return REFUSED.format(error)
+        return self.apply(world)
+
+    def set_period(self, name: str, seconds: float) -> str | None:
+        """Set the seconds between runs of a robot's controller."""
+        if (why := self._guard()) is not None:
+            return why
+        try:
+            world = edit.set_control_period(self.world, name, seconds)
+        except WorldError as error:
+            return REFUSED.format(error)
+        return self.apply(world)
+
+    def toggle_play(self) -> None:
+        """Start or pause the run."""
+        self.playing = not self.playing
+
+    def advance(self, seconds: float) -> None:
+        """Advance a playing run by real seconds, at the chosen speed."""
+        if self.playing:
+            self.run.advance(min(seconds, MAX_FRAME) * self.speed)
+            self.scene.record_trails()
+
+    def step_once(self) -> None:
+        """Advance by about one control period."""
+        self.run.step(max(1, round(STEP_SECONDS / self.run.sim.dt)))
+        self.scene.record_trails()
+
+    def reset(self) -> None:
+        """End the run, go back to time zero and unlock editing."""
+        self.playing = False
+        self.run.reset()
+        self.scene.set_run(self.run)
+
+    def heading_to(self, name: str, x: float, y: float) -> float:
+        """The heading from a robot towards a world point."""
+        rx, ry = self.scene.pose(name)[:2]
+        return math.atan2(y - ry, x - rx)
