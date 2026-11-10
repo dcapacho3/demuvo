@@ -33,6 +33,7 @@ ALLOWED = {
         "smoothers",
         "world",
     },
+    "options": {"models", "nav", "verify"},
     "view": {"models", "sim", "world"},
     "run": {"evaluation", "nav", "sim", "world"},
 }
