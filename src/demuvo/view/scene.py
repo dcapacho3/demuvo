@@ -94,7 +94,8 @@ class View:
         """
         pygame.font.init()
         self.sim = sim
-        w, h = sim.world.size
+        x0, y0, x1, y1 = sim.world.bounds
+        w, h = x1 - x0, y1 - y0
         self.scale = min(width / (w + 2 * MARGIN), height / (h + 2 * MARGIN))
         self._scene = (
             round((w + 2 * MARGIN) * self.scale),
@@ -121,15 +122,15 @@ class View:
 
     def to_pixel(self, x: float, y: float, k: int = 1) -> tuple[float, float]:
         """Metres to scene pixels at k times the size. The y axis points up."""
-        h = self.sim.world.size[1]
-        return ((x + MARGIN) * self.scale * k, (h + MARGIN - y) * self.scale * k)
+        x0, _, _, y1 = self.sim.world.bounds
+        return ((x - x0 + MARGIN) * self.scale * k, (y1 + MARGIN - y) * self.scale * k)
 
     def _points(self, points, k: int = SS) -> list[tuple[float, float]]:
         """Many points from metres to pixels; one numpy pass, as trails are long."""
         xy = np.asarray(points, dtype=float).reshape(-1, 2)
-        h = self.sim.world.size[1]
-        px = (xy[:, 0] + MARGIN) * self.scale * k
-        py = (h + MARGIN - xy[:, 1]) * self.scale * k
+        x0, _, _, y1 = self.sim.world.bounds
+        px = (xy[:, 0] - x0 + MARGIN) * self.scale * k
+        py = (y1 + MARGIN - xy[:, 1]) * self.scale * k
         return list(zip(px.tolist(), py.tolist()))
 
     def _layer(self, alpha: bool = False) -> pygame.Surface:
@@ -141,17 +142,25 @@ class View:
         """Shrink a layer to the scene size."""
         return pygame.transform.smoothscale(layer, self._scene)
 
-    def _draw_background(self) -> pygame.Surface:
-        """The floor, shadows, obstacles and walls, with the top bar."""
-        w, h = self.sim.world.size
-        big = self._layer()
+    def _draw_floor(self, big: pygame.Surface) -> None:
+        """Fill the margin, then lay the checked floor tiles over the world."""
+        left, bottom, right, top = self.sim.world.bounds
         big.fill(OUTSIDE)
         for i, j in itertools.product(
-            range(math.ceil(w / TILE)), range(math.ceil(h / TILE))
+            range(math.ceil((right - left) / TILE)),
+            range(math.ceil((top - bottom) / TILE)),
         ):
-            x0, y0 = map(round, self.to_pixel(i * TILE, min((j + 1) * TILE, h), SS))
-            x1, y1 = map(round, self.to_pixel(min((i + 1) * TILE, w), j * TILE, SS))
+            nw = self.to_pixel(left + i * TILE, min(bottom + (j + 1) * TILE, top), SS)
+            se = self.to_pixel(min(left + (i + 1) * TILE, right), bottom + j * TILE, SS)
+            x0, y0 = map(round, nw)
+            x1, y1 = map(round, se)
             big.fill(FLOOR[(i + j) % 2], (x0, y0, x1 - x0, y1 - y0))
+
+    def _draw_background(self) -> pygame.Surface:
+        """The floor, shadows, obstacles and walls, with the top bar."""
+        left, bottom, right, top = self.sim.world.bounds
+        big = self._layer()
+        self._draw_floor(big)
         shadows = self._layer(alpha=True)
         for obstacle in self.sim.world.obstacles:
             x, y, angle = obstacle.pose.xyt
@@ -160,8 +169,8 @@ class View:
         big.blit(shadows, (0, 0))
         for obstacle in self.sim.world.obstacles:
             self._draw_obstacle(big, obstacle.shape, obstacle.pose, solid=True)
-        x0, y0 = self.to_pixel(0, h, SS)
-        x1, y1 = self.to_pixel(w, 0, SS)
+        x0, y0 = self.to_pixel(left, top, SS)
+        x1, y1 = self.to_pixel(right, bottom, SS)
         border = pygame.Rect(
             round(x0), round(y0), round(x1) - round(x0), round(y1) - round(y0)
         )

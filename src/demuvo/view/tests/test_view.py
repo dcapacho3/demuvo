@@ -1,5 +1,6 @@
 """Tests for the pygame view."""
 
+import dataclasses
 from pathlib import Path
 
 import numpy as np
@@ -30,6 +31,7 @@ from demuvo.view import (
     play,
     record,
 )
+from demuvo.view.style import OUTSIDE
 from demuvo.view.window import _change_speed
 
 DEMO = str(Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml")
@@ -86,6 +88,17 @@ def test_the_floor_has_no_gaps():
     }
     outside = tuple(pygame.Color("#90a4ae"))[:3]
     assert outside not in colours
+
+
+def test_a_world_with_a_moved_origin_is_drawn_from_its_corner():
+    """With the west and south walls moved out by 1 m, the floor grows there."""
+    moved = dataclasses.replace(load_world(DEMO), origin=(-1.0, -1.0))
+    view = View(Simulation(moved))
+    frame = view.render()
+    assert pixel(view, frame, -0.5, -0.5) in {(236, 239, 241), (221, 226, 230)}
+    assert close(pixel(view, frame, -1.2, 2.0), OUTSIDE)
+    assert close(pixel(view, frame, 7.0, 2.0), OBSTACLE)
+    assert close(pixel(view, frame, 1.0, 0.9), ROBOT_COLORS[0])
 
 
 def test_things_are_drawn_where_they_are_in_the_world():
