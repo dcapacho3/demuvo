@@ -43,6 +43,24 @@ def lzw_decode(data: bytes, min_code: int) -> bytes:
             width += 1
 
 
+def read_blocks(data: bytes, position: int):
+    """The data sub-blocks that start at a position, joined, and the position after."""
+    parts = []
+    while data[position]:
+        parts.append(data[position + 1 : position + 1 + data[position]])
+        position += 1 + data[position]
+    return parts, position + 1
+
+
+def read_image(data: bytes, position: int, palette):
+    """One image block: the box it covers, its RGB pixels, and the position after."""
+    left, top, width, height, _ = struct.unpack("<HHHHB", data[position : position + 9])
+    min_code = data[position + 9]
+    parts, position = read_blocks(data, position + 10)
+    indices = np.frombuffer(lzw_decode(b"".join(parts), min_code), np.uint8)
+    return (left, top), palette[indices].reshape(height, width, 3), position
+
+
 def read_gif(data: bytes):
     """Decode a GIF the writer made: (size, loop count, delays, RGB frames)."""
     assert data[:6] == b"GIF89a"
@@ -50,30 +68,22 @@ def read_gif(data: bytes):
     size = 3 * (2 << (flags & 7))
     palette = np.frombuffer(data[13 : 13 + size], np.uint8).reshape(-1, 3)
     position, loop, delays, frames = 13 + size, None, [], []
+    current = np.zeros((height, width, 3), np.uint8)
     while data[position] != 0x3B:
-        block = data[position]
-        position += 1
+        block, position = data[position], position + 1
         if block == 0x21:
-            label, parts = data[position], []
-            position += 1
-            while data[position]:
-                parts.append(data[position + 1 : position + 1 + data[position]])
-                position += 1 + data[position]
-            position += 1
+            label = data[position]
+            parts, position = read_blocks(data, position + 1)
             if label == 0xF9:
                 delays.append(struct.unpack("<H", parts[0][1:3])[0])
             else:
                 loop = struct.unpack("<H", parts[1][1:3])[0]
         else:
             assert block == 0x2C
-            position += 9
-            min_code, position, packed = data[position], position + 1, b""
-            while data[position]:
-                packed += data[position + 1 : position + 1 + data[position]]
-                position += 1 + data[position]
-            position += 1
-            indices = np.frombuffer(lzw_decode(packed, min_code), np.uint8)
-            frames.append(palette[indices].reshape(height, width, 3))
+            (left, top), pixels, position = read_image(data, position, palette)
+            box_h, box_w = pixels.shape[:2]
+            current[top : top + box_h, left : left + box_w] = pixels
+            frames.append(current.copy())
     return (width, height), loop, delays, frames
 
 
@@ -212,3 +222,22 @@ def test_a_gif_that_cannot_be_made_is_refused(frames, fps, message):
     """No frames, a bad rate, frames of two sizes, and a frame with opacity."""
     with pytest.raises(ValueError, match=message):
         imgio.gif_bytes(frames, fps=fps)
+
+
+def test_a_still_scene_with_a_small_moving_part_stores_only_the_changed_box():
+    """The second frame is far smaller than the first, and both read back exactly."""
+    first = np.full((120, 160, 3), (230, 246, 244), np.uint8)
+    second = first.copy()
+    second[40:50, 60:75] = (31, 181, 166)
+    data = imgio.gif_bytes([first, second, second])
+    alone = imgio.gif_bytes([first])
+    assert len(data) < len(alone) + 200
+    decoded = read_gif(data)[3]
+    assert all(np.array_equal(a, b) for a, b in zip([first, second, second], decoded))
+
+
+def test_a_frame_that_did_not_change_still_makes_a_frame():
+    """A one-pixel box keeps the count of frames."""
+    frame = np.full((20, 30, 3), 90, np.uint8)
+    decoded = read_gif(imgio.gif_bytes([frame, frame, frame]))[3]
+    assert len(decoded) == 3 and all(np.array_equal(f, frame) for f in decoded)

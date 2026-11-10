@@ -205,11 +205,27 @@ def _indices(frame: np.ndarray, palette: np.ndarray) -> np.ndarray:
     return distance.argmin(axis=1).astype(np.uint8)[inverse]
 
 
+def _changed_box(indices: np.ndarray, previous: np.ndarray | None):
+    """The box (x0, y0, x1, y1) that holds every pixel that differs from the last frame.
+
+    The first frame is all of it; a frame that did not change is one pixel.
+    """
+    height, width = indices.shape
+    if previous is None:
+        return 0, 0, width, height
+    rows, cols = np.nonzero(indices != previous)
+    if rows.size == 0:
+        return 0, 0, 1, 1
+    return int(cols.min()), int(rows.min()), int(cols.max()) + 1, int(rows.max()) + 1
+
+
 def gif_bytes(frames: list[np.ndarray], fps: int = 20, loop: int = 0) -> bytes:
     """The bytes of an animated GIF.
 
     All frames share one palette of up to 256 colours, cut from a sample of every
     frame. A picture with no more colours than that is exact; one with more is close.
+    After the first, each frame stores only the box that changed, so a still scene
+    with a small moving part makes a small file.
 
     Args:
         frames: pictures of one size, uint8 with 3 channels.
@@ -237,11 +253,16 @@ def gif_bytes(frames: list[np.ndarray], fps: int = 20, loop: int = 0) -> bytes:
     out = bytearray(b"GIF89a" + struct.pack("<HHBBB", width, height, 0xF7, 0, 0))
     out += palette.tobytes()
     out += b"\x21\xff\x0bNETSCAPE2.0\x03\x01" + struct.pack("<H", loop) + b"\x00"
+    previous = None
     for frame in frames:
-        data = _lzw(_indices(frame, palette[: len(found)]).tobytes(), 8)
-        out += b"\x21\xf9\x04\x00" + struct.pack("<H", round(100 / fps)) + b"\x00\x00"
-        out += b"\x2c" + struct.pack("<HHHHB", 0, 0, width, height, 0) + b"\x08"
+        indices = _indices(frame, palette[: len(found)]).reshape(height, width)
+        x0, y0, x1, y1 = _changed_box(indices, previous)
+        data = _lzw(indices[y0:y1, x0:x1].tobytes(), 8)
+        # Disposal 1: the picture stays, and only the changed box is drawn over it.
+        out += b"\x21\xf9\x04\x04" + struct.pack("<H", round(100 / fps)) + b"\x00\x00"
+        out += b"\x2c" + struct.pack("<HHHHB", x0, y0, x1 - x0, y1 - y0, 0) + b"\x08"
         out += _sub_blocks(data)
+        previous = indices
     return bytes(out + b"\x3b")
 
 
