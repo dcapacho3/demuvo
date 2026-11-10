@@ -6,6 +6,7 @@ import tomllib
 import warnings
 from pathlib import Path
 
+import numpy as np
 from robomath import Transform2D
 
 from ..models import MODELS, parse_params
@@ -21,6 +22,7 @@ from ..verify import (
     table,
     text,
 )
+from .mapfile import MapFile, read_map
 from .shapes import parse_shape
 from .spec import (
     DEFAULT_CONTROL_PERIOD,
@@ -287,7 +289,7 @@ def _parse_global(value, base: Path) -> CostmapSpec:
     check_keys(g, {"enabled", "resolution", "plugins", "static", "inflation"}, label)
     default = CostmapSpec()
     plugins = _layers(g, ("static", "inflation"), label)
-    static = _layer_table(g, "static", {"source"}, label)
+    static = _layer_table(g, "static", {"source", "unknown"}, label)
     inflation = _layer_table(g, "inflation", INFLATION, label)
     _warn_unused_layers(plugins, {"static": static, "inflation": inflation}, label)
     source = (
@@ -298,6 +300,13 @@ def _parse_global(value, base: Path) -> CostmapSpec:
         if not path.is_file():
             raise WorldError(f"{label}.static: no map file '{path}'")
         source = str(path)
+    unknown = (
+        text(static, "unknown", f"{label}.static") if "unknown" in static else "free"
+    )
+    if unknown not in ("free", "blocked"):
+        raise WorldError(f'{label}.static: \'unknown\' must be "free" or "blocked"')
+    if "unknown" in static and source == "generate":
+        warnings.warn(f"{label}.static: 'unknown' has no effect without a map file")
     return CostmapSpec(
         _enabled(g, label, default.enabled),
         _setting(g, "resolution", label, default.resolution),
@@ -315,6 +324,7 @@ def _parse_global(value, base: Path) -> CostmapSpec:
             f"{label}.inflation",
             default.cost_scaling_factor,
         ),
+        unknown,
     )
 
 
@@ -384,6 +394,43 @@ def _parse_costmaps(value, base: Path) -> tuple[CostmapSpec, LocalCostmapSpec]:
     )
 
 
+def _map_in_use(costmap: CostmapSpec) -> MapFile | None:
+    """The map file the global costmap reads, or None if it reads none."""
+    if costmap.enabled and "static" in costmap.plugins and costmap.source != "generate":
+        return read_map(Path(costmap.source))
+    return None
+
+
+def _size_and_origin(world: dict, found: MapFile | None):
+    """The size and origin of the world, from `[world]` or else from the map."""
+    from_map = "size" not in world and found is not None
+    if from_map:
+        size = found.size
+    else:
+        size = numbers(require_key(world, "size", "world"), 2, "world", "size", True)
+    if "origin" in world:
+        origin = numbers(world["origin"], 2, "world", "origin")
+    else:
+        origin = found.origin if from_map else (0.0, 0.0)
+    _warn_map_differs(found, size, origin)
+    return size, origin
+
+
+def _warn_map_differs(found: MapFile | None, size, origin) -> None:
+    """Warn if the world file gives a size or origin other than its map's."""
+    if found is None:
+        return
+    for name, given, wanted in (
+        ("size", size, found.size),
+        ("origin", origin, found.origin),
+    ):
+        if not np.allclose(given, wanted):
+            warnings.warn(
+                f"world: {name} {list(given)} differs from the map's {list(wanted)}; "
+                "the planner sees the map as it is"
+            )
+
+
 def load_world(path: str | Path) -> World:
     """Read a world file and check it.
 
@@ -417,12 +464,11 @@ def load_world(path: str | Path) -> World:
 
     world = table(require_key(data, "world", "file"), "world")
     check_keys(world, {"size", "origin", "seed", "dt"}, "world")
-    size = numbers(require_key(world, "size", "world"), 2, "world", "size", True)
-    origin = (
-        numbers(world["origin"], 2, "world", "origin")
-        if "origin" in world
-        else (0.0, 0.0)
+    costmap, local_costmap = _parse_costmaps(
+        data.get("costmap", {}), Path(path).resolve().parent
     )
+    found = _map_in_use(costmap)
+    size, origin = _size_and_origin(world, found)
     bounds = (origin[0], origin[1], origin[0] + size[0], origin[1] + size[1])
     seed = require_key(world, "seed", "world")
     if not isinstance(seed, int) or isinstance(seed, bool):
@@ -448,9 +494,6 @@ def load_world(path: str | Path) -> World:
         for i, item in enumerate(items(data, "task"), start=1)
     )
     sensors = _parse_sensors(data.get("sensors", {}), "file")
-    costmap, local_costmap = _parse_costmaps(
-        data.get("costmap", {}), Path(path).resolve().parent
-    )
     return World(
         size,
         seed,

@@ -110,6 +110,9 @@ class CostmapSpec:
         plugins: the layers to use, "static" then "inflation".
         source: "generate" (from the obstacles of the world) or the path of a
             `map.yaml`.
+        unknown: what a cell of a map file between its free and occupied
+            thresholds counts as, "free" or "blocked" (no information, which a
+            planner will not cross).
         inflation_radius: how far cost spreads from an obstacle, in metres.
         cost_scaling_factor: how fast cost falls with distance, higher is faster.
     """
@@ -120,6 +123,7 @@ class CostmapSpec:
     source: str = "generate"
     inflation_radius: float = 0.55
     cost_scaling_factor: float = 10.0
+    unknown: str = "free"
 
 
 LOCAL_LAYERS = ("obstacle", "inflation")

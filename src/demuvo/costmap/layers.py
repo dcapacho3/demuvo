@@ -7,10 +7,10 @@ from pathlib import Path
 
 import numpy as np
 
-from ..verify import WorldError
 from ..world import World
+from ..world.mapfile import read_map
 from ..world.shapes import Part, border_parts
-from .grid import FREE, INSCRIBED, LETHAL, MAX_NON_OBSTACLE
+from .grid import FREE, INSCRIBED, LETHAL, MAX_NON_OBSTACLE, NO_INFORMATION
 
 
 def edge_distance(points: np.ndarray, vertices) -> np.ndarray:
@@ -91,64 +91,24 @@ def generate_static(world: World, resolution: float) -> np.ndarray:
     return grid
 
 
-def _read_pgm(path: Path) -> np.ndarray:
-    """The brightness of a PGM image (P2 or P5) as floats from 0 to 1, row 0 on top."""
-    data = path.read_bytes()
-    tokens, pos = [], 0
-    while len(tokens) < 4:
-        while data[pos : pos + 1].isspace():
-            pos += 1
-        if data[pos : pos + 1] == b"#":
-            pos = data.index(b"\n", pos)
-            continue
-        end = pos
-        while end < len(data) and not data[end : end + 1].isspace():
-            end += 1
-        tokens.append(data[pos:end])
-        pos = end
-    magic, width, height, maxval = tokens[0], *(int(t) for t in tokens[1:])
-    if magic == b"P5":
-        dtype = np.uint8 if maxval < 256 else ">u2"
-        pixels = np.frombuffer(data, dtype=dtype, count=width * height, offset=pos + 1)
-    elif magic == b"P2":
-        pixels = np.array(data[pos:].split(), dtype=float)[: width * height]
-    else:
-        raise WorldError(f"{path}: only PGM images (P2 or P5) can be read")
-    return pixels.reshape(height, width) / maxval
-
-
-def load_static(path: Path) -> tuple[np.ndarray, float, tuple[float, float]]:
+def load_static(
+    path: Path, unknown: str = "free"
+) -> tuple[np.ndarray, float, tuple[float, float]]:
     """Read a `map.yaml` and its image as cells, a resolution and an origin.
 
-    A cell is LETHAL when its occupancy, `1 - brightness` (or `brightness` if
-    `negate` is set), reaches `occupied_thresh` (default 0.65). Every other cell
-    is FREE. The `mode` and `free_thresh` keys do nothing here.
-    The origin's angle must be 0.
+    A cell is LETHAL when its occupancy reaches `occupied_thresh` (default 0.65)
+    and FREE when it is below `free_thresh` (default 0.25). A cell between the
+    two is unknown: FREE if `unknown` is "free", NO_INFORMATION if "blocked".
 
     Raises:
         WorldError: if the file or its image cannot be read.
     """
-    try:
-        keys = {}
-        for line in path.read_text().splitlines():
-            line = line.split("#")[0].strip()
-            if line:
-                key, _, value = line.partition(":")
-                keys[key.strip()] = value.strip().strip("'\"")
-        resolution = float(keys["resolution"])
-        origin = [float(v) for v in keys["origin"].strip("[]").split(",")]
-        image = _read_pgm(path.parent / keys["image"])
-    except (OSError, KeyError, ValueError, IndexError) as error:
-        raise WorldError(f"costmap: cannot read map '{path}': {error!r}") from error
-    if resolution <= 0 or len(origin) != 3 or origin[2] != 0:
-        raise WorldError(
-            f"costmap: map '{path}' needs resolution > 0 and an origin with angle 0"
-        )
-    occupancy = image if keys.get("negate", "0") in ("1", "true") else 1.0 - image
-    lethal = occupancy >= float(keys.get("occupied_thresh", 0.65))
-    grid = np.where(lethal, LETHAL, FREE).astype(np.uint8)
-    grid = grid[::-1].copy()  # image row 0 is the top; cell row 0 is the lowest y
-    return grid, resolution, (origin[0], origin[1])
+    found = read_map(path)
+    grid = np.full(found.occupancy.shape, FREE, dtype=np.uint8)
+    if unknown == "blocked":
+        grid[found.occupancy >= found.free_thresh] = NO_INFORMATION
+    grid[found.occupancy >= found.occupied_thresh] = LETHAL
+    return grid, found.resolution, found.origin
 
 
 def inflate(

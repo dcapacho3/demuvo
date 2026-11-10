@@ -283,7 +283,8 @@ def test_a_bad_map_file_is_refused(tmp_path, mutate):
 def test_a_world_uses_a_map_file_instead_of_its_obstacles(tmp_path):
     """The path is relative to the world file; the map's own resolution wins."""
     write_map(tmp_path, [[255] * 8] * 6)
-    loaded = world(tmp_path, '[costmap.global.static]\nsource = "m.yaml"')
+    with pytest.warns(UserWarning, match="origin"):  # the map's corner is not (0, 0)
+        loaded = world(tmp_path, '[costmap.global.static]\nsource = "m.yaml"')
     assert loaded.costmap.source == str(tmp_path / "m.yaml")
     costmap = build_costmaps(loaded)["a"]
     assert (costmap.resolution, costmap.origin) == (0.5, (1.0, 2.0))

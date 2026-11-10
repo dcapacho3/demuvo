@@ -139,6 +139,7 @@ plugins = ["static", "inflation"]
 
 [costmap.global.static]
 source = "generate"             # or the path of a map.yaml, relative to this file
+# unknown = "free"              # a map file only: "free" or "blocked" for unknown cells
 
 [costmap.global.inflation]
 inflation_radius = 0.55         # metres
@@ -147,8 +148,14 @@ cost_scaling_factor = 10.0
 
 A `map.yaml` and its `.pgm` image (the files a ROS map saver writes) replace the
 generated map, so a planner can be developed with no SLAM first. The image must be a
-PGM; the `mode` and `free_thresh` keys are ignored and unknown space counts as free.
-A map read from a file keeps its own resolution and origin.
+PGM, and the `mode` key is ignored. A cell is an obstacle from `occupied_thresh`
+(default 0.65) and free below `free_thresh` (default 0.25); between the two it is
+unknown. `unknown` in `[costmap.global.static]` says what unknown cells count as:
+`"free"` (default) or `"blocked"`, which a planner will not cross.
+A map read from a file keeps its own resolution and origin. A world file with a map may
+leave out `size` and `origin` in `[world]`: both then come from the map. With a `size`
+given, the origin is `[0.0, 0.0]` unless the file sets it, and a size or origin that
+differs from the map's gives a warning.
 
 ## Lidar and the local costmap
 

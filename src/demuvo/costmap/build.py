@@ -50,7 +50,7 @@ def build_costmaps(world: World) -> dict[str, Costmap | None]:
     elif spec.source == "generate":
         base = generate_static(world, resolution)
     else:
-        base, resolution, origin = load_static(Path(spec.source))
+        base, resolution, origin = load_static(Path(spec.source), spec.unknown)
     base.flags.writeable = False
     shared: dict[float | None, Costmap] = {}
     result = {}

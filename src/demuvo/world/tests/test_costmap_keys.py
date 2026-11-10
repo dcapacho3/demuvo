@@ -63,7 +63,8 @@ def test_no_warning_for_a_good_costmap_table(tmp_path):
 
 
 def test_a_map_path_is_taken_relative_to_the_world_file(tmp_path):
-    """The loader finds the file next to the world file; it does not read it."""
-    (tmp_path / "m.yaml").write_text("")
+    """The loader finds the file next to the world file."""
+    (tmp_path / "m.pgm").write_bytes(b"P5\n5 4\n255\n" + bytes([255] * 20))
+    (tmp_path / "m.yaml").write_text("image: m.pgm\nresolution: 1\norigin: [0, 0, 0]\n")
     spec = world(tmp_path, '[costmap.global.static]\nsource = "m.yaml"').costmap
     assert spec.source == str(tmp_path / "m.yaml")
