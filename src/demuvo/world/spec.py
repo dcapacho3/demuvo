@@ -186,6 +186,8 @@ class World:
             name, such as {"encoders": {"noise": 0.01, "ticks_per_rev": 2048}}.
         costmap: how the global costmap is built.
         local_costmap: how the local costmap of a robot with a lidar is built.
+        origin: where the lower-left corner of the world is, in metres. The world
+            spans from there to the origin plus `size`.
     """
 
     size: tuple[float, float]
@@ -197,3 +199,10 @@ class World:
     sensors: dict = field(default_factory=dict)
     costmap: CostmapSpec = field(default_factory=CostmapSpec)
     local_costmap: LocalCostmapSpec = field(default_factory=LocalCostmapSpec)
+    origin: tuple[float, float] = (0.0, 0.0)
+
+    @property
+    def bounds(self) -> tuple[float, float, float, float]:
+        """The corners of the world as (x_min, y_min, x_max, y_max)."""
+        (x, y), (width, height) = self.origin, self.size
+        return x, y, x + width, y + height

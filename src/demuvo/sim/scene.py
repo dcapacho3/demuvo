@@ -60,7 +60,7 @@ def parts_scene(bodies: Sequence[tuple[int, Sequence[Part]]]) -> Scene:
 
 def static_scene(world: World) -> Scene:
     """The border and the obstacles of the world, which never move."""
-    parts = border_parts(world.size)
+    parts = border_parts(world.bounds)
     for obstacle in world.obstacles:
         parts += obstacle.shape.parts(obstacle.pose)
     return parts_scene([(Scene.FIXED, parts)])

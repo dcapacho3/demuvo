@@ -71,7 +71,7 @@ def number(data: dict, key: str, label: str) -> float:
     return numbers([require_key(data, key, label)], 1, label, key, True)[0]
 
 
-def inside(points, size) -> bool:
-    """True if every point lies within the world, which spans (0, 0) to size."""
-    width, height = size
-    return all(0.0 <= x <= width and 0.0 <= y <= height for x, y in points)
+def inside(points, bounds) -> bool:
+    """True if every point lies within the bounds (x_min, y_min, x_max, y_max)."""
+    x0, y0, x1, y1 = bounds
+    return all(x0 <= x <= x1 and y0 <= y <= y1 for x, y in points)

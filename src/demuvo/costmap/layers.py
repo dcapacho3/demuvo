@@ -70,7 +70,7 @@ def generate_static(world: World, resolution: float) -> np.ndarray:
         ),
         dtype=np.uint8,
     )
-    parts = border_parts(world.size)
+    parts = border_parts(world.bounds)
     for obstacle in world.obstacles:
         parts += obstacle.shape.parts(obstacle.pose)
     for part in parts:

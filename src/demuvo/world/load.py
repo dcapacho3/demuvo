@@ -37,7 +37,7 @@ from .spec import (
 FORMAT_VERSION = 1
 
 
-def _parse_obstacle(item: dict, index: int, size) -> Obstacle:
+def _parse_obstacle(item: dict, index: int, bounds) -> Obstacle:
     """Build and check one `[[obstacle]]`."""
     label = f"obstacle {index}"
     item = table(item, label)
@@ -47,7 +47,7 @@ def _parse_obstacle(item: dict, index: int, size) -> Obstacle:
         pose = _pose(item, label)
     else:
         pose = Transform2D.identity()
-    if not inside(shape.points(pose), size):
+    if not inside(shape.points(pose), bounds):
         raise WorldError(f"{label}: must lie inside the world")
     return Obstacle(pose, shape)
 
@@ -133,7 +133,7 @@ def _warn_ignored_sensors(sensors: dict, estimator: str, label: str) -> None:
             )
 
 
-def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
+def _parse_robot(item: dict, index: int, bounds, names: set[str]) -> RobotSpec:
     """Build and check one `[[robot]]`; `names` holds the names read so far."""
     item = table(item, f"robot {index}")
     name = text(item, "name", f"robot {index}")
@@ -176,7 +176,7 @@ def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
     period = DEFAULT_CONTROL_PERIOD
     if "control_period" in item:
         period = number(item, "control_period", label)
-    if not inside(shape.points(pose), size):
+    if not inside(shape.points(pose), bounds):
         raise WorldError(f"{label}: 'pose' must lie inside the world")
     estimator = (
         text(item, "estimator", label) if "estimator" in item else "ground_truth"
@@ -213,7 +213,7 @@ def _parse_robot(item: dict, index: int, size, names: set[str]) -> RobotSpec:
     )
 
 
-def _parse_task(item: dict, index: int, size, robots: dict[str, RobotSpec]) -> Task:
+def _parse_task(item: dict, index: int, bounds, robots: dict[str, RobotSpec]) -> Task:
     """Build and check one `[[task]]`; the robot must be in `robots`."""
     label = f"task {index}"
     item = table(item, label)
@@ -222,7 +222,7 @@ def _parse_task(item: dict, index: int, size, robots: dict[str, RobotSpec]) -> T
     if name not in robots:
         raise WorldError(f"{label}: no robot named '{name}'")
     goal = _pose(item, label, "goal")
-    if not inside(robots[name].shape.points(goal), size):
+    if not inside(robots[name].shape.points(goal), bounds):
         raise WorldError(f"{label}: 'goal' must lie inside the world")
     tolerance = DEFAULT_GOAL_TOLERANCE
     if "goal_tolerance" in item:
@@ -418,19 +418,20 @@ def load_world(path: str | Path) -> World:
     world = table(require_key(data, "world", "file"), "world")
     check_keys(world, {"size", "seed", "dt"}, "world")
     size = numbers(require_key(world, "size", "world"), 2, "world", "size", True)
+    bounds = (0.0, 0.0, size[0], size[1])
     seed = require_key(world, "seed", "world")
     if not isinstance(seed, int) or isinstance(seed, bool):
         raise WorldError("world: 'seed' must be an integer")
     dt = number(world, "dt", "world") if "dt" in world else DEFAULT_DT
 
     obstacles = tuple(
-        _parse_obstacle(item, i, size)
+        _parse_obstacle(item, i, bounds)
         for i, item in enumerate(items(data, "obstacle"), start=1)
     )
 
     names: set[str] = set()
     robots = tuple(
-        _parse_robot(item, i, size, names)
+        _parse_robot(item, i, bounds, names)
         for i, item in enumerate(items(data, "robot"), start=1)
     )
     if not robots:
@@ -438,7 +439,7 @@ def load_world(path: str | Path) -> World:
 
     by_name = {r.name: r for r in robots}
     tasks = tuple(
-        _parse_task(item, i, size, by_name)
+        _parse_task(item, i, bounds, by_name)
         for i, item in enumerate(items(data, "task"), start=1)
     )
     sensors = _parse_sensors(data.get("sensors", {}), "file")

@@ -63,10 +63,10 @@ class Part:
         return min(xs) - r, min(ys) - r, max(xs) + r, max(ys) + r
 
 
-def border_parts(size: tuple[float, float]) -> list[Part]:
-    """The four walls along the border of a world of this size, in order round it."""
-    width, height = size
-    corners = [(0.0, 0.0), (width, 0.0), (width, height), (0.0, height)]
+def border_parts(bounds: tuple[float, float, float, float]) -> list[Part]:
+    """The four walls along the bounds (x_min, y_min, x_max, y_max), in order round."""
+    x0, y0, x1, y1 = bounds
+    corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
     return [Part((p, q)) for p, q in zip(corners, corners[1:] + corners[:1])]
 
 

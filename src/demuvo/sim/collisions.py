@@ -102,13 +102,12 @@ class Checker:
         self._shapes = {r.name: r.shape for r in world.robots}
         self._seen: dict[str, tuple[Transform2D, list[Part], Box]] = {}
         self._layers = dict(layers or {})
-        width, height = world.size
         self._fixed: list[tuple[str, Part]] = []
         for i, obstacle in enumerate(world.obstacles, start=1):
             for part in obstacle.shape.parts(obstacle.pose):
                 self._fixed.append((f"obstacle {i}", part))
-        self._fixed += [("border", part) for part in border_parts(world.size)]
-        self._tree = Quadtree((0.0, 0.0, width, height))
+        self._fixed += [("border", part) for part in border_parts(world.bounds)]
+        self._tree = Quadtree(world.bounds)
         for index, (_, part) in enumerate(self._fixed):
             self._tree.insert(index, part.box)
 

@@ -100,7 +100,7 @@ def test_parts_of_each_shape():
 
 def test_the_border_is_four_walls_that_close_a_loop():
     """Each wall starts where the one before ended, round the whole world."""
-    walls = border_parts((4.0, 3.0))
+    walls = border_parts((0.0, 0.0, 4.0, 3.0))
     assert [wall.vertices for wall in walls] == [
         ((0.0, 0.0), (4.0, 0.0)),
         ((4.0, 0.0), (4.0, 3.0)),
@@ -108,3 +108,10 @@ def test_the_border_is_four_walls_that_close_a_loop():
         ((0.0, 3.0), (0.0, 0.0)),
     ]
     assert all(wall.radius == 0.0 for wall in walls)
+
+
+def test_the_border_follows_the_bounds_when_they_do_not_start_at_zero():
+    """Walls round a world that spans (-2, -1) to (2, 2)."""
+    walls = border_parts((-2.0, -1.0, 2.0, 2.0))
+    assert walls[0].vertices == ((-2.0, -1.0), (2.0, -1.0))
+    assert walls[2].vertices == ((2.0, 2.0), (-2.0, 2.0))
