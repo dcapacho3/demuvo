@@ -68,3 +68,17 @@ def click(widget, x=None, y=None, outside=False):
     if outside:
         event = Event(widget.x - 50, widget.y - 50)
     widget.on_release(event)
+
+
+def ink(canvas, region=None):
+    """The darkness on a white canvas, in a region (x0, y0, x1, y1) if given."""
+    x0, y0, x1, y1 = region or (0, 0, canvas.width, canvas.height)
+    return float((1.0 - canvas.px[y0:y1, x0:x1, 0]).sum())
+
+
+def hosted(widget, rect=(10, 10, 120, 32)):
+    """Give a widget a fake host and a place."""
+    host = FakeHost()
+    widget.adopt(host)
+    widget.set_rect(*rect)
+    return host

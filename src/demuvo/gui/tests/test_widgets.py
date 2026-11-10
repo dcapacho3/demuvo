@@ -17,21 +17,7 @@ from demuvo.gui.widgets import (
     text_baseline,
 )
 
-from .fakes import FakeHost, click
-
-
-def ink(canvas, region=None):
-    """The darkness on a white canvas, in a region (x0, y0, x1, y1) if given."""
-    x0, y0, x1, y1 = region or (0, 0, canvas.width, canvas.height)
-    return float((1.0 - canvas.px[y0:y1, x0:x1, 0]).sum())
-
-
-def hosted(widget, rect=(10, 10, 100, 32)):
-    """Give a widget a host and a place."""
-    host = FakeHost()
-    widget.adopt(host)
-    widget.set_rect(*rect)
-    return host
+from .fakes import FakeHost, click, hosted, ink
 
 
 def test_added_widgets_know_their_parent_and_the_host_reaches_all_levels():
