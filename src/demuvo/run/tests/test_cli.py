@@ -21,7 +21,9 @@ def stand_in_window(monkeypatch):
         shown.append((session.mode, session.world.robots[0].name, seconds))
         return 0
 
+    real = cli.Session
     monkeypatch.setattr(cli, "show", show)
+    monkeypatch.setattr(cli, "Session", lambda world, mode, remote: real(world, mode))
     return shown
 
 
@@ -77,6 +79,51 @@ def test_bench_opens_a_fixed_benchmark_and_no_file_a_blank_sandbox(windows):
     assert main([DEMO, "--bench"]) == 0
     assert main([]) == 0
     assert windows == [("benchmark", "r1", None), ("sandbox", "r1", None)]
+
+
+def test_the_simulation_gets_a_process_of_its_own_unless_told_not_to(monkeypatch):
+    """`remote` is True by default, False with --one-process; the session closes."""
+    seen, closed = [], []
+
+    class Probe:
+        """A session stand-in."""
+
+        def __init__(self, _world, _mode, remote):
+            seen.append(remote)
+
+        def close(self):
+            """Note the close."""
+            closed.append(1)
+
+    monkeypatch.setattr(cli, "Session", Probe)
+    monkeypatch.setattr(cli, "show", lambda session, seconds: 0)
+    assert main([DEMO]) == 0 and main([DEMO, "--one-process"]) == 0
+    assert seen == [True, False] and closed == [1, 1]
+
+
+def test_the_session_is_closed_even_if_the_window_fails(monkeypatch):
+    """A crash in the window does not leave the worker running."""
+    closed = []
+
+    class Probe:
+        """A session stand-in."""
+
+        def __init__(self, _world, _mode, remote):
+            """Nothing to set up."""
+            assert remote
+
+        def close(self):
+            """Note the close."""
+            closed.append(1)
+
+    def crash(session, seconds):
+        raise RuntimeError("window")
+
+    monkeypatch.setattr(cli, "Session", Probe)
+    monkeypatch.setattr(cli, "show", crash)
+    with pytest.raises(RuntimeError):
+        main([DEMO])
+    assert closed == [1]
 
 
 def test_dt_replaces_the_step_length_of_the_file(monkeypatch):

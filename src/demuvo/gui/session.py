@@ -17,6 +17,7 @@ from .. import edit, options
 from ..runner import Run
 from ..verify import WorldError
 from ..world import World
+from .remote import RemoteRun
 from .scenedraw import SceneDraw
 
 MODES = ("sandbox", "benchmark")
@@ -40,6 +41,7 @@ class Session:
     Args:
         source: a world file, or a `World`; None in the sandbox starts a blank world.
         mode: "sandbox" or "benchmark".
+        remote: True to simulate in a process of its own, so drawing never waits.
 
     Attributes:
         mode: "sandbox" or "benchmark".
@@ -54,7 +56,11 @@ class Session:
     """
 
     def __init__(
-        self, source: str | World | None = None, mode: str = "sandbox"
+        self,
+        source: str | World | None = None,
+        mode: str = "sandbox",
+        *,
+        remote: bool = False,
     ) -> None:
         """Open the world."""
         if mode not in MODES:
@@ -62,8 +68,11 @@ class Session:
         if mode == "benchmark" and source is None:
             raise ValueError("a benchmark needs a world file")
         self.mode = mode
-        self.run = Run(edit.new_world() if source is None else source)
+        world = edit.new_world() if source is None else source
+        self.run = RemoteRun(world) if remote else Run(world)
         self.scene = SceneDraw(self.run)
+        self._seen = 0.0
+        self._owed = 0.0
         self.tool = "select"
         self.playing = False
         self.speed = 1.0
@@ -104,14 +113,14 @@ class Session:
         except ValueError as error:
             return REFUSED.format(error)
         keep = self.scene.selected if select is None else (select or None)
+        self.run.set_world(world)
         if rebuild:
             old = self.scene
-            self.run = Run(world)
             self.scene = SceneDraw(self.run)
             self.scene.layers, self.scene.palette = old.layers, old.palette
         else:
-            self.run.set_world(world)
             self.scene.set_run(self.run)
+        self._seen = 0.0
         self.scene.selected = keep
         self.scene.fit(self.scene.view.rect)
         return None
@@ -221,21 +230,39 @@ class Session:
         self.playing = not self.playing
 
     def advance(self, seconds: float) -> None:
-        """Advance a playing run by real seconds, at the chosen speed."""
+        """Take the run's news; if playing, advance it by real seconds at the speed.
+
+        Time is counted in whole steps and the rest is carried to the next frame, so
+        a fast frame rate does not make the run go faster than real time.
+        """
+        self.run.poll()
         if self.playing:
-            self.run.advance(min(seconds, MAX_FRAME) * self.speed)
+            self._owed += min(seconds, MAX_FRAME) * self.speed
+            steps = int(self._owed / self.run.sim.dt)
+            if steps:
+                self._owed -= steps * self.run.sim.dt
+                self.run.advance(steps * self.run.sim.dt)
+        if self.run.time != self._seen:
+            self._seen = self.run.time
             self.scene.record_trails()
 
     def step_once(self) -> None:
         """Advance by about one control period."""
         self.run.step(max(1, round(STEP_SECONDS / self.run.sim.dt)))
+        self._seen = self.run.time
         self.scene.record_trails()
 
     def reset(self) -> None:
         """End the run, go back to time zero and unlock editing."""
         self.playing = False
+        self._owed = 0.0
         self.run.reset()
         self.scene.set_run(self.run)
+        self._seen = 0.0
+
+    def close(self) -> None:
+        """Stop the simulation process, if there is one."""
+        self.run.close()
 
     def heading_to(self, name: str, x: float, y: float) -> float:
         """The heading from a robot towards a world point."""

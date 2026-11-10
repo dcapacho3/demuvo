@@ -1,12 +1,15 @@
 """Tests for a session: modes, locks, edits and the run, with no widgets."""
 
 import dataclasses
+import multiprocessing
+import threading
+import time
 from pathlib import Path
 
 import pytest
 
 from demuvo import edit
-from demuvo.gui import look
+from demuvo.gui import look, remote
 from demuvo.gui import session as module
 from demuvo.gui.session import Session
 
@@ -207,6 +210,14 @@ def test_playing_advances_the_run_at_the_speed_and_a_slow_frame_is_capped(sandbo
     assert not sandbox.playing
 
 
+def test_a_fast_frame_rate_does_not_make_the_run_faster_than_real_time(sandbox):
+    """Twenty frames of 4 ms are 0.08 s of time, not one step a frame."""
+    sandbox.toggle_play()
+    for _ in range(20):
+        sandbox.advance(0.004)
+    assert sandbox.run.time == pytest.approx(0.08, abs=0.011)
+
+
 def test_a_step_is_about_a_control_period_and_reset_goes_back_to_zero(sandbox):
     """5 steps of 0.01 s; reset empties the trail and unlocks editing."""
     sandbox.step_once()
@@ -221,3 +232,51 @@ def test_the_heading_to_a_point_is_the_angle_from_the_robot(sandbox):
     """r1 is in the middle at (5, 3); a point straight above is 90 degrees."""
     assert sandbox.heading_to("r1", 5.0, 5.0) == pytest.approx(1.5707963)
     assert sandbox.heading_to("r1", 9.0, 3.0) == pytest.approx(0.0)
+
+
+@pytest.fixture(name="remote_session")
+def thread_served(monkeypatch):
+    """A session whose simulation is a worker served from a thread."""
+    ends = []
+
+    def make(world):
+        parent, child = multiprocessing.Pipe()
+        threading.Thread(target=remote.serve, args=(child,), daemon=True).start()
+        ends.append(parent)
+        return remote.RemoteRun(world, connection=parent)
+
+    monkeypatch.setattr(module, "RemoteRun", make)
+    session = Session(remote=True)
+    yield session
+    session.close()
+
+
+def test_a_remote_session_edits_and_resets_like_a_local_one(remote_session):
+    """Adding a robot and a goal go through the worker; reset returns to zero."""
+    assert remote_session.add_robot() is None
+    assert [r.name for r in remote_session.world.robots] == ["r1", "r2"]
+    assert set(remote_session.run.poses) == {"r1", "r2"}
+    assert remote_session.set_goal("r1", (8.0, 1.0, 0.0)) is None
+    remote_session.step_once()
+    assert (
+        remote_session.run.time == pytest.approx(0.05) and not remote_session.editable
+    )
+    remote_session.reset()
+    assert remote_session.run.time == 0.0 and remote_session.editable
+
+
+def test_playing_a_remote_session_takes_news_and_records_each_time_once(
+    remote_session,
+):
+    """Advance asks the worker; later calls bring the poses and one trail point."""
+    remote_session.toggle_play()
+    end = time.perf_counter() + 10
+    while remote_session.run.time == 0.0:
+        remote_session.advance(0.05)
+        assert time.perf_counter() < end
+        time.sleep(0.002)
+    points = len(remote_session.scene.trails["r1"])
+    remote_session.toggle_play()
+    remote_session.advance(0.05)
+    remote_session.advance(0.05)
+    assert len(remote_session.scene.trails["r1"]) in (points, points + 1)

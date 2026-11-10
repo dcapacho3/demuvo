@@ -139,3 +139,10 @@ def test_an_unknown_robot_is_refused(method):
     """The same plain message for every question about a robot."""
     with pytest.raises(WorldError, match="no robot named 'x'"):
         getattr(Run(DEMO), method)("x")
+
+
+def test_a_run_in_this_process_has_no_news_to_take_and_nothing_to_close():
+    """`poll` is False and `close` does nothing, so a window can call both."""
+    run = Run(DEMO)
+    assert run.poll() is False
+    assert run.close() is None

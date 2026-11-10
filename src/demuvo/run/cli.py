@@ -11,6 +11,7 @@ from dataclasses import replace
 
 from ..gui.app import show
 from ..gui.session import Session
+from ..runner import Run
 from ..world import load_world
 
 
@@ -41,6 +42,11 @@ def _parser() -> argparse.ArgumentParser:
         help="print what each robot did when the window closes",
     )
     parser.add_argument(
+        "--one-process",
+        action="store_true",
+        help="simulate in the window's process, not in one of its own",
+    )
+    parser.add_argument(
         "--seconds", type=float, help="close the window after this long"
     )
     return parser
@@ -63,22 +69,34 @@ def main(argv: list[str] | None = None) -> int:
         world = load_world(args.world) if args.world else None
         if world is not None and args.dt is not None:
             world = replace(world, dt=args.dt)
-        session = Session(world, "benchmark" if args.bench else "sandbox")
+        if world is not None:
+            Run(world)  # the world must run, whatever happens next
+        if args.check:
+            return _check(world, args.world)
+        mode = "benchmark" if args.bench else "sandbox"
+        session = Session(world, mode, remote=not args.one_process)
     except (OSError, ValueError) as error:
         print(f"demuvo: {where}{error}", file=sys.stderr)
         return 1
-    if args.check:
-        if world is None:
-            print("demuvo: --check needs a world file", file=sys.stderr)
-            return 1
-        print(
-            f"{args.world}: ok, {_count(len(world.obstacles), 'obstacle')}, "
-            f"{_count(len(world.robots), 'robot')}"
-        )
-        return 0
-    code = show(session, args.seconds)
-    if code == 0 and args.result:
-        lines = session.run.result()
-        if lines:
-            print("\n".join(lines))
+    try:
+        code = show(session, args.seconds)
+        if code == 0 and args.result:
+            lines = session.run.result()
+            if lines:
+                print("\n".join(lines))
+    finally:
+        session.close()
     return code
+
+
+def _check(world, name: str) -> int:
+    """Print a summary of a world that loaded and ran; there is none without a file."""
+    if world is None:
+        print("demuvo: --check needs a world file", file=sys.stderr)
+        return 1
+    obstacles, robots = (
+        _count(len(world.obstacles), "obstacle"),
+        _count(len(world.robots), "robot"),
+    )
+    print(f"{name}: ok, {obstacles}, {robots}")
+    return 0

@@ -68,6 +68,13 @@ class Run:
         self.nav = Navigation(self.world)
         self.nav.check(self.sim.dt)
 
+    def poll(self) -> bool:
+        """Take news from a simulation that runs elsewhere; here there is none."""
+        return False
+
+    def close(self) -> None:
+        """Release what the run holds; a run in this process holds nothing."""
+
     def set_world(self, world: World) -> None:
         """Run another world, for instance after an edit, from time zero."""
         self.world = world
