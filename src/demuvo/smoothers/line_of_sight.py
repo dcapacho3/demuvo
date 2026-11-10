@@ -57,7 +57,7 @@ class LineOfSight:
         if self._costmap is None:
             raise ValueError("LineOfSight is not configured; call configure first")
         points = path[:, :2]
-        rows, cols = self._cells(points)
+        rows, cols = self._costmap.cells(points)
         height, width = self._costmap.data.shape
         off = (rows < 0) | (rows >= height) | (cols < 0) | (cols >= width)
         if off.any():
@@ -77,13 +77,6 @@ class LineOfSight:
             kept.append(j)
             i = j
         return self._resample(points[kept], path[-1, 2])
-
-    def _cells(self, xy: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """The (row, column) of the cell that holds each point (m, 2)."""
-        costmap = self._costmap
-        scaled = (xy - costmap.origin) / costmap.resolution
-        cells = np.floor(np.round(scaled, 9)).astype(int)
-        return cells[:, 1], cells[:, 0]
 
     def _line_cells(
         self, a: np.ndarray, b: np.ndarray
@@ -119,7 +112,7 @@ class LineOfSight:
     def _clear(self, a: np.ndarray, b: np.ndarray, limit: int) -> bool:
         """True if the line from a to b crosses only free cells of cost up to limit."""
         rows, cols = self._line_cells(a, b)
-        first_row, first_col = self._cells(a[None])
+        first_row, first_col = self._costmap.cells(a[None])
         seen = self._costmap.data[rows, cols].astype(int)
         seen = seen[(rows != first_row[0]) | (cols != first_col[0])]
         return seen.size == 0 or (seen.max() < INSCRIBED and seen.max() <= limit)

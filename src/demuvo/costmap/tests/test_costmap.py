@@ -70,6 +70,17 @@ def test_cells_and_world_positions_match():
     assert costmap.world_to_cell(*costmap.cell_to_world(2, 3)) == (2, 3)
 
 
+def test_many_points_are_looked_up_at_once():
+    """The array lookup agrees with the single-point one, edges and outside included."""
+    costmap = Costmap(np.zeros((4, 6), np.uint8), 0.5, (1.0, 2.0))
+    points = np.array([[1.2, 2.2], [3.9, 3.9], [1.5, 2.5], [0.0, 9.0]])
+    rows, cols = costmap.cells(points)
+    assert [(int(r), int(c)) for r, c in zip(rows, cols)] == [
+        costmap.world_to_cell(*point) for point in points
+    ]
+    assert (rows.tolist(), cols.tolist()) == ([0, 3, 1, 14], [0, 5, 1, -2])
+
+
 def test_outside_the_grid_has_no_information():
     """A point off the grid is out of bounds and its cost is unknown."""
     data = np.full((2, 2), 7, np.uint8)

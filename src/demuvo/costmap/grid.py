@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -33,11 +32,20 @@ class Costmap:
     resolution: float
     origin: tuple[float, float] = (0.0, 0.0)
 
+    def cells(self, xy: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """The (rows, columns) of the cells that hold the points (m, 2).
+
+        A point may lie outside the grid. The rounding keeps a point on a cell edge
+        from landing in the wrong cell through float noise.
+        """
+        scaled = (np.asarray(xy, dtype=float) - self.origin) / self.resolution
+        cells = np.floor(np.round(scaled, 9)).astype(int)
+        return cells[:, 1], cells[:, 0]
+
     def world_to_cell(self, x: float, y: float) -> tuple[int, int]:
         """The (row, column) of the cell that holds the point; it may be outside."""
-        col = math.floor(round((x - self.origin[0]) / self.resolution, 9))
-        row = math.floor(round((y - self.origin[1]) / self.resolution, 9))
-        return row, col
+        rows, cols = self.cells(np.array([[x, y]]))
+        return int(rows[0]), int(cols[0])
 
     def cell_to_world(self, row: int, col: int) -> tuple[float, float]:
         """The world position of the centre of a cell."""
