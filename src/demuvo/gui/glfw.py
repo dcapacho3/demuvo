@@ -55,11 +55,26 @@ FUNCTIONS = {
 }
 
 
-def load_library():
-    """Open the GLFW library.
+def open_library(names, install: str):
+    """Open the first of some shared libraries that loads.
 
-    Returns:
-        The ctypes library.
+    Args:
+        names: file names or paths; empty ones are skipped.
+        install: what to tell the user if none loads.
+
+    Raises:
+        RuntimeError: if none loads.
+    """
+    for name in filter(None, names):
+        try:
+            return ctypes.CDLL(name)
+        except OSError:
+            continue
+    raise RuntimeError(install)
+
+
+def load_library():
+    """Open the GLFW library; see `ENVIRONMENT` to name one.
 
     Raises:
         RuntimeError: if it cannot be found, with how to install it.
@@ -69,13 +84,8 @@ def load_library():
         ctypes.util.find_library("glfw"),
         "libglfw.so.3",
     ]
-    for name in filter(None, names):
-        try:
-            return ctypes.CDLL(name)
-        except OSError:
-            continue
-    raise RuntimeError(
-        "GLFW is not installed; on Ubuntu run: sudo apt install libglfw3"
+    return open_library(
+        names, "GLFW is not installed; on Ubuntu run: sudo apt install libglfw3"
     )
 
 

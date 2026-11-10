@@ -1,11 +1,6 @@
 """Tests for the GLFW binding: against a stand-in library, and against the real one."""
 
 import ctypes
-import os
-import shutil
-import subprocess
-import sys
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -13,7 +8,7 @@ import pytest
 from demuvo.gui import glfw as binding
 from demuvo.gui.glfw import Glfw
 
-SRC = Path(__file__).resolve().parents[3]
+from .fakes import on_virtual_display
 
 
 def require_library():
@@ -195,16 +190,8 @@ print("window ok")
 """
 
 
-@pytest.mark.skipif(shutil.which("xvfb-run") is None, reason="needs a virtual display")
 def test_the_real_library_opens_a_window_on_a_virtual_display():
     """A hidden window of 200 by 120: sizes, events, close flag, destroy."""
     require_library()
-    result = subprocess.run(
-        ["xvfb-run", "-a", sys.executable, "-I", "-c", SNIPPET.format(src=str(SRC))],
-        capture_output=True,
-        text=True,
-        timeout=60,
-        env={**os.environ, "PYTHONPATH": ""},
-        check=False,
-    )
+    result = on_virtual_display(SNIPPET)
     assert "window ok" in result.stdout, result.stderr

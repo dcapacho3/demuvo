@@ -1,6 +1,16 @@
 """A stand-in for the window, so a widget can be tested alone."""
 
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
 from demuvo.gui.widgets import Event
+
+SRC = Path(__file__).resolve().parents[3]
 
 
 class FakeHost:
@@ -82,3 +92,21 @@ def hosted(widget, rect=(10, 10, 120, 32)):
     widget.adopt(host)
     widget.set_rect(*rect)
     return host
+
+
+def on_virtual_display(snippet):
+    """Run a Python snippet on a virtual display and return its finished process.
+
+    The snippet may use `{src}` for the source folder, which is put on its path.
+    The test is skipped if no virtual display is installed.
+    """
+    if shutil.which("xvfb-run") is None:
+        pytest.skip("needs a virtual display")
+    return subprocess.run(
+        ["xvfb-run", "-a", sys.executable, "-I", "-c", snippet.format(src=str(SRC))],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env={**os.environ, "PYTHONPATH": ""},
+        check=False,
+    )
