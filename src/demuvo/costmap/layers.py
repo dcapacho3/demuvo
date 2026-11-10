@@ -36,20 +36,30 @@ def distance_to_part(points: np.ndarray, part: Part) -> np.ndarray:
     return np.maximum(d - part.radius, 0.0)
 
 
-def _mark(grid: np.ndarray, part: Part, resolution: float) -> None:
-    """Set to LETHAL every cell whose centre is within half a cell of the part."""
+def _mark(
+    grid: np.ndarray,
+    part: Part,
+    resolution: float,
+    origin: tuple[float, float] = (0.0, 0.0),
+) -> None:
+    """Set to LETHAL every cell whose centre is within half a cell of the part.
+
+    The origin is the world position of the corner of cell (0, 0).
+    """
     reach = part.radius + resolution
     x0, y0, x1, y1 = part.box
-    c0, c1 = math.floor((x0 - reach) / resolution), math.ceil((x1 + reach) / resolution)
-    r0, r1 = math.floor((y0 - reach) / resolution), math.ceil((y1 + reach) / resolution)
+    ox, oy = origin
+    c0 = math.floor((x0 - reach - ox) / resolution)
+    c1 = math.ceil((x1 + reach - ox) / resolution)
+    r0 = math.floor((y0 - reach - oy) / resolution)
+    r1 = math.ceil((y1 + reach - oy) / resolution)
     c0, r0 = max(c0, 0), max(r0, 0)
     c1, r1 = min(c1, grid.shape[1]), min(r1, grid.shape[0])
     if c0 >= c1 or r0 >= r1:
         return
     rows, cols = np.mgrid[r0:r1, c0:c1]
-    centres = (
-        np.stack([(cols.ravel() + 0.5), (rows.ravel() + 0.5)], axis=1) * resolution
-    )
+    centres = np.stack([cols.ravel() + 0.5, rows.ravel() + 0.5], axis=1)
+    centres = centres * resolution + origin
     # the small margin keeps a wall on a cell edge from slipping between two cells
     near = distance_to_part(centres, part) <= resolution / 2 + 1e-9
     grid[rows.ravel()[near], cols.ravel()[near]] = LETHAL
@@ -58,11 +68,14 @@ def _mark(grid: np.ndarray, part: Part, resolution: float) -> None:
 def generate_static(world: World, resolution: float) -> np.ndarray:
     """The obstacles and the border of the world as cells.
 
+    Cell (0, 0) has its corner at the world's origin.
+
     A cell is LETHAL when its centre lies within half a cell of a shape, so a
     shape never hides between cells; a cell touching a shape's corner can be
     marked a little early.
     """
     width, height = world.size
+    origin = world.origin
     grid = np.zeros(
         (
             math.ceil(round(height / resolution, 9)),
@@ -74,7 +87,7 @@ def generate_static(world: World, resolution: float) -> np.ndarray:
     for obstacle in world.obstacles:
         parts += obstacle.shape.parts(obstacle.pose)
     for part in parts:
-        _mark(grid, part, resolution)
+        _mark(grid, part, resolution, origin)
     return grid
 
 

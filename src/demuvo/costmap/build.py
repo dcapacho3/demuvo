@@ -43,7 +43,7 @@ def build_costmaps(world: World) -> dict[str, Costmap | None]:
     spec = world.costmap
     if not spec.enabled:
         return {r.name: None for r in world.robots}
-    origin = (0.0, 0.0)
+    origin = world.origin
     resolution = spec.resolution
     if "static" not in spec.plugins:
         base = np.zeros(generate_static(world, resolution).shape, dtype=np.uint8)

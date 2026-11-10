@@ -1,9 +1,11 @@
 """Tests for the costmap - cells, layers and building."""
 
+import dataclasses
 import math
 
 import numpy as np
 import pytest
+from robomath import Transform2D
 
 from demuvo import load_world
 from demuvo.costmap import (
@@ -103,6 +105,21 @@ def test_the_static_layer_marks_the_obstacles_and_the_border(tmp_path):
     assert costmap.cost_at(3.95, 1.5) == LETHAL
     assert costmap.cost_at(1.0, 1.5) == FREE
     assert costmap.cost_at(1.0, 0.8) == FREE
+
+
+def test_a_moved_world_gives_the_same_cells_at_the_moved_origin(tmp_path):
+    """Moving the origin and the obstacles by the same offset moves the map."""
+    base = world(tmp_path)
+    shift = Transform2D.from_xyt(np.array([-2.0, 1.0, 0.0]))
+    moved = dataclasses.replace(
+        base,
+        origin=(-2.0, 1.0),
+        obstacles=[dataclasses.replace(o, pose=shift @ o.pose) for o in base.obstacles],
+    )
+    assert (generate_static(moved, 0.1) == generate_static(base, 0.1)).all()
+    costmap = build_costmaps(moved)["a"]
+    assert costmap.origin == (-2.0, 1.0)
+    assert costmap.cost_at(0.0, 2.5) == LETHAL  # the box, moved from (2.0, 1.5)
 
 
 def test_a_thin_wall_leaves_no_gap(tmp_path):
