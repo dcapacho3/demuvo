@@ -98,9 +98,10 @@ def test_a_run_with_no_tasks_is_never_finished():
 def test_the_scans_of_a_lidar_robot_are_placed_in_the_world():
     """Two lidars of 90 beams each, with their origin at the robot's pose."""
     run = Run(LIDAR)
-    assert run.scans("r1") == []
+    assert not run.scans("r1")
     run.step(30)
-    front, rear = run.scans("r1")
+    scans = run.scans("r1")
+    front, rear = scans[0], scans[1]
     assert len(front.angles) == len(front.ranges) == 90
     assert front.max_range == 4.0
     x, y, yaw = run.poses["r1"]
@@ -114,7 +115,7 @@ def test_a_robot_without_a_lidar_has_no_scans_and_no_local_costmap():
     """The demo has neither."""
     run = Run(DEMO)
     run.step(20)
-    assert run.scans("r1") == []
+    assert not run.scans("r1")
     assert run.local_costmap("r1") is None
 
 

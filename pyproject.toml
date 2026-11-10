@@ -11,7 +11,7 @@ authors = [
 description = "A small, deterministic 2D world for robots."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["numpy", "robomath>=0.1.5"]
+dependencies = ["numpy", "robomath>=0.1.5", "fonttools>=4.40"]
 keywords = ["robotics", "simulator", "2d", "kinematics", "lidar", "odometry", "numpy"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
@@ -47,6 +47,9 @@ dev = [
   # Only the tests use it, to check our results against another library.
   "shapely>=2",
 ]
+
+[tool.setuptools.package-data]
+"demuvo.gui" = ["assets/*"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
