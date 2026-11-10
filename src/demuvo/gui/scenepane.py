@@ -20,8 +20,8 @@ class ScenePane(Widget):
         session: the session whose scene it shows.
         pill: the playback pill.
         actions: an object that is told what the mouse did; it has
-            `selected(name)`, `goal_set(name, x, y, heading)`,
-            `dropped(name, x, y, angle)` and `scene_changed()`.
+            `select(name)`, `goal_set(name, x, y, heading)`,
+            `dragged()` and `dropped(name, x, y, angle)`.
     """
 
     def __init__(self, session: Session, pill: Pill, actions) -> None:
@@ -68,7 +68,7 @@ class ScenePane(Widget):
             heading = session.heading_to(scene.selected, x, y)
             self.actions.goal_set(scene.selected, x, y, heading)
             return
-        self.actions.selected(name)
+        self.actions.select(name)
         if name and session.editable:
             self.dragging = name
             x, y = scene.view.to_world(event.x, event.y)
@@ -83,7 +83,7 @@ class ScenePane(Widget):
             x, y = scene.view.to_world(event.x, event.y)
             angle = float(scene.pose(self.dragging)[2])
             scene.drag(self.dragging, x + self.grab[0], y + self.grab[1], angle)
-            self.actions.scene_changed()
+            self.actions.dragged()
 
     def on_release(self, event: Event) -> None:
         """Drop the dragged robot where it is."""

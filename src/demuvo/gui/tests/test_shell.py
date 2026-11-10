@@ -320,14 +320,12 @@ def test_a_focused_number_field_takes_the_keys_it_uses_and_passes_the_rest_on(to
     toy.char("x")
 
 
-def test_keys_that_the_shell_owns_toggle_the_panels_and_quit(toy):
-    """Ctrl+1 and Ctrl+2 slide the panels; Ctrl+Q ends; others go to `command`."""
-    toy.key(KEY["1"], 1, CTRL)
-    assert toy.layout.docks["left"].open is False
-    toy.key(KEY["2"], 1, CTRL)
-    assert toy.layout.docks["right"].open is False
+def test_ctrl_q_quits_and_other_keys_go_to_the_programs_commands(toy):
+    """Ctrl+Q asks to end; Ctrl+1 and a plain key reach `command`."""
     toy.key(KEY["q"], 1, CTRL)
     assert toy.quit_requested
+    toy.key(KEY["1"], 1, CTRL)
+    assert toy.program.commands[-1] == (KEY["1"], True)
     toy.key(KEY["g"], 1, 0)
     assert toy.program.commands[-1] == (KEY["g"], False)
 

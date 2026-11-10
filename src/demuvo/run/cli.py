@@ -49,6 +49,10 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="print what each robot did when the window closes",
     )
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv[:1] == ["gui"]:  # the sandbox window, in its own package
+        return importlib.import_module("demuvo.gui.app").main(argv[1:])
     args = parser.parse_args(argv)
 
     try:

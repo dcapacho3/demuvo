@@ -18,7 +18,7 @@ class Actions:
         """Keep the session, so a goal or a drop can be applied as the window does."""
         self.session, self.log = session, []
 
-    def selected(self, name):
+    def select(self, name):
         """Note a selection and make it."""
         self.log.append(("selected", name))
         self.session.select(name)
@@ -33,9 +33,9 @@ class Actions:
         self.log.append(("dropped", name, round(x, 2), round(y, 2)))
         self.session.move_robot(name, (x, y, angle))
 
-    def scene_changed(self):
-        """Note a change."""
-        self.log.append(("changed",))
+    def dragged(self):
+        """Note a drag."""
+        self.log.append(("dragged",))
 
 
 def build(session=None):
@@ -101,7 +101,7 @@ def test_dragging_a_robot_moves_it_and_dropping_applies_the_place():
     tx, ty = at(pane, 2.1, 2.0)
     pane.on_move(Event(tx, ty))
     assert tuple(session.scene.pose("r1")[:2]) == pytest.approx((2.0, 2.0), abs=0.02)
-    assert ("changed",) in actions.log
+    assert ("dragged",) in actions.log
     pane.on_release(Event(tx, ty))
     assert actions.log[-1][:2] == ("dropped", "r1")
     assert tuple(session.run.poses["r1"][:2]) == pytest.approx((2.0, 2.0), abs=0.02)

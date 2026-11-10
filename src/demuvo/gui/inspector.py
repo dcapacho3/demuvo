@@ -189,7 +189,9 @@ class Inspector:
         session = self.session
         ok = session.editable
         notes = {
-            "bench": "This is a benchmark world. It is fixed, so every run is alike.",
+            "bench": (
+                "This is a benchmark world. It is fixed, so every run is the same."
+            ),
             "run": "A run is in progress. Press Reset (R) to edit again.",
             "edit": "",
         }

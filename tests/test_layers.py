@@ -38,7 +38,7 @@ ALLOWED = {
     "runner": {"costmap", "evaluation", "nav", "sim", "verify", "world"},
     "edit": {"models", "nav", "options", "plugins", "sim", "verify", "world"},
     "view": {"models", "sim", "world"},
-    "run": {"evaluation", "nav", "sim", "world"},
+    "run": {"evaluation", "gui", "nav", "sim", "world"},
 }
 
 

@@ -525,10 +525,6 @@ class Input:
             if shell.focus is not None:
                 self.set_focus(None)
                 shell.keyboard_focus = False
-        elif event.ctrl and key == KEY["1"]:
-            shell.layout.slide("left", not shell.layout.docks["left"].open)
-        elif event.ctrl and key == KEY["2"]:
-            shell.layout.slide("right", not shell.layout.docks["right"].open)
         elif event.ctrl and key == KEY["q"]:
             shell.quit_requested = True
         else:
