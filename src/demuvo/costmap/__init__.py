@@ -14,6 +14,7 @@ from .grid import (
     NO_INFORMATION,
     Costmap,
 )
+from .local import LocalCostmap, LocalSettings
 
 __all__ = [
     "FREE",
@@ -22,6 +23,8 @@ __all__ = [
     "MAX_NON_OBSTACLE",
     "NO_INFORMATION",
     "Costmap",
+    "LocalCostmap",
+    "LocalSettings",
     "build_costmaps",
     "inscribed_radius",
 ]

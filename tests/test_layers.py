@@ -17,7 +17,7 @@ ALLOWED = {
     "models": {"plugins", "verify"},
     "sensing": {"models"},
     "world": {"verify", "models", "sensing"},
-    "costmap": {"verify", "world"},
+    "costmap": {"plugins", "sensing", "verify", "world"},
     "sim": {"costmap", "models", "sensing", "world"},
     "planners": {"costmap", "paths", "plugins", "world"},
     "smoothers": {"costmap", "paths", "plugins"},
