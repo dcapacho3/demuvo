@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from typing import ClassVar, Protocol
 
 from robomath import Transform2D
+
+# The fields of a Twist, in order. A tuple is much faster to walk than `fields()`,
+# and `Twist` is built several times per robot and step.
+FIELDS = ("vx", "vy", "vz", "wx", "wy", "wz")
 
 
 @dataclass(frozen=True)
@@ -30,9 +34,9 @@ class Twist:
 
     def __post_init__(self) -> None:
         """Refuse nan and infinity, so they never become a speed."""
-        for field in fields(self):
-            if not math.isfinite(getattr(self, field.name)):
-                raise ValueError(f"{field.name} must be finite, got {self}")
+        for name in FIELDS:
+            if not math.isfinite(getattr(self, name)):
+                raise ValueError(f"{name} must be finite, got {self}")
 
 
 class Model(Protocol):

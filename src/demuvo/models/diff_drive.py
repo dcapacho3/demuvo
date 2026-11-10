@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import warnings
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from typing import ClassVar
 
 import numpy as np
 from robomath import Transform2D
 
 from ..plugins import check_positive
-from .base import Twist
+from .base import FIELDS, Twist
+
+_USES = ("vx", "wz")
+_UNUSED = tuple(name for name in FIELDS if name not in _USES)
 
 
 @dataclass(frozen=True)
@@ -38,7 +41,7 @@ class DiffDrive:
     track: float = 0.3
 
     name: ClassVar[str] = "diff_drive"
-    uses: ClassVar[tuple[str, ...]] = ("vx", "wz")
+    uses: ClassVar[tuple[str, ...]] = _USES
 
     def __post_init__(self) -> None:
         """Refuse a wheel size that is not a positive number."""
@@ -49,11 +52,7 @@ class DiffDrive:
 
         Warns once if the command asks for something the robot cannot do.
         """
-        ignored = [
-            f.name
-            for f in fields(command)
-            if f.name not in self.uses and getattr(command, f.name) != 0.0
-        ]
+        ignored = [name for name in _UNUSED if getattr(command, name) != 0.0]
         if ignored:
             warnings.warn(f"{self.name} ignores {', '.join(ignored)}")
         return Twist(
