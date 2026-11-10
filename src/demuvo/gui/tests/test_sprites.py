@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from demuvo.gui.raster import Canvas
-from demuvo.gui.sprites import Sprite, draw_sprites
+from demuvo.gui.raster import Canvas, rgba
+from demuvo.gui.sprites import Sprite, SpriteCache, draw_sprites, render_sprite
 
 
 def disc(size=6, color=(1.0, 0.0, 0.0)):
@@ -94,3 +94,45 @@ def test_no_sprites_or_none_inside_change_nothing():
     draw_sprites(canvas, [], [], [])
     draw_sprites(canvas, [disc()], [99], [99])
     assert (1.0 - canvas.px).sum() == 0.0
+
+
+def test_a_sprite_made_by_a_drawing_function_has_its_colour_and_its_soft_edge():
+    """A teal disc: opaque teal in the middle, a soft edge, a clear corner."""
+
+    def draw(canvas, cx, cy):
+        canvas.circle((cx, cy), 6, fill=rgba("#1fb5a6"))
+
+    sprite = render_sprite(16, draw)
+    assert sprite.width == sprite.height == 17
+    middle = sprite.rgba[8, 8]
+    assert middle[3] == pytest.approx(1.0)
+    assert middle[:3].tolist() == pytest.approx(list(rgba("#1fb5a6")[:3]), abs=0.01)
+    assert 0.0 < sprite.rgba[8, 14, 3] < 1.0
+    assert sprite.rgba[0, 0, 3] == 0.0
+
+
+def test_a_translucent_shape_gives_a_translucent_sprite():
+    """Half-opaque black has an alpha of a half and keeps its colour."""
+    sprite = render_sprite(8, lambda c, x, y: c.rect((0, 0, 20, 20), (0, 0, 0, 0.5)))
+    assert sprite.rgba[4, 4, 3] == pytest.approx(0.5, abs=0.01)
+    assert sprite.rgba[4, 4, :3].tolist() == pytest.approx([0, 0, 0], abs=0.01)
+
+
+def test_the_cache_draws_each_key_once_and_forgets_all_when_it_is_full():
+    """The function is called once for a key; past the limit the cache empties."""
+    calls = []
+
+    def draw(canvas, cx, cy):
+        calls.append(1)
+        canvas.circle((cx, cy), 3, fill=rgba("#000000"))
+
+    cache = SpriteCache(limit=2)
+    first = cache.get(("a",), 8, draw)
+    assert cache.get(("a",), 8, draw) is first and len(calls) == 2
+    cache.get(("b",), 8, draw)
+    cache.get(("c",), 8, draw)
+    assert len(cache) == 3
+    cache.get(("d",), 8, draw)
+    assert len(cache) == 1
+    cache.clear()
+    assert len(cache) == 0

@@ -7,6 +7,8 @@ not its box, and many sprites go into the canvas in a few numpy passes.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 from .raster import Canvas
@@ -110,3 +112,53 @@ def draw_sprites(
     for batch in range(int(wave.max()) + 1):
         members = [whole[j] for j in np.nonzero(wave == batch)[0]]
         _draw_batch(canvas, [(sprites[i], xs[i], ys[i]) for i in members], opacity)
+
+
+def render_sprite(size: float, draw) -> Sprite:
+    """A sprite from a drawing function.
+
+    The function is called as `draw(canvas, cx, cy)`. It draws once on black and
+    once on white; the difference between the two gives the opacity of each
+    pixel, and the black picture divided by it gives the colour.
+
+    Args:
+        size: the sprite is about this many pixels across, made odd.
+        draw: the drawing function, which draws at the centre (cx, cy).
+    """
+    side = math.ceil(size) | 1
+    black, white = Canvas(side, side, "#000000"), Canvas(side, side, "#ffffff")
+    for canvas in (black, white):
+        draw(canvas, side / 2, side / 2)
+    alpha = np.clip(1.0 - (white.px - black.px).mean(axis=2), 0.0, 1.0)
+    color = black.px / np.maximum(alpha, 1e-4)[..., None]
+    rgba = np.concatenate([np.clip(color, 0, 1), alpha[..., None]], axis=2)
+    return Sprite(rgba.astype(np.float32))
+
+
+class SpriteCache:
+    """Sprites kept by key, so a robot is drawn once and then copied.
+
+    Args:
+        limit: the most sprites kept; the cache empties itself when it passes this.
+    """
+
+    def __init__(self, limit: int = 4000) -> None:
+        """Start empty."""
+        self.limit = limit
+        self._sprites: dict[tuple, Sprite] = {}
+
+    def get(self, key: tuple, size: float, draw) -> Sprite:
+        """The sprite for a key, drawn by `draw` the first time."""
+        if key not in self._sprites:
+            if len(self._sprites) > self.limit:
+                self._sprites.clear()
+            self._sprites[key] = render_sprite(size, draw)
+        return self._sprites[key]
+
+    def clear(self) -> None:
+        """Forget every sprite."""
+        self._sprites.clear()
+
+    def __len__(self) -> int:
+        """How many sprites are kept."""
+        return len(self._sprites)

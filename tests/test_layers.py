@@ -33,7 +33,7 @@ ALLOWED = {
         "smoothers",
         "world",
     },
-    "gui": {"costmap"},
+    "gui": {"costmap", "world"},
     "options": {"models", "nav", "verify"},
     "runner": {"costmap", "evaluation", "nav", "sim", "verify", "world"},
     "edit": {"models", "nav", "options", "plugins", "sim", "verify", "world"},
