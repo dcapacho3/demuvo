@@ -38,7 +38,9 @@ Working today:
   own scan rate, and a local costmap that the robot builds from their scans (see
   "Lidar and the local costmap" below);
 - a step length and a controller rate that you set apart (see "Time" below);
-- a top-down view, and GIF export from Python;
+- a native window, `demuvo`, to open a world, build one by adding robots and choosing
+  their planner, smoother and controller, set goals and run it (see "The window"
+  below), and a recorder that writes GIFs with no window;
 - a `Run` for scripts and benchmarks, and functions that build, edit and save a world
   (see "Use it from Python" below);
 - a result, printed with `--result` when the window closes: for each task, whether the
@@ -50,8 +52,10 @@ runner that compares controllers on the same worlds and seeds.
 ## Try it
 
 ```bash
-pip install -e ".[view]"
-demuvo examples/worlds/demo.toml     # a robot drives to the star; --no-trail hides its path
+pip install -e .
+sudo apt install libglfw3 libgl1      # the window; Ubuntu and Debian
+demuvo examples/worlds/demo.toml      # open a world; Space runs it; --bench fixes it
+demuvo                                # a blank world to build in
 demuvo examples/worlds/demo.toml --check   # check the file and open nothing
 ```
 
@@ -123,6 +127,54 @@ shape (0, 3) if there is no path. A smoother has `configure(costmap)` and
 `smooth(path)`. A controller has `command(obs)` and returns a `Twist`; it sees only the
 observation (its pose, the path, the goal), not the simulation. From Python,
 `Navigation` also takes a goal or a path from outside with `set_goal` and `set_path`.
+
+## The window
+
+![The sandbox: the scene list, the world with the playback pill, and the inspector.](docs/window.png)
+
+`demuvo` opens a native window. It is drawn by demuvo itself on numpy, shown through
+the system's GLFW and OpenGL, and needs no Python package for the window: only
+`libglfw3` and `libgl1`. The text is Roboto, from `fonts-roboto-unhinted` if that is
+installed and else from a copy that ships with demuvo.
+
+There are two modes:
+
+- **sandbox** (`demuvo` or `demuvo world.toml`): the world is yours. Add and delete
+  robots, drag them, pick a goal, choose each robot's model, planner, smoother and
+  controller and their settings, then run. A change is allowed only while no run is in
+  progress; Reset ends the run and unlocks editing. A change that cannot work is
+  refused in the status bar, in words that name the robot and the setting.
+- **benchmark** (`demuvo world.toml --bench`): the world is fixed, so every run is the
+  same. Reset repeats it. Layers and panels still work.
+
+The scene list is on the left, the world in the middle with a playback pill (play,
+step, reset, speed 0.25x to 8x, the clock), and the inspector on the right. The
+inspector shows the selected robot's pose, goal, parts and settings, and the layer
+switches: floor, global and local costmap, obstacles, trails, paths, goals, lidar rays
+and robots, with an opacity and a palette for the costmaps. Every robot has its own
+colour, and is drawn with its real footprint, a disc, a box or any polygon, and a white
+arrow for its heading.
+
+| Key | Does |
+| --- | --- |
+| Space | play or pause |
+| S | step by one control period |
+| R | reset |
+| V, G | the select tool, the goal tool (click the floor to set the selected robot's goal) |
+| Ctrl+N, Delete | add a robot, delete the selected one |
+| Ctrl+1, Ctrl+2 | show or hide the scene list, the inspector |
+| Tab, Shift+Tab | move the keyboard focus |
+| Ctrl+Q | quit |
+
+A GIF or a folder of PNG frames of any world is made with no window:
+
+```bash
+python -m demuvo.gui.record examples/worlds/lidar.toml run.gif --seconds 12 --fps 8 \
+    --layers rays,local          # a path ending in / writes one PNG for each frame
+```
+
+A GIF stores only the part of each frame that changed, so a still scene with a few
+moving robots makes a small file.
 
 ## Costmap
 
@@ -231,7 +283,7 @@ On the author's computer the ray caster reads about 900,000 rays per second agai
 
 A world spans from its lower-left corner, the origin, to the origin plus `size`. The
 origin is `[0.0, 0.0]` unless `[world]` sets it, and it may be negative, so a world can
-reach west and south of zero. The border, the costmap and the view all follow it. Every
+reach west and south of zero. The border, the costmap and the window all follow it. Every
 obstacle, robot start and goal must lie inside the box it gives:
 
 ```toml
@@ -272,11 +324,10 @@ one step apart, and their mean is the period. A new goal or path takes effect at
 controller's next run, up to one period later, as in Nav2. The controller's
 `Observation.dt` is the time since it last ran.
 
-The window draws each robot between its last two steps, so the motion stays smooth
-whatever `dt` is. The picture lags the simulation by up to one step. With `dt = 0.05`
-and a 60 Hz screen, a robot at 0.5 m/s would otherwise stand still in most frames and
-then jump 25 mm; blended, it moves 8.3 mm in every frame. A GIF has one frame per
-whole step and is not blended.
+The window shows the state after the latest step. While it plays, each frame advances
+the run by the real time since the last frame, at the chosen speed, but by at most
+0.1 s, so a slow frame never makes the robots leap. A GIF has one frame per whole step
+count that fits the frame rate.
 
 ## Use it from Python
 
@@ -322,8 +373,11 @@ pre-commit install
 python -m pytest
 ```
 
+The window tests need `libglfw3`, `libgl1` and `xvfb`, and are skipped where they are
+missing.
+
 Each part of the code is a folder under `src/demuvo/` (`world`, `models`, `costmap`, `sim`, `planners`,
-`controllers`, `nav`, `evaluation`, `run`, `view`), plus the files `options.py`, `edit.py`
+`controllers`, `nav`, `evaluation`, `run`, `gui`), plus the files `options.py`, `edit.py`
 and `runner.py`, and its tests sit in a `tests` folder inside it.
 
 Pose maths comes from [robomath](https://github.com/dcapacho3/robomath).
