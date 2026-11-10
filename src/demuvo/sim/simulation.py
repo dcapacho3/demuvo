@@ -10,10 +10,11 @@ from robomath import Transform2D
 
 from ..costmap import build_costmaps
 from ..models import MODELS, Twist
-from ..sensing import Estimate, StepTruth
+from ..sensing import Estimate, Scene, StepTruth
 from ..world import World
 from .collisions import Checker, Collision, Contact
 from .robot import Robot
+from .scene import static_scene, with_robots
 
 # How many times a push out of one contact may uncover another before the robots
 # involved are put back where they were.
@@ -84,6 +85,8 @@ class Simulation:
         self.driven = {r.name: 0.0 for r in world.robots}
         self.collisions: list[Collision] = []
         self.checker = Checker(world)
+        self._static_scene = static_scene(world)
+        self._scene: tuple[int, Scene] | None = None  # the step it was built for
         self._touching: set[tuple[str, str]] = set()
         if overlaps := self.checker.check(self.poses):
             raise ValueError(
@@ -140,10 +143,30 @@ class Simulation:
         self.velocity = velocity
         self.poses.update(moved)
         self.steps += 1
-        for name, robot in self.robots.items():
+        for index, (name, robot) in enumerate(self.robots.items()):
             robot.observe(
-                StepTruth(self.time, self.poses[name], clipped[name], self.dt)
+                StepTruth(
+                    self.time,
+                    self.poses[name],
+                    clipped[name],
+                    self.dt,
+                    self.scene,
+                    index,
+                )
             )
+
+    def scene(self) -> Scene:
+        """What a ray can hit now: the border, the obstacles and every robot's body.
+
+        The body of a robot has its index in `world.robots` as its owner. The
+        scene is built on the first call after a step and kept until the next.
+        """
+        if self._scene is None or self._scene[0] != self.steps:
+            bodies = [
+                spec.shape.parts(self.poses[spec.name]) for spec in self.world.robots
+            ]
+            self._scene = (self.steps, with_robots(self._static_scene, bodies))
+        return self._scene[1]
 
     def _resolve(self, moved: dict[str, Transform2D]) -> dict[str, Transform2D]:
         """Push the proposed poses out of every overlap and record collisions."""

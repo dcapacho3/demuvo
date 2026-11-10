@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import ClassVar, Protocol
 
@@ -10,6 +10,7 @@ import numpy as np
 from robomath import Transform2D
 
 from ..models import Twist
+from .raycast import Scene
 
 
 @dataclass(frozen=True)
@@ -24,12 +25,19 @@ class StepTruth:
         command: the command the model followed, after `clip`. A wheel turns
             as commanded even if a wall stops the robot.
         dt: length of the step in seconds.
+        scene: a call that gives what a ray can hit at the end of the step, or
+            None if the simulation gives none. It builds the scene on the first
+            call of a step, so a step that no sensor asks about costs nothing.
+        owner: the index of this robot's body in that scene, so a sensor can
+            leave it out; None if the robot has no body there.
     """
 
     time: float
     pose: Transform2D
     command: Twist
     dt: float
+    scene: Callable[[], Scene] | None = None
+    owner: int | None = None
 
 
 @dataclass(frozen=True)
