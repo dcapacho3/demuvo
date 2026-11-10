@@ -39,14 +39,17 @@ from .style import (
 Commands = Callable[[Simulation], Mapping[str, Twist]]
 
 
+def _polar(x: float, y: float, radii, angles) -> np.ndarray:
+    """Points (n, 2) at the given radii and angles round the centre (x, y)."""
+    radii, angles = np.asarray(radii, dtype=float), np.asarray(angles, dtype=float)
+    return np.column_stack([x + radii * np.cos(angles), y + radii * np.sin(angles)])
+
+
 def outline(shape: Shape, pose: Transform2D) -> np.ndarray:
     """The points to draw for a shape at a pose, as an array of shape (n, 2)."""
     if isinstance(shape, Circle):
         x, y = pose.translation
-        angles = np.linspace(0.0, 2 * math.pi, 65)[:-1]
-        return np.column_stack(
-            [x + shape.radius * np.cos(angles), y + shape.radius * np.sin(angles)]
-        )
+        return _polar(x, y, shape.radius, np.linspace(0.0, 2 * math.pi, 65)[:-1])
     return np.array(shape.points(pose))
 
 
@@ -246,11 +249,10 @@ class View:
     def _draw_goal(self, layer: pygame.Surface, goal, color: str) -> None:
         """A star in the colour of the robot."""
         x, y = goal
-        points = []
-        for k in range(10):
-            r = 0.22 if k % 2 == 0 else 0.09
-            angle = math.pi / 2 + k * math.pi / 5
-            points.append((x + r * math.cos(angle), y + r * math.sin(angle)))
+        k = np.arange(10)
+        points = _polar(
+            x, y, np.where(k % 2 == 0, 0.22, 0.09), math.pi / 2 + k * math.pi / 5
+        )
         pixels = self._points(points)
         pygame.draw.polygon(layer, color, pixels)
         pygame.draw.polygon(layer, WALL, pixels, width=SS)
@@ -262,12 +264,9 @@ class View:
         points = self._points(outline(robot.shape, pose))
         pygame.draw.polygon(layer, color, points)
         pygame.draw.polygon(layer, _darker(color), points, width=SS * 2)
-        x, y, angle = pose.xyt
         reach = 0.8 * self.reach[robot.name]
-        centre = self.to_pixel(x, y, SS)
-        front = self.to_pixel(
-            x + reach * math.cos(angle), y + reach * math.sin(angle), SS
-        )
+        centre = self.to_pixel(*pose.translation, SS)
+        front = self.to_pixel(*(pose @ np.array([reach, 0.0])), SS)
         width = max(2, round(0.035 * self.scale * SS))
         pygame.draw.line(layer, "white", centre, front, width)
         pygame.draw.circle(layer, "white", centre, width)
