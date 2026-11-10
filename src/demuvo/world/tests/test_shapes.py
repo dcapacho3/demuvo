@@ -5,7 +5,7 @@ import pytest
 from robomath import Transform2D
 
 from demuvo import SHAPES, Box, Circle, LineString, Polygon, WorldError
-from demuvo.world.shapes import parse_shape
+from demuvo.world.shapes import border_parts, parse_shape
 
 
 def shape(**table):
@@ -96,3 +96,15 @@ def test_parts_of_each_shape():
     assert len(wall.parts(pose)) == 2
     u = Polygon(((0, 0), (4, 0), (4, 4), (3, 4), (3, 1), (1, 1), (1, 4), (0, 4)))
     assert len(u.parts(pose)) == 3
+
+
+def test_the_border_is_four_walls_that_close_a_loop():
+    """Each wall starts where the one before ended, round the whole world."""
+    walls = border_parts((4.0, 3.0))
+    assert [wall.vertices for wall in walls] == [
+        ((0.0, 0.0), (4.0, 0.0)),
+        ((4.0, 0.0), (4.0, 3.0)),
+        ((4.0, 3.0), (0.0, 3.0)),
+        ((0.0, 3.0), (0.0, 0.0)),
+    ]
+    assert all(wall.radius == 0.0 for wall in walls)

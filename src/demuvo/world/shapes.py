@@ -63,6 +63,13 @@ class Part:
         return min(xs) - r, min(ys) - r, max(xs) + r, max(ys) + r
 
 
+def border_parts(size: tuple[float, float]) -> list[Part]:
+    """The four walls along the border of a world of this size, in order round it."""
+    width, height = size
+    corners = [(0.0, 0.0), (width, 0.0), (width, height), (0.0, height)]
+    return [Part((p, q)) for p, q in zip(corners, corners[1:] + corners[:1])]
+
+
 def _place(pose: Transform2D, points) -> list[Point]:
     """Rotate points by the pose angle, then move them to the pose position."""
     return list(map(tuple, act_se2(pose.matrix, points).tolist()))

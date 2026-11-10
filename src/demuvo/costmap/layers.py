@@ -9,7 +9,7 @@ import numpy as np
 
 from ..verify import WorldError
 from ..world import World
-from ..world.shapes import Part
+from ..world.shapes import Part, border_parts
 from .grid import FREE, INSCRIBED, LETHAL, MAX_NON_OBSTACLE
 
 
@@ -70,8 +70,7 @@ def generate_static(world: World, resolution: float) -> np.ndarray:
         ),
         dtype=np.uint8,
     )
-    corners = [(0.0, 0.0), (width, 0.0), (width, height), (0.0, height)]
-    parts = [Part((corners[i], corners[(i + 1) % 4])) for i in range(4)]
+    parts = border_parts(world.size)
     for obstacle in world.obstacles:
         parts += obstacle.shape.parts(obstacle.pose)
     for part in parts:

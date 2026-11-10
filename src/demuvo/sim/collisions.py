@@ -17,7 +17,7 @@ import numpy as np
 from robomath import Transform2D
 
 from ..world import World
-from ..world.shapes import Part
+from ..world.shapes import Part, border_parts
 from .gjk import touch
 from .quadtree import Box, Quadtree
 
@@ -107,9 +107,7 @@ class Checker:
         for i, obstacle in enumerate(world.obstacles, start=1):
             for part in obstacle.shape.parts(obstacle.pose):
                 self._fixed.append((f"obstacle {i}", part))
-        corners = [(0.0, 0.0), (width, 0.0), (width, height), (0.0, height)]
-        for p, q in zip(corners, corners[1:] + corners[:1]):
-            self._fixed.append(("border", Part((p, q))))
+        self._fixed += [("border", part) for part in border_parts(world.size)]
         self._tree = Quadtree((0.0, 0.0, width, height))
         for index, (_, part) in enumerate(self._fixed):
             self._tree.insert(index, part.box)
