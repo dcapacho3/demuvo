@@ -124,7 +124,10 @@ class Widget:  # pylint: disable=unused-argument
         preferred_height: the height a column gives it.
         interactive: False lets a click pass through to what is behind.
         focusable: True if the Tab key can stop on it.
+        takes_focus_on_press: True if a click on it gives it the keyboard focus.
     """
+
+    takes_focus_on_press = False
 
     def __init__(self) -> None:
         """Make a widget with no size, no parent and no children."""

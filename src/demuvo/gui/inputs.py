@@ -58,6 +58,8 @@ class Spin(Widget):
         on_change: called with the new value.
     """
 
+    takes_focus_on_press = True
+
     def __init__(self, value: float, spec: NumberSpec, on_change=None) -> None:
         """Make a number field."""
         super().__init__()
@@ -211,17 +213,23 @@ class Popup(Widget):
         x: left edge.
         y: top edge.
         min_width: the least width.
+        owner: the name of what opened it, such as a menu title, or None.
     """
 
     ROW_HEIGHT = 32
     SEPARATOR_HEIGHT = 10
 
     def __init__(
-        self, items: list[MenuItem], x: float, y: float, min_width: float = 160
+        self,
+        items: list[MenuItem],
+        x: float,
+        y: float,
+        min_width: float = 160,
+        owner: str | None = None,
     ) -> None:
         """Size the popup to its widest line and place it."""
         super().__init__()
-        self.items = items
+        self.items, self.owner = items, owner
         self.has_check = any(item.checked is not None for item in items)
         self.hover_row = -1
         self.set_rect(x, y, max(min_width, self._widest()), self._height())
