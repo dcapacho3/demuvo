@@ -1,6 +1,7 @@
 """The demuvo command - open a world file in the sandbox window.
 
 demuvo [world.toml] [--bench] [--check] [--dt S] [--result] [--seconds S]
+       [--seeds N [--jobs J] [--limit S]]
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from ..gui.app import show
 from ..gui.session import Session
 from ..runner import Run
 from ..world import load_world
+from .seeds import run_seeds, table
 
 
 def _count(n: int, word: str) -> str:
@@ -49,6 +51,21 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--seconds", type=float, help="close the window after this long"
     )
+    parser.add_argument(
+        "--seeds",
+        type=int,
+        metavar="N",
+        help="open no window; run N seeds to the end and print a table",
+    )
+    parser.add_argument(
+        "--jobs", type=int, default=1, help="runs at once with --seeds (default 1)"
+    )
+    parser.add_argument(
+        "--limit",
+        type=float,
+        default=120.0,
+        help="simulated seconds before a run with --seeds stops (default 120)",
+    )
     return parser
 
 
@@ -73,6 +90,8 @@ def main(argv: list[str] | None = None) -> int:
             Run(world)  # the world must run, whatever happens next
         if args.check:
             return _check(world, args.world)
+        if args.seeds is not None:
+            return _seeds(world, args)
         mode = "benchmark" if args.bench else "sandbox"
         session = Session(world, mode, remote=not args.one_process)
     except (OSError, ValueError) as error:
@@ -99,4 +118,16 @@ def _check(world, name: str) -> int:
         _count(len(world.robots), "robot"),
     )
     print(f"{name}: ok, {obstacles}, {robots}")
+    return 0
+
+
+def _seeds(world, args) -> int:
+    """Run the world under several seeds and print the table."""
+    if world is None:
+        print("demuvo: --seeds needs a world file", file=sys.stderr)
+        return 1
+    if args.seeds < 1 or args.jobs < 1 or args.limit <= 0:
+        print("demuvo: --seeds, --jobs and --limit must be above 0", file=sys.stderr)
+        return 1
+    print(table(run_seeds(world, args.seeds, args.limit, args.jobs)))
     return 0

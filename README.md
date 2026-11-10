@@ -70,6 +70,23 @@ r1 drove 8.86 m
 A task that is not done says how far the robot is from it. The distance is the exact
 length of the path, and the time is simulated time, so the same seed gives the same lines.
 
+To compare seeds, run the world with no window. `--seeds 4` runs the world's seed and
+the three after it, each to the end or to `--limit` simulated seconds (120 by default);
+`--jobs 4` runs four at once. The rows are the same for any number of jobs.
+
+```bash
+demuvo examples/worlds/demo.toml --seeds 4 --jobs 4
+```
+
+```
+seed  done  time (s)  collisions
+   7   yes     19.26           0
+   8   yes     19.26           0
+   9   yes     19.26           0
+  10   yes     19.26           0
+4 of 4 runs done
+```
+
 A robot that has a task gets a path from its planner, and its controller follows it.
 Several tasks for one robot, in file order, are waypoints:
 

@@ -194,3 +194,24 @@ def test_with_nothing_done_no_result_lines_are_printed(monkeypatch, capsys):
     monkeypatch.setattr(cli, "show", lambda session, seconds: 0)
     assert main(["--result"]) == 0
     assert capsys.readouterr().out == ""
+
+
+def test_seeds_print_a_table_and_open_no_window(capsys, windows):
+    """--seeds runs each seed to the end and prints one row each."""
+    assert main([DEMO, "--seeds", "2", "--jobs", "2", "--limit", "120"]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0].startswith("seed")
+    assert lines[-1] == "2 of 2 runs done"
+    assert windows == []
+
+
+def test_seeds_need_a_file(capsys):
+    """Without a world there is nothing to run."""
+    assert main(["--seeds", "2"]) == 1
+    assert capsys.readouterr().err == "demuvo: --seeds needs a world file\n"
+
+
+def test_seeds_refuse_a_count_below_one(capsys):
+    """A count, job number or limit of zero is a message, not a hang."""
+    assert main([DEMO, "--seeds", "0"]) == 1
+    assert "must be above 0" in capsys.readouterr().err
