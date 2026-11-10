@@ -39,6 +39,8 @@ Working today:
   "Lidar and the local costmap" below);
 - a step length and a controller rate that you set apart (see "Time" below);
 - a top-down view, and GIF export from Python;
+- a `Run` for scripts and benchmarks, and functions that build, edit and save a world
+  (see "Use it from Python" below);
 - a result, printed with `--result` when the window closes: for each task, whether the
   robot reached it and when, the distance it drove, and the number of collisions.
 
@@ -276,6 +278,40 @@ and a 60 Hz screen, a robot at 0.5 m/s would otherwise stand still in most frame
 then jump 25 mm; blended, it moves 8.3 mm in every frame. A GIF has one frame per
 whole step and is not blended.
 
+## Use it from Python
+
+`Run` steps a world without a window, so a script or a benchmark needs nothing else.
+The `edit` functions build or change a world, and `save_world` writes it to a file.
+Each edit returns a new world, and a bad one is refused with a message that names the
+robot and the setting.
+
+```python
+from demuvo import Run, edit
+from demuvo.world import save_world
+
+world = edit.new_world()  # 10 by 6 m, one robot, r1
+world = edit.set_goal(world, "r1", (8.0, 1.0, 0.0))
+world = edit.add_robot(world, "r2", edit.free_pose(world))
+world = edit.set_goal(world, "r2", (1.0, 5.0, 0.0))
+save_world(world, "mine.toml")  # a file `demuvo mine.toml` opens
+
+run = Run(world)
+run.until_done(60.0)  # step until every goal is reached
+print("\n".join(run.result()))
+```
+
+```text
+r1 task 1: reached at 9.16 s
+r1 drove 3.58 m
+r2 task 1: reached at 14.06 s
+r2 drove 4.36 m
+0 collisions
+```
+
+`run.step(n)` takes `n` steps, `run.advance(seconds, budget)` covers some simulated time
+within a wall-clock budget, and `run.poses`, `run.scans(name)`, `run.local_costmap(name)`
+and `run.path(name)` read the state. Comments in a saved file are not kept.
+
 ## Develop
 
 ```bash
@@ -287,7 +323,8 @@ python -m pytest
 ```
 
 Each part of the code is a folder under `src/demuvo/` (`world`, `models`, `costmap`, `sim`, `planners`,
-`controllers`, `nav`, `evaluation`, `run`, `view`), and its tests sit in a `tests` folder inside it.
+`controllers`, `nav`, `evaluation`, `run`, `view`), plus the files `options.py`, `edit.py`
+and `runner.py`, and its tests sit in a `tests` folder inside it.
 
 Pose maths comes from [robomath](https://github.com/dcapacho3/robomath).
 

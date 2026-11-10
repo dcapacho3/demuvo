@@ -5,6 +5,7 @@ from .costmap import Costmap
 from .models import MODELS, DiffDrive, Twist
 from .nav import Navigation
 from .planners import AStar, Planner, StraightLine
+from .runner import Run
 from .sensing import Estimate, Estimator, Reading, Sensor
 from .sim import Simulation
 from .world import Obstacle, RobotSpec, Task, World, WorldError, load_world
@@ -30,6 +31,7 @@ __all__ = [
     "PurePursuit",
     "Reading",
     "RobotSpec",
+    "Run",
     "Sensor",
     "Simulation",
     "StraightLine",
