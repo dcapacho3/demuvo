@@ -20,7 +20,7 @@ ALLOWED = {
     "sim": {"costmap", "models", "sensing", "world"},
     "planners": {"costmap", "plugins", "world"},
     "smoothers": {"costmap", "plugins"},
-    "controllers": {"models", "plugins"},
+    "controllers": {"models", "plugins", "sensing"},
     "evaluation": {"sim", "world"},
     "nav": {
         "controllers",

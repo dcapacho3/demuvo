@@ -11,6 +11,7 @@ from ..sensing import (
     SENSORS,
     Estimate,
     Reading,
+    Scan,
     StepTruth,
     stream,
 )
@@ -83,6 +84,14 @@ class Robot:
             raise WorldError(
                 f"robot '{self.spec.name}': sensors.{name}: {error}"
             ) from error
+
+    def scans(self) -> dict[str, Scan]:
+        """The latest scan of each payload sensor that gives one, by name."""
+        return {
+            name: sensor.scan(self.readings[name])
+            for name, sensor in self.payload.items()
+            if name in self.readings and hasattr(sensor, "scan")
+        }
 
     def observe(self, truth: StepTruth) -> Estimate:
         """Sense the step and update the estimate."""

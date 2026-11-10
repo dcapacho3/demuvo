@@ -8,7 +8,7 @@ it to `SENSORS` or `ESTIMATORS`.
 The `Robot` that joins them is in `demuvo.sim`.
 """
 
-from .base import Estimate, Estimator, Reading, Sensor, StepTruth
+from .base import Estimate, Estimator, Reading, Scan, Sensor, StepTruth
 from .estimators import ESTIMATORS, DeadReckoning, GroundTruth, resolve_estimator
 from .lidar import Lidar
 from .raycast import Scene, cast
@@ -27,6 +27,7 @@ __all__ = [
     "Lidar",
     "PerfectPose",
     "Reading",
+    "Scan",
     "Scene",
     "Sensor",
     "StepTruth",

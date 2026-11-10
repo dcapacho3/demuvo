@@ -7,8 +7,9 @@ from dataclasses import dataclass, fields
 from typing import ClassVar
 
 import numpy as np
+from robomath import Transform2D
 
-from .base import Reading, StepTruth
+from .base import Reading, Scan, StepTruth
 from .raycast import cast
 
 
@@ -102,11 +103,23 @@ class Lidar:
         else:
             self.angles = np.linspace(-half, half, self._settings.beams)
         self.mount = self._settings.mount
+        self._mount_pose = Transform2D.from_xyt(self.mount)
         self.max_range = self._settings.max_range
         self.min_range = self._settings.min_range
         self._rng = rng
         self._reading: Reading | None = None
         self._due = 0.0
+
+    def scan(self, reading: Reading) -> Scan:
+        """A reading of this lidar as a `Scan`, with its beams and limits."""
+        return Scan(
+            reading.time,
+            self.angles,
+            reading.data,
+            self.min_range,
+            self.max_range,
+            self.mount,
+        )
 
     def read(self, truth: StepTruth) -> Reading:
         """The ranges of the latest scan, taking a new one if its time has come.
@@ -118,17 +131,10 @@ class Lidar:
             raise ValueError("the lidar needs the scene, but the simulation gave none")
         settings = self._settings
         if self._reading is None or truth.time + 1e-9 >= self._due:
-            x, y, yaw = truth.pose.xyt
-            mx, my, mount_yaw = self.mount
-            origin = np.array(
-                [
-                    x + math.cos(yaw) * mx - math.sin(yaw) * my,
-                    y + math.sin(yaw) * mx + math.cos(yaw) * my,
-                ]
-            )
+            x, y, yaw = (truth.pose @ self._mount_pose).xyt
             ranges = cast(
-                origin,
-                yaw + mount_yaw + self.angles,
+                np.array([x, y]),
+                yaw + self.angles,
                 truth.scene(),
                 settings.max_range,
                 truth.owner,

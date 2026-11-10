@@ -70,6 +70,32 @@ class Estimate:
     map: object | None = None
 
 
+@dataclass(frozen=True, eq=False)
+class Scan:
+    """What a range sensor saw in its latest scan.
+
+    Attributes:
+        time: simulated time the scan was taken, in seconds.
+        angles: the angle of each beam in the sensor's frame, in radians.
+        ranges: the distance each beam read, in metres; `inf` where it read nothing.
+        min_range: the nearest the sensor reads, in metres.
+        max_range: the farthest the sensor reads, in metres.
+        mount: where the sensor sits on the robot, as (x, y, angle) in the robot's
+            frame.
+    """
+
+    time: float
+    angles: np.ndarray
+    ranges: np.ndarray
+    min_range: float
+    max_range: float
+    mount: tuple[float, float, float]
+
+    def sensor_pose(self, pose: Transform2D) -> Transform2D:
+        """Where the sensor is in the world, for a robot at `pose`."""
+        return pose @ Transform2D.from_xyt(self.mount)
+
+
 class Sensor(Protocol):
     """What every sensor offers. It holds its own random generator."""
 
