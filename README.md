@@ -34,13 +34,16 @@ Working today:
   `PurePursuit` (controller);
 - a global costmap, built from the obstacles or read from a `map.yaml` (see
   "Costmap" below);
+- lidars that a robot carries, any number of them, each with a mount, noise and its
+  own scan rate, and a local costmap that the robot builds from their scans (see
+  "Lidar and the local costmap" below);
 - a step length and a controller rate that you set apart (see "Time" below);
 - a top-down view, and GIF export from Python;
 - a result, printed with `--result` when the window closes: for each task, whether the
   robot reached it and when, the distance it drove, and the number of collisions.
 
-Not yet: a lidar, the other kinematic models (car-like, forklift, mecanum,
-skid-steer), and a runner that compares controllers on the same worlds and seeds.
+Not yet: the other kinematic models (car-like, forklift, mecanum, skid-steer), and a
+runner that compares controllers on the same worlds and seeds.
 
 ## Try it
 
@@ -109,6 +112,8 @@ blocked cells and no costlier than the stretch it replaces, and spaces the point
 `spacing` metres apart (0.05 by default). `examples/worlds/astar.toml` has two robots
 going round two boxes: 8-neighbour A* with a smoother, and 4-neighbour A* without.
 
+![Two robots go round two boxes. The costmap of the first is drawn under it.](docs/astar.gif)
+
 To use your own, write a class and name it in the file. A planner has
 `configure(costmap)`, which the navigation calls once with the robot's costmap, and
 `plan(start, goal)`, which returns an array of shape (N, 3) of x, y, angle, or one of
@@ -144,6 +149,74 @@ A `map.yaml` and its `.pgm` image (the files a ROS map saver writes) replace the
 generated map, so a planner can be developed with no SLAM first. The image must be a
 PGM; the `mode` and `free_thresh` keys are ignored and unknown space counts as free.
 A map read from a file keeps its own resolution and origin.
+
+## Lidar and the local costmap
+
+A robot carries a lidar when its `sensors` table names one. The lidar casts rays from
+its mount into the scene and reads the distance to the first thing each ray meets: an
+obstacle, the border, or another robot, but never the body of its own robot. A ray
+that meets nothing within range reads `inf`. Angles are in radians, and a mount is
+`[x, y, angle]` on the robot, in the same form as a pose.
+
+```toml
+sensors = { lidar = { beams = 360, max_range = 8.0, noise = 0.01 } }
+```
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `beams` | 360 | number of rays |
+| `fov` | 6.2832 | angle the beams cover; below a full circle they run edge to edge, centred on the sensor's heading |
+| `max_range` | 8.0 | the farthest it reads, in metres |
+| `min_range` | 0.0 | the nearest it reads; a reading below it is `inf` |
+| `noise` | 0.0 | standard deviation of the error on each range, in metres |
+| `period` | 0.1 | seconds between scans; the last scan is reported again between them |
+| `mount` | `[0, 0, 0]` | where the lidar sits on the robot |
+
+A robot can carry several. Give each its own name and a `type`:
+
+```toml
+sensors = { front = { type = "lidar", mount = [0.15, 0.0, 0.0], fov = 3.14159 }, rear = { type = "lidar", mount = [-0.15, 0.0, 3.14159], fov = 3.14159 } }
+```
+
+`[sensors.lidar]` sets the defaults of every lidar, and does not give a lidar to a
+robot that names none. A controller gets `obs.scans`, the latest scan of each lidar by
+name. A `Scan` has the `time`, the beam `angles`, the `ranges`, the `min_range` and
+`max_range`, the `mount`, and `sensor_pose(pose)`, which gives where the sensor is in
+the world for a robot at `pose`.
+
+A robot with a lidar also builds a local costmap, a window round itself that it fills
+from its scans. A controller gets it as `obs.costmap`. Each update clears the cells
+along every beam up to its hit, or up to `raytrace_max_range` if it hit nothing, then
+marks each hit within `obstacle_max_range`. The window follows the robot, a mark stays
+in its cell until a beam clears it, and the hits are placed with the robot's estimated
+pose, so an estimate that drifts shows in the costmap. Every setting is optional:
+
+```toml
+[costmap.local]
+enabled = true                  # false: no local costmap
+window = 3.0                    # metres, a square round the robot
+resolution = 0.05               # metres per cell
+period = 0.2                    # seconds between updates
+plugins = ["obstacle", "inflation"]
+
+[costmap.local.obstacle]
+obstacle_max_range = 2.5        # farthest hit that is marked, in metres
+raytrace_max_range = 3.0        # farthest a beam clears, in metres
+
+[costmap.local.inflation]
+inflation_radius = 0.55         # metres
+cost_scaling_factor = 10.0
+```
+
+`examples/worlds/lidar.toml` has a robot with a front and a rear lidar that goes round a
+box and a circle. The picture shows every third beam, a dot where each hit, and the
+local costmap: light where cost is low, amber where the robot's centre cannot go.
+
+![A robot with two lidars goes round a box and a circle, and builds its local costmap.](docs/lidar.gif)
+
+On the author's computer the ray caster reads about 900,000 rays per second against
+100 segments, and one update of the local costmap from a 360-beam scan takes about
+4 ms.
 
 ## Time
 
