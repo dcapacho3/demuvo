@@ -34,6 +34,7 @@ ALLOWED = {
         "world",
     },
     "options": {"models", "nav", "verify"},
+    "edit": {"models", "nav", "options", "plugins", "sim", "verify", "world"},
     "view": {"models", "sim", "world"},
     "run": {"evaluation", "nav", "sim", "world"},
 }

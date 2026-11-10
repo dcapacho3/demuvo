@@ -26,6 +26,7 @@ class Plain:
     def __init__(
         self,
         required,
+        *,
         gain: float = 1.0,
         steps: int = 3,
         flag=True,
@@ -34,6 +35,9 @@ class Plain:
         other=None,
     ):
         """Take one setting of each kind, and some that a form leaves out."""
+
+    def run(self):
+        """Do nothing; a class with no public method is not worth a test."""
 
 
 @dataclass
