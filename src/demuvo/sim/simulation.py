@@ -6,7 +6,7 @@ import math
 from collections.abc import Mapping
 
 import numpy as np
-from robomath import Transform2D
+from robomath import Transform2D, rminus_se2
 
 from ..costmap import build_costmaps
 from ..models import MODELS, Twist
@@ -137,10 +137,7 @@ class Simulation:
             for name, model in self.models.items()
         }
         moved = self._resolve(moved)
-        velocity = {
-            name: pose.rminus(self.poses[name]) / self.dt
-            for name, pose in moved.items()
-        }
+        velocity = self._velocities(moved)
         self.driven = {
             name: self.driven[name] + math.hypot(v[0], v[1]) * self.dt
             for name, v in velocity.items()
@@ -172,6 +169,12 @@ class Simulation:
             ]
             self._scene = (self.steps, with_robots(self._static_scene, bodies))
         return self._scene[1]
+
+    def _velocities(self, moved: dict[str, Transform2D]) -> dict[str, np.ndarray]:
+        """The body velocity (vx, vy, wz) of each robot over this step, in one call."""
+        before = np.array([self.poses[name].matrix for name in moved])
+        after = np.array([pose.matrix for pose in moved.values()])
+        return dict(zip(moved, rminus_se2(after, before) / self.dt))
 
     def _resolve(self, moved: dict[str, Transform2D]) -> dict[str, Transform2D]:
         """Push the proposed poses out of every overlap and record collisions."""
