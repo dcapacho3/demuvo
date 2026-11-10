@@ -5,6 +5,7 @@ Including size, obstacles and robots, all from a TOML file.
 
 from ..verify import WorldError
 from .load import FORMAT_VERSION, load_world
+from .save import save_world
 from .spec import (
     DEFAULT_CONTROL_PERIOD,
     DEFAULT_DT,
@@ -30,4 +31,5 @@ __all__ = [
     "World",
     "WorldError",
     "load_world",
+    "save_world",
 ]
