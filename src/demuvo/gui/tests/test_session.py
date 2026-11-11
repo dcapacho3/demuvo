@@ -361,3 +361,14 @@ def test_opening_a_world_ends_a_run_in_progress(sandbox):
     sandbox.advance(0.1)
     assert sandbox.edits.open(str(DEMO)) is None
     assert not sandbox.playing and sandbox.run.time == 0
+
+
+def test_a_new_world_is_blank_and_has_no_file(sandbox):
+    """New drops the obstacles and the file name, and ends a run."""
+    sandbox.edits.add_obstacle("circle", (2.0, 2.0, 0.0), (0.3,))
+    sandbox.edits.path = "old.toml"
+    sandbox.toggle_play()
+    assert sandbox.edits.new() is None
+    assert not sandbox.world.obstacles and not sandbox.playing
+    assert sandbox.edits.path is None and sandbox.scene.selected_obstacle is None
+    assert Session(DEMO, "benchmark").edits.new() == "A benchmark world is fixed."

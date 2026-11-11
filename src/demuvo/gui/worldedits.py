@@ -99,13 +99,23 @@ class WorldEdits:
 
     def open(self, path: str) -> str | None:
         """Replace the world with the one in a file."""
-        session = self.session
-        if session.mode == "benchmark":
+        if self.session.mode == "benchmark":
             return "A benchmark world is fixed."
         try:
             world = load_world(path)
         except (OSError, ValueError) as error:
             return f"Could not open {path}: {error}"
+        return self._replace(world, path)
+
+    def new(self) -> str | None:
+        """Replace the world with a blank one, which has no file yet."""
+        if self.session.mode == "benchmark":
+            return "A benchmark world is fixed."
+        return self._replace(edit.new_world(), None)
+
+    def _replace(self, world: World, path: str | None) -> str | None:
+        """Make another world the one that runs, ending any run in progress."""
+        session = self.session
         session.playing = False
         message = session.apply(world, rebuild=True, select="")
         if message is None:

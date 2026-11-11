@@ -8,10 +8,11 @@ world is fixed and only Reset and the layers can change.
 
 from __future__ import annotations
 
+import os
 import time
 
 from . import look
-from .inputs import Combo, MenuItem, Row, TreeList
+from .inputs import Combo, MenuItem, PromptPopup, Row, TreeList
 from .inspector import Inspector
 from .keys import KEY
 from .paneactions import PaneActions
@@ -195,7 +196,20 @@ class Sandbox:
         """The lines of a menu."""
         ok = self.session.editable
         if title == "File":
-            return [MenuItem("Quit", shortcut="Ctrl+Q", action=self._quit)]
+            fixed = self.session.mode == "benchmark"
+            return [
+                MenuItem("New world", enabled=not fixed, action=self._new_world),
+                MenuItem(
+                    "Open…",
+                    shortcut="Ctrl+O",
+                    enabled=not fixed,
+                    action=self._open_prompt,
+                ),
+                MenuItem("Save", shortcut="Ctrl+S", action=self._save),
+                MenuItem("Save as…", action=self._save_prompt),
+                MenuItem(separator=True),
+                MenuItem("Quit", shortcut="Ctrl+Q", action=self._quit),
+            ]
         if title == "Edit":
             tool = self.session.tool
             return [
@@ -274,6 +288,8 @@ class Sandbox:
             (KEY["1"], True): lambda: self._toggle_panel("left"),
             (KEY["2"], True): lambda: self._toggle_panel("right"),
             (KEY["n"], True): self._add_robot,
+            (KEY["o"], True): self._open_prompt,
+            (KEY["s"], True): self._save,
             (KEY["0"], True): self.shell.layout.apply,
             (KEY["delete"], False): self._delete_selected,
             (KEY["space"], False): self.toggle_play,
@@ -415,6 +431,69 @@ class Sandbox:
     def _speed(self, speed: float) -> None:
         """The playback speed."""
         self.session.speed = speed
+
+    # -- files --
+    def _prompt(self, title: str, text: str, hint: str, action) -> None:
+        """Ask for a line of text in a card near the top of the window."""
+        width = min(560.0, self.shell.screen.width - 40)
+        x = (self.shell.screen.width - width) / 2
+        self.shell.open_popup(
+            PromptPopup(
+                title, text, action, (x, MENU_H + TOOL_H + 20, width), hint=hint
+            )
+        )
+
+    def _open_prompt(self) -> None:
+        """Ask which world file to open."""
+        if self.session.mode == "sandbox":
+            self._prompt(
+                "Open a world file",
+                self.session.edits.path or "",
+                "Type the path of a .toml world file, then press Enter. Esc cancels.",
+                self._open,
+            )
+
+    def _open(self, path: str) -> None:
+        """Open the file at a path, and show the new world."""
+        path = os.path.expanduser(path.strip())
+        error = self.session.edits.open(path)
+        self.pane.pill.set_playing(False)
+        self.pane.pill.set_time(0.0)
+        if error is not None:
+            self.message(error)
+            return
+        self.refresh()
+        self.message(f"Opened {path}.")
+
+    def _new_world(self) -> None:
+        """Start again with a blank world."""
+        error = self.session.edits.new()
+        self.pane.pill.set_playing(False)
+        self.pane.pill.set_time(0.0)
+        self.edited(error)
+
+    def _save(self) -> None:
+        """Save to the file the world has, or ask for one."""
+        path = self.session.edits.path
+        if path:
+            self._save_to(path)
+        else:
+            self._save_prompt()
+
+    def _save_prompt(self) -> None:
+        """Ask where to save the world."""
+        self._prompt(
+            "Save the world as",
+            self.session.edits.path or "world.toml",
+            "Type a path ending in .toml, then press Enter. An old file is replaced.",
+            self._save_to,
+        )
+
+    def _save_to(self, path: str) -> None:
+        """Write the world to a path and say so."""
+        path = os.path.expanduser(path.strip())
+        error = self.session.edits.save(path)
+        self.message(error or f"Saved {path}.")
 
     def _quit(self) -> None:
         """Ask the window to close."""

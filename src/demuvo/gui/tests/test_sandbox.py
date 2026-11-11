@@ -12,6 +12,7 @@ from demuvo.gui.sandbox import BADGES, DEFAULT_MESSAGE, GOAL_MESSAGE, Sandbox
 from demuvo.gui.session import Session
 from demuvo.gui.shell import Shell
 from demuvo.gui.widgets import Event
+from demuvo.world import save_world
 
 from .fakes import EXAMPLES
 
@@ -259,7 +260,9 @@ def test_the_speed_choice_sets_the_playback_speed(app):
 def test_the_menus_list_the_commands_and_run_them(app):
     """File has Quit; Edit has the tools; View has the panels and layers."""
     window, program = app
-    assert [i.text for i in program.menu_items("File")] == ["Quit"]
+    assert [i.text for i in program.menu_items("File") if not i.separator] == [
+        "New world", "Open…", "Save", "Save as…", "Quit",
+    ]  # fmt: skip
     edit_items = program.menu_items("Edit")
     assert [i.text for i in edit_items if not i.separator] == [
         "Add robot", "Delete selected", "Set goal", "Draw box", "Draw circle",
@@ -275,7 +278,7 @@ def test_the_menus_list_the_commands_and_run_them(app):
     view[[i.text for i in view].index("trails")].action()
     assert program.layer_on["trails"] is False
     view[-1].action()
-    program.menu_items("File")[0].action()
+    program.menu_items("File")[-1].action()
     assert window.quit_requested
 
 
@@ -463,3 +466,77 @@ def test_the_lidar_rays_start_on_for_a_few_robots_and_off_for_a_swarm():
         many = edit.add_robot(many, f"r{k}", edit.free_pose(many))
     _, crowd = start(Session(many))
     assert not crowd.layer_on["rays"]
+
+
+def type_text(window, text):
+    """Type a line into whatever has the focus."""
+    for char in text:
+        window.char(char)
+
+
+def test_save_as_asks_for_a_path_then_writes_the_world_and_later_saves_go_there(
+    app, tmp_path
+):
+    """Ctrl+S with no file opens the prompt; Enter writes; the next Ctrl+S reuses it."""
+    window, program = app
+    program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 0.5))
+    press_key(window, "s", ctrl=True)
+    assert window.input.popup is not None
+    path = tmp_path / "mine.toml"
+    type_text(window, str(path))
+    press_key(window, "enter")
+    assert window.input.popup is None and path.exists()
+    assert f"Saved {path}" in window.layout.chrome.status.message
+    program.pane.actions.obstacle_drawn("circle", (7.0, 4.0, 0.0), (0.3,))
+    press_key(window, "s", ctrl=True)
+    assert window.input.popup is None
+    assert "circle" in path.read_text()
+
+
+def test_open_asks_for_a_path_and_shows_the_world_in_the_file(app, tmp_path):
+    """Ctrl+O, a path, Enter: the world is replaced and the lists follow."""
+    window, program = app
+    path = tmp_path / "other.toml"
+    other = edit.add_obstacle(edit.new_world(), "box", (2.0, 2.0, 0.0), (1.0, 1.0))
+    save_world(other, path)
+    press_key(window, "o", ctrl=True)
+    assert window.input.popup is not None
+    type_text(window, str(path))
+    press_key(window, "enter")
+    assert "Opened" in window.layout.chrome.status.message
+    assert len(program.session.world.obstacles) == 1
+    assert "box 1" in [row.text for row in program.tree.rows]
+
+
+def test_a_bad_path_is_reported_and_nothing_changes(app, tmp_path):
+    """The prompt closes and the status bar says why."""
+    window, program = app
+    press_key(window, "o", ctrl=True)
+    type_text(window, str(tmp_path / "missing.toml"))
+    press_key(window, "enter")
+    assert "Could not open" in window.layout.chrome.status.message
+    assert not program.session.world.obstacles
+
+
+def test_escape_closes_the_prompt_and_new_world_starts_blank(app):
+    """Esc gives up; New world drops the obstacles."""
+    window, program = app
+    press_key(window, "o", ctrl=True)
+    press_key(window, "escape")
+    assert window.input.popup is None
+    program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 0.5))
+    program.menu_items("File")[0].action()
+    assert not program.session.world.obstacles
+
+
+def test_a_benchmark_world_cannot_be_replaced_but_can_be_saved(tmp_path):
+    """Open and New are greyed out; Save as still writes the fixed world."""
+    window, program = start(Session(EXAMPLES / "demo.toml", "benchmark"))
+    items = {i.text: i for i in program.menu_items("File") if not i.separator}
+    assert not items["Open…"].enabled and not items["New world"].enabled
+    program.command(KEY["o"], True)
+    assert window.input.popup is None
+    program.menu_items("File")[3].action()
+    type_text(window, str(tmp_path / "copy.toml"))
+    press_key(window, "enter")
+    assert (tmp_path / "copy.toml").exists()
