@@ -1,0 +1,53 @@
+version = 1
+
+# Two robots race along two lanes of the room. r1 uses the two classes in
+# examples/plugins; r2 uses the built-in A* and pure pursuit.
+# Run it with the plugins folder on the path:
+#   PYTHONPATH=examples/plugins demuvo examples/worlds/plugins.toml
+
+[world]
+size = [10.0, 6.0]
+seed = 4
+
+# The same two things stand in each robot's lane, so the race is fair.
+[[obstacle]]
+pose = [3.0, 1.0, 0.0]
+shape = { name = "circle", radius = 0.6 }
+
+[[obstacle]]
+pose = [6.5, 1.0, 0.0]
+shape = { name = "box", size = [1.0, 1.2] }
+
+[[obstacle]]
+pose = [3.0, 5.0, 0.0]
+shape = { name = "circle", radius = 0.6 }
+
+[[obstacle]]
+pose = [6.5, 5.0, 0.0]
+shape = { name = "box", size = [1.0, 1.2] }
+
+[[robot]]
+name = "r1"
+model = "diff_drive"
+shape = { name = "circle", radius = 0.2 }
+pose = [1.0, 1.0, 0.0]
+planner = "breadth_first:BreadthFirst"
+controller = "turn_then_drive:TurnThenDrive"
+controller_params = { speed = 0.6 }
+
+[[robot]]
+name = "r2"
+model = "diff_drive"
+shape = { name = "circle", radius = 0.2 }
+pose = [1.0, 5.0, 0.0]
+planner = "demuvo.planners:AStar"
+controller = "demuvo.controllers:PurePursuit"
+controller_params = { speed = 0.6 }
+
+[[task]]
+robot = "r1"
+goal = [9.0, 1.0, 0.0]
+
+[[task]]
+robot = "r2"
+goal = [9.0, 5.0, 0.0]
