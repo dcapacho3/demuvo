@@ -90,6 +90,16 @@ class WorldEdits:
             session.scene.selected = None
         return message
 
+    def rename_robot(self, old: str, new: str) -> str | None:
+        """Give a robot another name, and keep it selected."""
+        return self._edit(
+            lambda w: edit.rename_robot(w, old, new), rebuild=True, select=new.strip()
+        )
+
+    def rename_obstacle(self, index: int, new: str) -> str | None:
+        """Give an obstacle a name, or none."""
+        return self._edit(lambda w: edit.rename_obstacle(w, index, new), index)
+
     def move_obstacle(self, index: int, pose: tuple[float, float, float]) -> str | None:
         """Move an obstacle; one that would leave the world or touch a robot stays."""
         return self._edit(lambda w: edit.move_obstacle(w, index, pose), index)

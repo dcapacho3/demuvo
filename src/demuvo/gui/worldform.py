@@ -84,7 +84,10 @@ class WorldForm(FormBase):
         """The pose and size of an obstacle; an outline turns about its middle."""
         item = self.session.world.obstacles[index]
         title = TitleRow()
-        title.name, title.color = f"{item.shape.name} {index + 1}", look.NAVY2
+        title.name, title.color = (
+            edit.obstacle_label(self.session.world, index),
+            look.NAVY2,
+        )
         self.column.add(title, Section("Pose"))
         self._pose_rows(index, item)
         self.column.add(Section("Size"))

@@ -2,10 +2,12 @@
 
 import pytest
 
+from demuvo.gui import inputs as module_inputs
 from demuvo.gui import look
 from demuvo.gui.inputs import (
     Combo,
     MenuItem,
+    NameBox,
     NumberSpec,
     Popup,
     Row,
@@ -17,7 +19,7 @@ from demuvo.gui.keys import KEY
 from demuvo.gui.raster import Canvas
 from demuvo.gui.widgets import Event
 
-from .fakes import click, hosted, ink
+from .fakes import FakeHost, click, hosted, ink
 
 
 def key(code, ctrl=False):
@@ -494,3 +496,59 @@ def test_a_text_box_copies_pastes_and_moves_the_caret():
     canvas = Canvas(320, 50, look.WINDOW)
     box.draw(canvas)
     assert (canvas.px != look.WINDOW[:3]).any()
+
+
+def test_two_quick_clicks_on_a_row_ask_for_a_rename_and_a_slow_pair_does_not(
+    monkeypatch,
+):
+    """The handler gets the key and the row's rectangle; headings are ignored."""
+    clock = [50.0]
+    monkeypatch.setattr(module_inputs.time, "perf_counter", lambda: clock[0])
+    asked = []
+    tree = TreeList(on_select=lambda key: None, on_rename=lambda *a: asked.append(a))
+    tree.set_rows([Row("", "Robots"), Row("r1", "r1"), Row("r2", "r2")])
+    hosted(tree, (0, 0, 200, 96))
+    click(tree, 20, 45)
+    clock[0] += 0.2
+    click(tree, 20, 45)
+    assert asked == [("r1", tree.row_rect("r1"))]
+    clock[0] += 0.2
+    click(tree, 20, 45)
+    assert len(asked) == 1
+    clock[0] += 3.0
+    click(tree, 20, 45)
+    clock[0] += 3.0
+    click(tree, 20, 45)
+    clock[0] += 0.1
+    click(tree, 20, 16)
+    clock[0] += 0.1
+    click(tree, 20, 16)
+    assert len(asked) == 1
+    click(tree, 20, 80)
+    clock[0] += 0.1
+    click(tree, 20, 45)
+    assert len(asked) == 1
+
+
+def test_a_name_box_hands_over_the_text_and_gives_the_focus_back_however_it_closes():
+    """Enter submits; Esc and a click elsewhere only close it."""
+    seen = []
+    box = NameBox("r1", seen.append, (10, 10, 160, 32))
+    host = FakeHost()
+    box.adopt(host)
+    assert host.focus is box.field and box.field.selected
+    box.on_press(Event(box.field.x + 5, box.field.y + 5))
+    box.on_move(Event(20, 20))
+    box.on_release(Event(20, 20))
+    canvas = Canvas(200, 60, look.WINDOW)
+    box.draw(canvas)
+    for char in "scout":
+        box.field.on_char(char)
+    box.field.on_key(key(KEY["enter"]))
+    assert seen == ["scoutr1"]
+    assert host.closed == 1
+    box.on_close()
+    assert host.focus is None
+    box.field.on_key(key(KEY["escape"]))
+    assert host.closed == 2 and len(seen) == 1
+    Popup([], 0, 0).on_close()

@@ -12,6 +12,7 @@ KEY = {
     "backspace": 259,
     "delete": 261,
     "right": 262,
+    "f2": 291,
     "home": 268,
     "end": 269,
     "left": 263,

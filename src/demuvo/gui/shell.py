@@ -733,6 +733,7 @@ class Input:
         """Close the popup that is open."""
         if self.popup is not None:
             popup, self.popup = self.popup, None
+            popup.on_close()
             self.shell.layout.chrome.menubar.open_title = None
             self._damage_menu(popup)
 

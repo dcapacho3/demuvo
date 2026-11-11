@@ -8,14 +8,16 @@ world is fixed and only Reset and the layers can change.
 
 from __future__ import annotations
 
+import functools
 import os
 import time
 from pathlib import Path
 
+from .. import edit
 from . import look
 from .clock import Clock
 from .filedialog import Browse, FileDialog
-from .inputs import Combo, MenuItem, Row, TreeList
+from .inputs import Combo, MenuItem, NameBox, Row, TreeList
 from .inspector import Inspector
 from .keys import KEY
 from .logview import LogView
@@ -81,7 +83,7 @@ class Sandbox:
         self.buttons: dict[str, IconButton] = {}
         self.badge = Badge()
         self.log_view: LogView | None = None
-        self.tree = TreeList(on_select=self.select)
+        self.tree = TreeList(on_select=self.select, on_rename=self._rename)
         self.layer_boxes: dict[str, Checkbox] = {}
         self.layer_on = {name: on for name, (_, on) in LAYERS.items()}
         # a few robots show their rays; a swarm would hide the floor under them
@@ -364,6 +366,7 @@ class Sandbox:
             (KEY["2"], True): lambda: self._toggle_panel("right"),
             (KEY["3"], True): lambda: self._toggle_panel("bottom"),
             (KEY["n"], True): self._add_robot,
+            (KEY["f2"], False): self._rename_selected,
             (KEY["z"], True): self._undo,
             (KEY["y"], True): self._redo,
             (KEY["o"], True): self._open_prompt,
@@ -460,8 +463,8 @@ class Sandbox:
         rows = [("", f"Robots ({len(robots)})", None, 0)]
         rows += [(r.name, r.name, session.scene.colors[r.name], 1) for r in robots]
         rows += [("", "Obstacles", None, 0)]
-        for k, obstacle in enumerate(session.world.obstacles, start=1):
-            label = f"{obstacle.shape.name} {k}"
+        for k in range(1, len(session.world.obstacles) + 1):
+            label = edit.obstacle_label(session.world, k - 1)
             rows.append((f"{OBSTACLE_KEY}{k - 1}", label, look.NAVY2, 1))
         self.tree.set_rows([Row(*row) for row in rows])
         self.tree.preferred_height = float(max(32 * len(rows), 10))
@@ -667,6 +670,40 @@ class Sandbox:
     def _redo(self) -> None:
         """Make the last undone edit again."""
         self.edited(self.session.history.redo())
+
+    def _rename(self, key: str, rect) -> None:
+        """Open a text box over a row of the scene list, to rename what it names."""
+        if (why := self.session.guard()) is not None:
+            self.message(why)
+            return
+        if key.startswith(OBSTACLE_KEY):
+            index = int(key[len(OBSTACLE_KEY) :])
+            current = self.session.world.obstacles[index].name
+            submit = functools.partial(self._renamed, "obstacle", index)
+        else:
+            current = key
+            submit = functools.partial(self._renamed, "robot", key)
+        x, y, width, height = rect
+        self.shell.open_popup(
+            NameBox(current, submit, (x, y, max(width, 160.0), height))
+        )
+
+    def _renamed(self, kind: str, which, text: str) -> None:
+        """Rename an obstacle (by its place) or a robot (by its name), and show it."""
+        edits = self.session.edits
+        if kind == "obstacle":
+            self.edited(edits.rename_obstacle(which, text))
+        else:
+            self.edited(edits.rename_robot(which, text))
+
+    def _rename_selected(self) -> None:
+        """F2: rename the selected robot or obstacle."""
+        place = self.session.scene.selected_obstacle
+        key = self.session.scene.selected or (
+            None if place is None else f"{OBSTACLE_KEY}{place}"
+        )
+        if key is not None:
+            self._rename(key, self.tree.row_rect(key))
 
     def _add_robot(self) -> None:
         """Add a robot."""

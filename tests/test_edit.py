@@ -572,3 +572,44 @@ def test_outline_edits_refuse_other_shapes_and_bad_places(world):
         edit.set_line_length(w, 2, 30.0)
     with pytest.raises(WorldError, match="no obstacle number 9"):
         edit.set_line_length(w, 8, 1.0)
+
+
+def test_a_robot_is_renamed_with_its_goals_and_a_clash_or_empty_name_is_refused(world):
+    """The goals follow the new name; the old name is gone."""
+    w = edit.set_goal(
+        edit.add_robot(world, "r2", edit.free_pose(world)), "r1", (8, 1, 0)
+    )
+    renamed = edit.rename_robot(w, "r1", "  scout ")
+    assert [r.name for r in renamed.robots] == ["scout", "r2"]
+    assert renamed.tasks[0].robot == "scout"
+    assert edit.rename_robot(w, "r1", "r1") == w
+    with pytest.raises(WorldError, match="already exists"):
+        edit.rename_robot(w, "r1", "r2")
+    with pytest.raises(WorldError, match="needs a name"):
+        edit.rename_robot(w, "r1", "   ")
+    with pytest.raises(WorldError, match="no robot named"):
+        edit.rename_robot(w, "ghost", "x")
+
+
+def test_an_obstacle_name_is_set_cleared_kept_by_edits_and_saved(world, tmp_path):
+    """A name shows in its label, survives resizing, and comes back from a file."""
+    w = edit.add_obstacle(world, "box", (2.0, 2.0, 0.0), (1.0, 0.5))
+    w = edit.add_obstacle(w, "circle", (7.0, 4.0, 0.0), (0.3,))
+    w = edit.add_outline(w, "linestring", [(1, 5), (3, 5)])
+    assert edit.obstacle_label(w, 0) == "box 1"
+    named = edit.rename_obstacle(w, 0, " table ")
+    named = edit.rename_obstacle(named, 2, "wall")
+    assert edit.obstacle_label(named, 0) == "table"
+    resized = edit.resize_obstacle(named, 0, (2.0, 1.0))
+    longer = edit.set_line_length(named, 2, 4.0)
+    assert resized.obstacles[0].name == "table" and longer.obstacles[2].name == "wall"
+    moved = edit.move_obstacle(named, 0, (3.0, 2.0, 0.0))
+    assert moved.obstacles[0].name == "table"
+    with pytest.raises(WorldError, match="already exists"):
+        edit.rename_obstacle(named, 1, "table")
+    assert edit.rename_obstacle(named, 0, "table").obstacles[0].name == "table"
+    assert edit.obstacle_label(edit.rename_obstacle(named, 0, ""), 0) == "box 1"
+    path = tmp_path / "named.toml"
+    save_world(named, path)
+    back = load_world(path)
+    assert [o.name for o in back.obstacles] == ["table", "", "wall"]

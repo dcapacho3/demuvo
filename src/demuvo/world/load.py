@@ -43,7 +43,8 @@ def _parse_obstacle(item: dict, index: int, bounds) -> Obstacle:
     """Build and check one `[[obstacle]]`."""
     label = f"obstacle {index}"
     item = table(item, label)
-    check_keys(item, {"shape", "pose"}, label)
+    check_keys(item, {"shape", "pose", "name"}, label)
+    name = text(item, "name", label) if "name" in item else ""
     shape = parse_shape(require_key(item, "shape", label), label)
     if "pose" in item or not shape.pose_optional:
         pose = _pose(item, label)
@@ -51,7 +52,16 @@ def _parse_obstacle(item: dict, index: int, bounds) -> Obstacle:
         pose = Transform2D.identity()
     if not inside(shape.points(pose), bounds):
         raise WorldError(f"{label}: must lie inside the world")
-    return Obstacle(pose, shape)
+    return Obstacle(pose, shape, name)
+
+
+def _check_obstacle_names(obstacles) -> None:
+    """Refuse two obstacles with the same name; an obstacle may have none."""
+    taken: set[str] = set()
+    for i, obstacle in enumerate(obstacles, start=1):
+        if obstacle.name and obstacle.name in taken:
+            raise WorldError(f"obstacle {i}: name '{obstacle.name}' used twice")
+        taken.add(obstacle.name)
 
 
 def _pose(item: dict, label: str, key: str = "pose") -> Transform2D:
@@ -479,6 +489,8 @@ def load_world(path: str | Path) -> World:
         _parse_obstacle(item, i, bounds)
         for i, item in enumerate(items(data, "obstacle"), start=1)
     )
+
+    _check_obstacle_names(obstacles)
 
     names: set[str] = set()
     robots = tuple(

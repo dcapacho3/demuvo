@@ -166,6 +166,8 @@ def world_text(world: World, base: Path) -> str:
     lines = ["version = 1", "", "[world]", *_lines(world_table), ""]
     for obstacle in world.obstacles:
         table = {"pose": _pose(obstacle.pose), "shape": _shape(obstacle.shape)}
+        if obstacle.name:
+            table = {"name": obstacle.name, **table}
         lines += ["[[obstacle]]", *_lines(table), ""]
     for spec in world.robots:
         lines += _robot(spec)

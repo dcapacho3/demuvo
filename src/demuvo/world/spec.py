@@ -21,10 +21,13 @@ class Obstacle:
     Attributes:
         pose: where its origin is and which way it points.
         shape: its shape.
+        name: what it is called, or "" for no name. Names are for people: the
+            window lists an obstacle by name, and a collision names it.
     """
 
     pose: Transform2D
     shape: Shape
+    name: str = ""
 
 
 @dataclass(frozen=True)

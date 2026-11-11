@@ -210,6 +210,54 @@ def set_pose(world: World, name: str, pose: Sequence[float]) -> World:
     return edited
 
 
+def _named(obstacle) -> dict:
+    """The `name` entry of an obstacle's table, if it has a name."""
+    return {"name": obstacle.name} if obstacle.name else {}
+
+
+def obstacle_label(world: World, index: int) -> str:
+    """What to call an obstacle: its name, else its shape and place, "box 2"."""
+    obstacle = world.obstacles[index]
+    return obstacle.name or f"{obstacle.shape.name} {index + 1}"
+
+
+def rename_robot(world: World, old: str, new: str) -> World:
+    """Give a robot another name; its goals follow it.
+
+    Raises:
+        WorldError: if the new name is empty, or another robot has it.
+    """
+    spec = _robot(world, old)
+    new = new.strip()
+    if not new:
+        raise WorldError(f"robot '{old}': a robot needs a name")
+    if new != old and any(r.name == new for r in world.robots):
+        raise WorldError(f"robot '{new}' already exists")
+    robots = tuple(
+        dataclasses.replace(spec, name=new) if r.name == old else r
+        for r in world.robots
+    )
+    tasks = tuple(
+        dataclasses.replace(t, robot=new) if t.robot == old else t for t in world.tasks
+    )
+    return dataclasses.replace(world, robots=robots, tasks=tasks)
+
+
+def rename_obstacle(world: World, index: int, new: str) -> World:
+    """Give an obstacle a name, or none with an empty one.
+
+    Raises:
+        WorldError: if another obstacle has the name.
+    """
+    old = _obstacle(world, index)
+    new = new.strip()
+    if new and any(o.name == new for i, o in enumerate(world.obstacles) if i != index):
+        raise WorldError(f"an obstacle named '{new}' already exists")
+    items = list(world.obstacles)
+    items[index] = dataclasses.replace(old, name=new)
+    return dataclasses.replace(world, obstacles=tuple(items))
+
+
 def _obstacle(world: World, index: int):
     """The obstacle at a 0-based place, or a plain error."""
     if not 0 <= index < len(world.obstacles):
@@ -275,7 +323,7 @@ def resize_obstacle(world: World, index: int, size: Sequence[float]) -> World:
         else {"name": "box", "size": list(size)}
     )
     made = _parse_obstacle(
-        {"shape": shape, "pose": [float(v) for v in old.pose.xyt]},
+        {"shape": shape, "pose": [float(v) for v in old.pose.xyt], **_named(old)},
         index + 1,
         world.bounds,
     )
@@ -381,6 +429,7 @@ def set_line_length(world: World, index: int, length: float) -> World:
         {
             "shape": {"name": "linestring", "vertices": stretched},
             "pose": [float(v) for v in obstacle.pose.xyt],
+            **_named(obstacle),
         },
         index + 1,
         world.bounds,

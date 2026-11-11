@@ -6,6 +6,7 @@ float over everything as a `Popup`, which the host shows and closes.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import NamedTuple
 
@@ -25,6 +26,8 @@ from .widgets import (
 DIGITS = "0123456789.-"
 # Pixels between the field's left edge and its text.
 TEXT_PAD = 10
+# Two clicks within this many seconds are a double click.
+DOUBLE_CLICK_SECONDS = 0.45
 
 
 @dataclass(frozen=True)
@@ -397,6 +400,9 @@ class Popup(Widget):
         self.hover_row = -1
         self.set_rect(x, y, max(min_width, self._widest()), self._height())
 
+    def on_close(self) -> None:
+        """Called when the popup is closed, however it was; most have nothing to do."""
+
     def _widest(self) -> float:
         """The width the lines need, including the check column and the shortcut."""
         face = font.regular()
@@ -495,6 +501,60 @@ class Popup(Widget):
                 action()
 
 
+class NameBox(Popup):
+    """A text box over the row being renamed; Enter keeps the name, Esc drops it.
+
+    Args:
+        text: the name to start with, all of it selected.
+        on_submit: called with the new text, after the box closes.
+        rect: (x, y, width, height) of the box.
+    """
+
+    def __init__(self, text: str, on_submit, rect: tuple[float, float, float, float]):
+        """Make the box."""
+        self.field = TextField(text, self._submit, self._close)
+        super().__init__([], rect[0], rect[1])
+        self.on_submit = on_submit
+        self.add(self.field)
+        self.set_rect(*rect)
+
+    def layout(self) -> None:
+        """The text box fills the popup."""
+        self.field.set_rect(self.x, self.y, self.width, self.height)
+
+    def adopt(self, host) -> None:
+        """Take the host and the keyboard focus, so typing goes to the box."""
+        super().adopt(host)
+        host.set_focus(self.field)
+
+    def on_close(self) -> None:
+        """Give the keyboard focus back."""
+        self.host.set_focus(None)
+
+    def _close(self) -> None:
+        """Close the box without a new name."""
+        self.host.close_popup()
+
+    def _submit(self, text: str) -> None:
+        """Close the box, then hand the text over."""
+        self._close()
+        self.on_submit(text)
+
+    def draw(self, canvas: Canvas) -> None:
+        """Draw the text box."""
+        self.field.draw(canvas)
+
+    def on_press(self, event: Event) -> None:
+        """A click on the box goes to the text box."""
+        self.field.on_press(event)
+
+    def on_move(self, event: Event) -> None:
+        """Nothing to light."""
+
+    def on_release(self, event: Event) -> None:
+        """Nothing to run."""
+
+
 class Combo(Widget):
     """A drop-down that shows the current choice and opens a list of the others.
 
@@ -588,15 +648,24 @@ class TreeList(Widget):
 
     Args:
         on_select: called with the key of a row that was clicked.
+        on_rename: called with the key and the rectangle of a row that was clicked
+            twice in a row, which asks for the row to be renamed.
     """
 
-    def __init__(self, on_select=None) -> None:
+    def __init__(self, on_select=None, on_rename=None) -> None:
         """Make an empty list."""
         super().__init__()
         self.rows: list[Row] = []
         self.selected: str | None = None
         self.hover_key: str | None = None
         self.on_select = on_select
+        self.on_rename = on_rename
+        self._last_click: tuple[float, str | None] = (0.0, None)
+
+    def row_rect(self, key: str) -> tuple[float, float, float, float]:
+        """The rectangle of the row with a key."""
+        index = next(i for i, row in enumerate(self.rows) if row.key == key)
+        return (self.x, self.y + index * ROW, self.width, ROW)
 
     def set_rows(self, rows) -> None:
         """Replace the rows."""
@@ -652,3 +721,10 @@ class TreeList(Widget):
         row = self._row_at(event.y)
         if clicked and row and row.key and self.on_select:
             self.on_select(row.key)
+        if clicked and row and row.key and self.on_rename:
+            before, was = self._last_click
+            now = time.perf_counter()
+            self._last_click = (now, row.key)
+            if was == row.key and now - before <= DOUBLE_CLICK_SECONDS:
+                self._last_click = (0.0, None)
+                self.on_rename(row.key, self.row_rect(row.key))

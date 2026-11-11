@@ -499,3 +499,20 @@ def test_a_bad_stop_or_wait_is_named(tmp_path, line, message):
     tail = tail.replace("goal = [9.0, 5.0, 0.0]", f"goal = [9.0, 5.0, 0.0]\n{line}", 1)
     with pytest.raises(WorldError, match=message):
         load(tmp_path, head + "[[task]]" + tail)
+
+
+def test_an_obstacle_may_have_a_name_and_two_may_not_share_one(tmp_path):
+    """The name is read; a repeat names the second one; an empty name is refused."""
+    named = GOOD.replace(
+        'pose = [4.0, 3.0, 0.0]\nshape = { name = "box"',
+        'name = "table"\npose = [4.0, 3.0, 0.0]\nshape = { name = "box"',
+    )
+    world = load(tmp_path, named)
+    assert [o.name for o in world.obstacles] == ["table", ""]
+    twice = named.replace(
+        "pose = [7.0, 2.0, 0.0]", 'name = "table"\npose = [7.0, 2.0, 0.0]'
+    )
+    with pytest.raises(WorldError, match=r"obstacle 2.*'table' used twice"):
+        load(tmp_path, twice)
+    with pytest.raises(WorldError, match=r"obstacle 1.*'name'.*non-empty"):
+        load(tmp_path, named.replace('name = "table"', 'name = ""'))
