@@ -42,6 +42,12 @@ class ScenePane(Widget):
         self.moving: int | None = None
         self.sketch: tuple[float, float, float, float] | None = None
 
+    def on_hover(self, inside: bool) -> None:
+        """Note that the pointer is over the scene; it looks the same, so no redraw."""
+        self.hover = inside
+        if not inside:
+            self.down = False
+
     def rect(self) -> tuple[float, float, float, float]:
         """The pane's rectangle."""
         return (self.x, self.y, self.width, self.height)

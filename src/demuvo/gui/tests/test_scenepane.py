@@ -243,3 +243,14 @@ def test_a_drawing_tool_does_nothing_while_a_run_is_in_progress():
     session.step_once()
     pane.on_press(Event(*at(pane, 1.0, 1.0)))
     assert pane.sketch is None
+
+
+def test_the_pointer_entering_or_leaving_the_scene_does_not_redraw_it():
+    """The scene looks the same either way, so no damage is asked for."""
+    pane, _, _ = build()
+    host = pane.host
+    before = len(host.invalidated)
+    pane.on_hover(True)
+    assert pane.hover and len(host.invalidated) == before
+    pane.on_hover(False)
+    assert not pane.hover and len(host.invalidated) == before

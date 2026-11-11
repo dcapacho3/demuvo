@@ -42,38 +42,56 @@ MESSAGE_SECONDS = 8.0
 
 
 class Damage:
-    """The rectangle of the window that needs a redraw.
+    """The parts of the window that need a redraw.
+
+    Boxes that touch, or that would waste little room if joined, become one. Far
+    apart boxes stay apart, so a change in the status bar and one in the scene do
+    not redraw everything between them.
 
     Attributes:
         dirty: True if anything needs a redraw.
-        rect: (x0, y0, x1, y1) that holds everything that changed, or None.
+        boxes: the (x0, y0, x1, y1) boxes to redraw.
     """
 
     def __init__(self, width: int, height: int) -> None:
         """Start with the whole window needing a redraw."""
         self.size = (width, height)
         self.dirty = True
-        self.rect: tuple[int, int, int, int] | None = (0, 0, width, height)
+        self.boxes: list[tuple[int, int, int, int]] = [(0, 0, width, height)]
+
+    @property
+    def rect(self) -> tuple[int, int, int, int] | None:
+        """One box that holds everything that changed, or None."""
+        if not self.boxes:
+            return None
+        return (
+            min(b[0] for b in self.boxes),
+            min(b[1] for b in self.boxes),
+            max(b[2] for b in self.boxes),
+            max(b[3] for b in self.boxes),
+        )
 
     def add(self, rect: tuple[int, int, int, int]) -> None:
         """Include a box in what must be redrawn."""
         self.dirty = True
-        old = self.rect
-        self.rect = (
-            rect
-            if old is None
-            else (
-                min(old[0], rect[0]),
-                min(old[1], rect[1]),
-                max(old[2], rect[2]),
-                max(old[3], rect[3]),
+        boxes = self.boxes
+        while True:
+            near = next((b for b in boxes if _worth_joining(b, rect)), None)
+            if near is None:
+                break
+            boxes.remove(near)
+            rect = (
+                min(near[0], rect[0]),
+                min(near[1], rect[1]),
+                max(near[2], rect[2]),
+                max(near[3], rect[3]),
             )
-        )
+        boxes.append(rect)
 
     def everything(self) -> None:
         """Redraw the whole window."""
         self.dirty = True
-        self.rect = (0, 0, *self.size)
+        self.boxes = [(0, 0, *self.size)]
 
     def widget(self, widget: Widget) -> None:
         """Redraw a widget and a margin round it."""
@@ -87,13 +105,24 @@ class Damage:
             )
         )
 
-    def take(self) -> tuple[int, int, int, int]:
-        """The box to redraw, inside the window; the damage is then cleared."""
+    def take(self) -> list[tuple[int, int, int, int]]:
+        """The boxes to redraw, inside the window; the damage is then cleared."""
         width, height = self.size
-        x0, y0, x1, y1 = self.rect or (0, 0, width, height)
-        box = (max(x0, 0), max(y0, 0), min(x1, width), min(y1, height))
-        self.dirty, self.rect = False, None
-        return box
+        boxes = self.boxes or [(0, 0, width, height)]
+        out = [
+            (max(x0, 0), max(y0, 0), min(x1, width), min(y1, height))
+            for x0, y0, x1, y1 in boxes
+        ]
+        self.dirty, self.boxes = False, []
+        return out
+
+
+def _worth_joining(a, b) -> bool:
+    """True if two boxes overlap, or one box around both is under a quarter too big."""
+    joined = (max(a[2], b[2]) - min(a[0], b[0])) * (max(a[3], b[3]) - min(a[1], b[1]))
+    areas = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1])
+    overlap = a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+    return overlap or joined <= 1.25 * areas
 
 
 @dataclass
@@ -768,12 +797,12 @@ class Shell:
             screen.resize(width, height)
             self.layout.apply()
         canvas = screen.surface.canvas
-        box = screen.damage.take()
-        if box[2] > box[0] and box[3] > box[1]:
-            canvas.set_clip(*box)
-            self.layout.chrome.root.draw(canvas)
-            self._draw_overlays(canvas)
-            screen.surface.copy(box)
+        for box in screen.damage.take():
+            if box[2] > box[0] and box[3] > box[1]:
+                canvas.set_clip(*box)
+                self.layout.chrome.root.draw(canvas)
+                self._draw_overlays(canvas)
+                screen.surface.copy(box)
         canvas.set_clip(0, 0, canvas.width, canvas.height)
         return screen.surface.frame
 

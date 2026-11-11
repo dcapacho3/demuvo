@@ -48,6 +48,13 @@ class Inspector:
         self.column, self.session = column, session
         self.report, self.refresh, self.footer = report, refresh, list(footer)
         self.note = Note()
+        # reading the installed packages for plug-ins takes milliseconds, and the
+        # list does not change while the window is open
+        self.tables = {
+            "planner": options.planners(),
+            "smoother": options.smoothers(),
+            "controller": options.controllers(),
+        }
         self.fields: dict[str, Widget] = {}
         self.settings: dict[str, dict[str, Widget]] = {}
 
@@ -116,27 +123,27 @@ class Inspector:
             self.fields[key] = field
             self.column.add(FormRow(label, field))
 
-    @staticmethod
-    def _choices(spec):
+    def _choices(self, spec):
         """The four choices of a robot: field, items to pick from, the current one."""
+        tables = self.tables
         return (
             ("model", list(options.models()), spec.model),
             (
                 "planner",
-                list(options.planners()),
+                list(tables["planner"]),
                 options.label_of(
-                    options.planners(), spec.planner or options.DEFAULT_PLANNER
+                    tables["planner"], spec.planner or options.DEFAULT_PLANNER
                 ),
             ),
             (
                 "smoother",
-                list(options.smoothers()),
-                options.label_of(options.smoothers(), spec.smoother),
+                list(tables["smoother"]),
+                options.label_of(tables["smoother"], spec.smoother),
             ),
             (
                 "controller",
-                list(options.controllers()),
-                options.label_of(options.controllers(), spec.controller),
+                list(tables["controller"]),
+                options.label_of(tables["controller"], spec.controller),
             ),
         )
 
@@ -212,23 +219,20 @@ class Inspector:
         self.column.layout()
 
     def sync_pose(self) -> None:
-        """Show the dragged robot's pose in the pose fields."""
+        """Show the dragged robot's or obstacle's pose in its three pose fields."""
         name = self.name
         place = self.session.scene.selected_obstacle
         if place is not None and "ox" in self.fields:
             x, y, angle = self.session.world.obstacles[place].pose.xyt
-            for key, value in (("ox", x), ("oy", y), ("oth", math.degrees(angle))):
-                self.fields[key].value = float(value)
-            self.column.invalidate()
+            values = (("ox", x), ("oy", y), ("oth", math.degrees(angle)))
         elif name and "x" in self.fields:
             pose = self.session.scene.pose(name)
-            for key, value in (
-                ("x", pose[0]),
-                ("y", pose[1]),
-                ("th", math.degrees(pose[2])),
-            ):
-                self.fields[key].value = float(value)
-            self.column.invalidate()
+            values = (("x", pose[0]), ("y", pose[1]), ("th", math.degrees(pose[2])))
+        else:
+            return
+        for key, value in values:
+            self.fields[key].value = float(value)
+            self.fields[key].invalidate()
 
     # -- edits --
     def _done(self, error: str | None) -> bool:

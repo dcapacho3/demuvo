@@ -74,6 +74,7 @@ class _Cutout:
     key: object = None
     signature: tuple = ()
     checked: float = 0.0
+    keep: tuple = ()
 
 
 class SceneDraw:
@@ -131,7 +132,6 @@ class SceneDraw:
         }
         self.feet = {r.name: footprint(r.shape) for r in self.world.robots}
         self._last_boxes: dict[str, tuple[int, int, int, int]] | None = None
-        self._cutout = _Cutout()
         self._local.clear()
         self.sprites.clear()
 
@@ -139,8 +139,10 @@ class SceneDraw:
         self, rect: tuple[float, float, float, float], bottom_room: float = 60.0
     ) -> None:
         """Fit the board into a window rectangle."""
-        self.view = self.view.fit(rect, bottom_room)
-        self._cutout.key = None
+        fitted = self.view.fit(rect, bottom_room)
+        if fitted != self.view:  # the same view keeps the cached layers
+            self.view = fitted
+            self._cutout.key = None
 
     def refresh_poses(self) -> None:
         """Read every robot's pose once; one at a time would rebuild all of them."""
@@ -196,15 +198,31 @@ class SceneDraw:
         if now - self._cutout.checked > PATH_CHECK:
             self._cutout.signature = self._path_signature()
             self._cutout.checked = now
+        world = self.world
+        # Edits leave the obstacles and tasks they do not touch as the same objects,
+        # and a rebuilt simulation has an equal costmap, so a robot that moves keeps
+        # the cache. `keep` holds them so an id is never taken for another object.
         key = (
             self.view,
             self.palette,
             tuple(alphas.values()),
-            id(self.run.sim.costmaps),
+            self._costmap_key(),
             self._cutout.signature,
-            id(self.world),
+            id(world.obstacles),
+            id(world.tasks),
+            world.size,
+            world.origin,
+            tuple(r.name for r in world.robots),
         )
+        self._cutout.keep = (world.obstacles, world.tasks)
         return alphas, key
+
+    def _costmap_key(self) -> tuple | None:
+        """What the drawn global costmap holds, so an equal one is not drawn again."""
+        costmap = self.run.sim.costmaps[self.world.robots[0].name]
+        if costmap is None:
+            return None
+        return (hash(costmap.data.tobytes()), costmap.resolution, tuple(costmap.origin))
 
     def _draw_cutout(self, alphas: dict[str, float], key: object) -> None:
         """Draw the cached layers into a cut-out the size of the scene."""

@@ -29,9 +29,9 @@ class PaneActions:
             self.program.refresh()
 
     def dragged(self) -> None:
-        """A robot is being dragged: show its pose in the form and redraw."""
+        """A robot is being dragged: show its pose, redraw only the robots."""
         self.program.inspector.sync_pose()
-        self.program.scene_changed()
+        self.program.shell.screen.damage.add(self.session.scene.dirty_rect())
 
     def goal_set(self, name: str, x: float, y: float, heading: float) -> None:
         """A goal was picked with the goal tool."""
@@ -47,7 +47,8 @@ class PaneActions:
         error = self.session.edits.move_obstacle(index, (x, y, angle))
         if error is not None:
             self.program.message(error)
-        self.dragged()
+        self.program.inspector.sync_pose()
+        self.program.scene_changed()
 
     def obstacle_drawn(self, kind: str, pose, size) -> None:
         """An obstacle was drawn with the box or circle tool."""

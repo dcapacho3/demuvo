@@ -171,20 +171,37 @@ def test_an_animation_eases_out_and_a_new_one_under_the_same_key_replaces_it():
     assert values[-1] == 0.0 and not animator.busy()
 
 
+def test_far_apart_damage_boxes_stay_apart_and_near_ones_join():
+    """A change in the status bar does not redraw the scene between."""
+    damage = Damage(200, 100)
+    damage.take()
+    damage.add((0, 0, 200, 10))
+    damage.add((0, 90, 200, 100))
+    assert damage.take() == [(0, 0, 200, 10), (0, 90, 200, 100)]
+    damage.add((0, 0, 50, 50))
+    damage.add((40, 40, 90, 90))
+    assert damage.take() == [(0, 0, 90, 90)]
+    damage.add((0, 0, 10, 10))
+    damage.add((12, 0, 22, 10))
+    damage.add((100, 0, 110, 10))
+    damage.add((20, 0, 100, 10))
+    assert damage.take() == [(0, 0, 110, 10)]
+
+
 def test_the_damage_box_grows_to_hold_each_change_and_is_taken_clipped():
-    """Two boxes become one that holds both; taking it clips and clears."""
+    """Boxes far apart stay two; the union holds both; taking clips and clears."""
     damage = Damage(100, 80)
     damage.take()
     assert not damage.dirty
     damage.add((10, 10, 20, 20))
     damage.add((50, 40, 120, 90))
     assert damage.rect == (10, 10, 120, 90)
-    assert damage.take() == (10, 10, 100, 80)
+    assert damage.take() == [(10, 10, 20, 20), (50, 40, 100, 80)]
     assert damage.rect is None and not damage.dirty
     damage.widget(Widget())
     assert damage.rect == (-8, -8, 8, 8)
-    assert damage.take() == (0, 0, 8, 8)
-    assert damage.take() == (0, 0, 100, 80)
+    assert damage.take() == [(0, 0, 8, 8)]
+    assert damage.take() == [(0, 0, 100, 80)]
 
 
 def test_the_first_render_draws_everything_and_a_later_one_only_what_changed(toy):
