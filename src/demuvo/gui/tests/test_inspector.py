@@ -9,6 +9,7 @@ from demuvo.gui.inputs import Combo, Spin
 from demuvo.gui.inspector import HINT, NO_GOAL, Inspector
 from demuvo.gui.session import Session
 from demuvo.gui.widgets import Checkbox, Column, Label
+from demuvo.gui.worldform import NO_SIZE
 
 from .fakes import EXAMPLES, FakeHost
 
@@ -36,11 +37,12 @@ def texts(column):
 
 
 def test_with_nothing_selected_the_inspector_shows_a_hint_and_the_footer():
-    """No fields; the footer widgets follow the hint."""
+    """The world form and the hint; the footer widgets come last."""
     inspector, session, _, _ = build(name=None)
     session.select(None)
     inspector.show(None)
-    assert HINT in texts(inspector.column) and not inspector.fields
+    assert HINT in texts(inspector.column)
+    assert set(inspector.fields) == {"width", "height", "seed", "dt"}
     assert inspector.column.children[-1] is inspector.footer[0]
     assert inspector.name is None
 
@@ -199,3 +201,53 @@ def test_a_combo_that_is_a_choice_lists_the_friendly_names():
     inspector, _, _, _ = build()
     box = inspector.fields["planner"]
     assert isinstance(box, Combo) and box.items == ["Straight line", "A*"]
+
+
+def test_the_world_form_changes_the_size_seed_and_step():
+    """Each field applies its edit through the session and refreshes."""
+    inspector, session, reports, refreshed = build(name=None)
+    session.select(None)
+    inspector.show(None)
+    inspector.fields["width"].set(12.0)
+    inspector.fields["height"].set(8.0)
+    assert session.world.size == (12.0, 8.0)
+    inspector.fields["seed"].set(9)
+    inspector.fields["dt"].set(0.02)
+    assert (session.world.seed, session.world.dt) == (9, 0.02)
+    assert refreshed and not reports
+    inspector.fields["width"].set(1.0)
+    assert "robot 'r1'" in reports[-1]
+    assert inspector.fields["width"].value == 12.0
+
+
+def test_an_obstacle_form_moves_and_resizes_the_selected_obstacle():
+    """Box and circle show their sizes; a polygon says it is drawn in the file."""
+    inspector, session, reports, _ = build(name=None)
+    session.edits.add_obstacle("box", (2.0, 2.0, 0.0), (1.0, 0.5))
+    inspector.show(None)
+    assert set(inspector.fields) == {"ox", "oy", "oth", "size0", "size1"}
+    inspector.fields["ox"].set(3.0)
+    inspector.fields["oth"].set(90.0)
+    inspector.fields["size0"].set(2.0)
+    box = session.world.obstacles[0]
+    assert box.pose.xyt[0] == 3.0 and box.shape.size == (2.0, 0.5)
+    inspector.fields["ox"].set(99.0)
+    assert reports and "inside the world" in reports[-1]
+    session.edits.delete_obstacle()
+    session.edits.add_obstacle("circle", (2.0, 2.0, 0.0), (0.3,))
+    inspector.show(None)
+    assert set(inspector.fields) == {"ox", "oy", "oth", "size0"}
+    inspector.fields["size0"].set(0.5)
+    assert session.world.obstacles[0].shape.radius == 0.5
+
+
+def test_a_shape_without_a_size_form_says_where_it_is_set():
+    """A line can be moved and deleted here, and shaped in the file."""
+    session = Session(EXAMPLES / "demo.toml")
+    column = Column()
+    column.set_rect(0, 0, 312, 600)
+    column.adopt(FakeHost())
+    inspector = Inspector(column, session, lambda m: None, lambda: None)
+    session.select_obstacle(2)
+    inspector.show(None)
+    assert NO_SIZE in texts(column) and set(inspector.fields) == {"ox", "oy", "oth"}

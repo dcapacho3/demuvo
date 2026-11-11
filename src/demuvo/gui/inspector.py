@@ -1,5 +1,7 @@
 """The inspector - the form for the selected robot, in the right-hand column.
 
+With an obstacle selected it shows the obstacle; with nothing, the world.
+
 It shows the robot's pose and goal, its model, planner, smoother and controller, the
 settings of each part and the control period; or a hint when nothing is selected.
 Each field applies its edit through the session and says why when it is refused.
@@ -15,8 +17,9 @@ from .inputs import Combo, NumberSpec, Spin
 from .panels import FormRow, Note, TitleRow
 from .session import Session
 from .widgets import Checkbox, Column, Label, Section, Widget
+from .worldform import WorldForm
 
-HINT = "Select a robot in the scene or in the list to see and edit it."
+HINT = "Select a robot or an obstacle to see and edit it."
 NO_GOAL = "No goal yet. Pick one with the Goal tool (G), or type it here."
 # Largest value a setting field accepts.
 SETTING_MAX = 1000.0
@@ -59,10 +62,15 @@ class Inspector:
         col.clear()
         col.add(Section("Inspector"), self.note)
         self.fields, self.settings = {}, {}
-        if name is None:
-            col.add(Label(HINT, 13, look.MUTED, wrap=True))
-        else:
+        forms = WorldForm(col, self.session, self.fields, self._done)
+        obstacle = self.session.scene.selected_obstacle
+        if name is not None:
             self._robot(name)
+        elif obstacle is not None:
+            forms.obstacle(obstacle)
+        else:
+            forms.world()
+            col.add(Label(HINT, 13, look.MUTED, wrap=True))
         col.add(*self.footer)
         col.layout()
         self.lock()

@@ -76,6 +76,18 @@ class WorldEdits:
             lambda w: edit.set_size(w, size), self.session.scene.selected_obstacle
         )
 
+    def set_seed(self, seed: int) -> str | None:
+        """Give the world a seed."""
+        return self._edit(
+            lambda w: edit.set_seed(w, seed), self.session.scene.selected_obstacle
+        )
+
+    def set_step(self, dt: float) -> str | None:
+        """Give the world a step length in seconds."""
+        return self._edit(
+            lambda w: edit.set_step(w, dt), self.session.scene.selected_obstacle
+        )
+
     def save(self, path: str) -> str | None:
         """Write the world to a file, and remember the file."""
         try:

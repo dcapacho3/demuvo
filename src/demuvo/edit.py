@@ -257,6 +257,8 @@ def move_obstacle(world: World, index: int, pose: Sequence[float]) -> World:
 def resize_obstacle(world: World, index: int, size: Sequence[float]) -> World:
     """Give the obstacle at a 0-based place a new size, keeping its pose."""
     old = _obstacle(world, index)
+    if old.shape.name not in ("box", "circle"):
+        raise WorldError(f"obstacle {index + 1}: only a box or a circle has a size")
     shape = (
         {"name": "circle", "radius": size[0]}
         if old.shape.name == "circle"
@@ -297,6 +299,23 @@ def set_size(world: World, size: Sequence[float]) -> World:
         if not inside([tuple(task.goal.translation)], edited.bounds):
             raise WorldError(f"the goal of '{task.robot}' would fall outside")
     return edited
+
+
+def set_seed(world: World, seed: int) -> World:
+    """Give the world a seed, which sets every random number a run uses."""
+    if not isinstance(seed, int) or isinstance(seed, bool):
+        raise WorldError("world: 'seed' must be an integer")
+    return dataclasses.replace(world, seed=seed)
+
+
+def set_step(world: World, dt: float) -> World:
+    """Give the world a step length in seconds.
+
+    Raises:
+        WorldError: if it is not a positive number.
+    """
+    (value,) = numbers([dt], 1, "world", "dt", True)
+    return dataclasses.replace(world, dt=value)
 
 
 def set_goal(

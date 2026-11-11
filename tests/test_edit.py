@@ -329,3 +329,22 @@ def test_the_world_size_changes_if_everything_still_fits(world):
     goal = edit.set_goal(world, "r1", (9.0, 3.0, 0.0))
     with pytest.raises(WorldError, match="goal of 'r1'"):
         edit.set_size(goal, (8.0, 6.0))
+
+
+def test_the_seed_and_the_step_are_set_and_checked(world):
+    """A whole number seed and a positive step; anything else is refused."""
+    assert edit.set_seed(world, 7).seed == 7
+    assert edit.set_step(world, 0.02).dt == 0.02
+    for bad in (1.5, True):
+        with pytest.raises(WorldError, match="seed"):
+            edit.set_seed(world, bad)
+    with pytest.raises(WorldError, match="dt"):
+        edit.set_step(world, 0.0)
+
+
+def test_only_a_box_or_a_circle_can_be_resized():
+    """A line keeps its shape; resizing it is refused."""
+    demo = load_world(DEMO)
+    line = next(i for i, o in enumerate(demo.obstacles) if o.shape.name == "linestring")
+    with pytest.raises(WorldError, match="only a box or a circle"):
+        edit.resize_obstacle(demo, line, (1.0, 1.0))
