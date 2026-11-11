@@ -6,7 +6,12 @@ and then shows the result or the reason it was refused.
 
 from __future__ import annotations
 
+import time
+
 from .. import edit
+
+# A dragged robot is made part of the world at most this often, in seconds.
+FOLLOW_SECONDS = 0.1
 
 
 class PaneActions:
@@ -20,6 +25,7 @@ class PaneActions:
         """Work for a sandbox."""
         self.program = program
         self.session = program.session
+        self._last_move = 0.0
 
     def select(self, name: str | None) -> None:
         """Select a robot or none."""
@@ -47,6 +53,19 @@ class PaneActions:
             )
         )
 
+    def robot_moved(self, name: str, x: float, y: float, angle: float) -> None:
+        """A robot is being dragged: now and then the world and its path follow.
+
+        A place that is refused leaves the world as it was and the robot drawn where
+        the pointer is. The drop makes the final edit.
+        """
+        now = time.perf_counter()
+        if now - self._last_move < FOLLOW_SECONDS:
+            return
+        self._last_move = now
+        self.session.move_robot(name, (x, y, angle))
+        self.program.scene_changed()
+
     def dropped(self, name: str, x: float, y: float, angle: float) -> None:
         """A dragged robot was dropped."""
         self.program.edited(self.session.move_robot(name, (x, y, angle)))
@@ -62,11 +81,20 @@ class PaneActions:
 
     def obstacle_drawn(self, kind: str, pose, size) -> None:
         """An obstacle was drawn with the box or circle tool."""
-        self.program.edited(self.session.edits.add_obstacle(kind, pose, size))
+        self._drawn(self.session.edits.add_obstacle(kind, pose, size))
 
     def outline_drawn(self, kind: str, vertices) -> None:
         """A polygon or line was drawn with its tool."""
-        self.program.edited(self.session.edits.add_outline(kind, vertices))
+        self._drawn(self.session.edits.add_outline(kind, vertices))
+
+    def _drawn(self, error: str | None) -> None:
+        """Show the result of a drawing, then go back to the select tool.
+
+        The next drag then moves the new shape instead of drawing another.
+        """
+        self.program.edited(error)
+        if error is None:
+            self.program.set_tool("select")
 
     def sketch_changed(self) -> None:
         """The outline being drawn changed, so the scene is drawn again."""

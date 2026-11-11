@@ -522,3 +522,27 @@ def test_an_open_menu_is_drawn_over_the_window(toy):
     frame = toy.render().astype(int)
     x, y = int(popup.x + 30), int(popup.y + 22)
     assert (frame[y - 6 : y + 6, x : x + 60].sum(axis=2) < 3 * 200).any()
+
+
+def test_a_popup_that_would_leave_the_window_goes_above_its_anchor_or_up(toy):
+    """Near the bottom a list opens upward; with no anchor it moves up; right too."""
+    height = toy.screen.height
+    items = [MenuItem(f"line {k}") for k in range(6)]
+    anchored = Popup(items, 20, height - 20)
+    anchored.flip_to = height - 40
+    toy.open_popup(anchored)
+    assert anchored.y + anchored.height == pytest.approx(height - 40)
+    plain = Popup(items, 20, height - 20)
+    toy.open_popup(plain)
+    assert plain.y + plain.height == pytest.approx(height - 4)
+    wide = Popup(items, toy.screen.width - 10, 100)
+    toy.open_popup(wide)
+    assert wide.x + wide.width <= toy.screen.width - 4
+    fits = Popup(items, 30, 100)
+    toy.open_popup(fits)
+    assert (fits.x, fits.y) == (30, 100)
+    cramped = Popup(items, 20, 10)
+    cramped.flip_to = 2
+    cramped.set_rect(20, height - 30, cramped.width, cramped.height)
+    toy.open_popup(cramped)
+    assert cramped.y + cramped.height == pytest.approx(height - 4)

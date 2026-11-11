@@ -39,7 +39,7 @@ class ScenePane(Widget):
         actions: an object that is told what the mouse did; it has
             `select(name)`, `select_obstacle(index)`, `goal_set(name, x, y,
             heading)`, `waypoint_added(name, x, y, heading)`, `dragged()`,
-            `dropped(name, x, y, angle)`,
+            `dropped(name, x, y, angle)`, `robot_moved(name, x, y, angle)`,
             `obstacle_moved(index, x, y)`, `obstacle_drawn(kind, pose, size)`,
             `outline_drawn(kind, vertices)` and `sketch_changed()`.
     """
@@ -179,8 +179,10 @@ class ScenePane(Widget):
             scene = self.session.scene
             x, y = scene.view.to_world(event.x, event.y)
             angle = float(scene.pose(self.dragging)[2])
-            scene.drag(self.dragging, x + self.grab[0], y + self.grab[1], angle)
+            place = (x + self.grab[0], y + self.grab[1], angle)
+            scene.drag(self.dragging, *place)
             self.actions.dragged()
+            self.actions.robot_moved(self.dragging, *place)
 
     def on_release(self, event: Event) -> None:
         """Drop the dragged robot, or finish the obstacle being drawn."""

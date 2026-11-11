@@ -173,13 +173,15 @@ def test_a_dashed_line_leads_from_each_robot_towards_its_goal(scene):
     assert 10 < near < 55
 
 
-def test_a_planned_path_replaces_the_straight_line(scene, run, monkeypatch):
-    """After the planner runs the paths change and the cut-out goes stale."""
+def test_the_planned_path_shows_before_the_first_step_and_keeps_the_cut_out(
+    scene, run, monkeypatch
+):
+    """The preview is already the planner's path, so the first step changes nothing."""
     monkeypatch.setattr(scenedraw, "PATH_CHECK", 0.0)
     _, before = scene.cutout_key()
     run.step(5)
     _, after = scene.cutout_key()
-    assert before != after
+    assert before == after
 
 
 def test_the_cut_out_is_drawn_once_and_again_only_when_something_changes(

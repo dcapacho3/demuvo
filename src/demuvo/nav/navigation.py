@@ -65,9 +65,9 @@ class Navigation:
         for task in world.tasks:
             self.tasks[task.robot].append(task)
         self.paths: dict[str, np.ndarray] = {}
+        self._specs = {r.name: r for r in world.robots}
         self.judge = Judge(self.tasks)
         self._planned: dict[str, int] = {}
-        self._on_truth = {r.name for r in world.robots if r.control_pose == "truth"}
         self._path_changes = dict.fromkeys(self.tasks, 0)
         self._planners: dict[str, Planner] = {}
         self._configured: set[str] = set()
@@ -169,6 +169,49 @@ class Navigation:
         if name not in self.tasks:
             raise ValueError(f"no robot named '{name}'")
 
+    def preview(self, sim: Simulation, name: str) -> np.ndarray | None:
+        """The path a robot would be given at its first step, made without a step.
+
+        It uses planners of its own, so the run is not touched and its results do
+        not change. A robot with no controller or no task has none.
+        """
+        spec, tasks = self._specs[name], self.tasks[name]
+        if spec.controller is None or not tasks:
+            return None
+        parts = []
+        planner = load_class(
+            spec.planner or DEFAULT_PLANNER,
+            spec.planner_params,
+            name,
+            "planner",
+            ("configure", "plan"),
+        )
+        parts.append(planner)
+        if spec.smoother is not None:
+            parts.append(
+                load_class(
+                    spec.smoother,
+                    spec.smoother_params,
+                    name,
+                    "smoother",
+                    ("configure", "smooth"),
+                )
+            )
+        try:
+            for part in parts:
+                part.configure(sim.estimates[name].map)
+        except ValueError:  # a planner that needs a costmap the world turns off
+            return None
+        pose = (
+            sim.poses[name]
+            if self._specs[name].control_pose == "truth"
+            else sim.estimates[name].pose
+        )
+        path = planner.plan(pose, tasks[0].goal)
+        if len(path) and len(parts) > 1:
+            path = parts[1].smooth(path)
+        return path
+
     def _due(self, name: str, dt: float) -> int:
         """The step of the robot's next controller run."""
         return math.ceil(round(self._runs[name] * self._periods[name] / dt, 9))
@@ -183,7 +226,9 @@ class Navigation:
                 commands[name] = self._held[name]
                 continue
             pose = (
-                sim.poses[name] if name in self._on_truth else sim.estimates[name].pose
+                sim.poses[name]
+                if self._specs[name].control_pose == "truth"
+                else sim.estimates[name].pose
             )
             task = self.judge.task(name)
             if self._planned.get(name, 0) != self.judge.current[name]:

@@ -41,6 +41,8 @@ BADGES = {
     "edit": ("SANDBOX · editing", "edit"),
     "run": ("SANDBOX · running", "run"),
 }
+# The floor is part of how demuvo looks, so it has no switch.
+ALWAYS_ON = ("floor",)
 # Layers whose opacity the slider sets.
 FADING = ("costmap", "local")
 BUTTON = 32
@@ -95,6 +97,8 @@ class Sandbox:
         self.pane = ScenePane(self.session, pill, PaneActions(self))
         shell.layout.pane = self.pane
         for name, (label, _) in LAYERS.items():
+            if name in ALWAYS_ON:
+                continue
             self.layer_boxes[name] = Checkbox(
                 label,
                 self.layer_on[name],
@@ -257,7 +261,7 @@ class Sandbox:
                     "Set goal",
                     shortcut="G",
                     checked=tool == "goal",
-                    enabled=ok,
+                    enabled=ok and self.session.scene.selected is not None,
                     action=lambda: self.set_tool("goal"),
                 ),
                 MenuItem(
@@ -305,6 +309,7 @@ class Sandbox:
                 action=lambda n=name: self.set_layer(n, not self.layer_on[n]),
             )
             for name, (label, _) in LAYERS.items()
+            if name not in ALWAYS_ON
         ]
         return [
             MenuItem(
@@ -408,9 +413,10 @@ class Sandbox:
         """Enable what the mode allows, show the badge, and tell the inspector."""
         session = self.session
         ok = session.editable
-        for key in ("add", "delete", "goal", "box", "circle", "polygon", "line"):
+        for key in ("add", "delete", "box", "circle", "polygon", "line"):
             self.buttons[key].enabled = ok
-        if not ok and session.tool != "select":
+        self.buttons["goal"].enabled = ok and session.scene.selected is not None
+        if session.tool != "select" and not self.buttons[session.tool].enabled:
             self.set_tool("select")
         self.badge.text, self.badge.kind = BADGES[session.state]
         self.inspector.lock()
@@ -436,12 +442,20 @@ class Sandbox:
         self.set_panel(which, not self.shell.layout.docks[which].open)
 
     def set_tool(self, tool: str) -> None:
-        """Choose a tool, and say what it does."""
+        """Choose a tool, and say what it does; the goal tool needs a robot picked."""
+        refused = tool == "goal" and self.session.scene.selected is None
+        if refused:
+            tool = "select"
         self.session.set_tool(tool)
         self.pane.cancel_outline()
         for key in TOOL_MESSAGES:
             self.buttons[key].checked = tool == key
-        self.shell.layout.chrome.status.show(TOOL_MESSAGES[tool], 6)
+        message = (
+            "Select a robot first, then pick its goal."
+            if refused
+            else TOOL_MESSAGES[tool]
+        )
+        self.shell.layout.chrome.status.show(message, 6)
         self.shell.invalidate_all()
 
     def set_layer(self, name: str, on: bool) -> None:

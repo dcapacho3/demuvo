@@ -612,9 +612,24 @@ class Input:
         """Show a popup, closing any other."""
         self.close_popup()
         popup.adopt(self.shell)
+        self._fit_popup(popup)
         self.popup = popup
         self.shell.layout.chrome.menubar.open_title = popup.owner
         self._damage_menu(popup)
+
+    def _fit_popup(self, popup: Popup) -> None:
+        """Keep a popup inside the window: above its anchor if it has one, else up."""
+        screen = self.shell.screen
+        x, y = popup.x, popup.y
+        if y + popup.height > screen.height - 4:
+            above = popup.flip_to - popup.height if popup.flip_to is not None else None
+            y = (
+                above
+                if above is not None and above >= 4
+                else screen.height - popup.height - 4
+            )
+        x = min(x, screen.width - popup.width - 4)
+        popup.set_rect(max(x, 4), max(y, 4), popup.width, popup.height)
 
     def close_popup(self) -> None:
         """Close the popup that is open."""

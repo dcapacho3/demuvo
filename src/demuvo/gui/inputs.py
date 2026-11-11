@@ -392,6 +392,7 @@ class Popup(Widget):
         """Size the popup to its widest line and place it."""
         super().__init__()
         self.items, self.owner = items, owner
+        self.flip_to: float | None = None
         self.has_check = any(item.checked is not None for item in items)
         self.hover_row = -1
         self.set_rect(x, y, max(min_width, self._widest()), self._height())
@@ -607,7 +608,9 @@ class Combo(Widget):
             MenuItem(item, checked=item == self.current, action=self._chooser(item))
             for item in self.items
         ]
-        self.host.open_popup(Popup(lines, self.x, self.y + self.height + 4, self.width))
+        popup = Popup(lines, self.x, self.y + self.height + 4, self.width)
+        popup.flip_to = self.y - 4  # where its bottom goes if there is no room below
+        self.host.open_popup(popup)
 
     def _chooser(self, text: str):
         """A function that makes `text` the choice."""

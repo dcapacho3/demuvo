@@ -38,6 +38,10 @@ class Actions:
         """Note a drag."""
         self.log.append(("dragged",))
 
+    def robot_moved(self, name, *_place):
+        """Note a live move."""
+        self.log.append(("robot moved", name))
+
     def select_obstacle(self, index):
         """Note an obstacle selection and make it."""
         self.log.append(("obstacle selected", index))

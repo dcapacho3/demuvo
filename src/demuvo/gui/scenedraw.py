@@ -77,6 +77,7 @@ class _Cutout:
     signature: tuple = ()
     checked: float = 0.0
     keep: tuple = ()
+    world: object = None
 
 
 class SceneDraw:
@@ -197,9 +198,13 @@ class SceneDraw:
         """The opacities of the cached layers, and the key to tell a stale cut-out."""
         alphas = {n: round(self.layers.alpha(n), 3) for n in STATIC}
         now = time.perf_counter()
-        if now - self._cutout.checked > PATH_CHECK:
+        if (
+            now - self._cutout.checked > PATH_CHECK
+            or self._cutout.world is not self.world
+        ):
             self._cutout.signature = self._path_signature()
             self._cutout.checked = now
+            self._cutout.world = self.world
         world = self.world
         # Edits leave the obstacles and tasks they do not touch as the same objects,
         # and a rebuilt simulation has an equal costmap, so a robot that moves keeps

@@ -60,6 +60,8 @@ class Run:
         """Load the world if it is a path, and start at time zero."""
         self._dt = dt
         self.world = source if isinstance(source, World) else load_world(source)
+        self._preview_of: World | None = None
+        self._preview_paths: dict[str, np.ndarray | None] = {}
         self.reset()
 
     def reset(self) -> None:
@@ -160,6 +162,22 @@ class Run:
         return self._robot(name).local_costmap
 
     def path(self, name: str) -> np.ndarray | None:
-        """The path a robot follows, rows of (x, y, angle); None before it has one."""
+        """The path a robot follows, rows of (x, y, angle); None if it has none.
+
+        Before the first step a robot has no path yet, so the one its planner
+        would make is shown. It is made once for each world.
+        """
         self._robot(name)
-        return self.nav.paths.get(name)
+        path = self.nav.paths.get(name)
+        if path is None and self.sim.steps == 0:
+            path = self._previews().get(name)
+        return path
+
+    def _previews(self) -> dict[str, np.ndarray | None]:
+        """The paths the planners would make now, kept until the world changes."""
+        if self._preview_of is not self.world:
+            self._preview_of = self.world
+            self._preview_paths = {
+                name: self.nav.preview(self.sim, name) for name in self.sim.robots
+            }
+        return self._preview_paths

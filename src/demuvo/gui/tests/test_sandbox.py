@@ -216,15 +216,15 @@ def test_a_second_step_does_not_lock_again_and_only_redraws_the_changed_boxes(ap
 
 
 def test_a_cached_layer_switches_at_once_and_a_live_one_fades(app):
-    """The floor goes with the click; the trails fade through an animation."""
+    """The costmap goes with the click; the trails fade through an animation."""
     window, program = app
     shown = program.session.scene.layers.shown
-    box = program.layer_boxes["floor"]
+    box = program.layer_boxes["costmap"]
     click(window, box)
-    assert program.layer_on["floor"] is False and not box.checked
-    assert shown["floor"] == 0.0
-    program.set_layer("floor", True)
-    assert shown["floor"] == 1.0
+    assert program.layer_on["costmap"] is False and not box.checked
+    assert shown["costmap"] == 0.0
+    program.set_layer("costmap", True)
+    assert shown["costmap"] == 1.0
     click(window, program.layer_boxes["trails"])
     assert shown["trails"] == 1.0 and window.animator.busy()
     window.animator.tick(time.perf_counter() + 1.0)
@@ -288,9 +288,16 @@ def test_the_menus_list_the_commands_and_run_them(app):
 def test_the_menu_state_follows_the_mode_and_the_tool(app):
     """A locked world greys the edit lines; the tool is ticked."""
     _, program = app
+    lines = {i.text: i for i in program.menu_items("Edit") if not i.separator}
+    assert not lines["Set goal"].enabled
+    program.select("r1")
     program.set_tool("goal")
     lines = {i.text: i for i in program.menu_items("Edit") if not i.separator}
-    assert lines["Set goal"].checked and not lines["Select"].checked
+    assert (
+        lines["Set goal"].enabled
+        and lines["Set goal"].checked
+        and not lines["Select"].checked
+    )
     program.step_once()
     lines = {i.text: i for i in program.menu_items("Edit") if not i.separator}
     assert not lines["Add robot"].enabled and not lines["Delete selected"].enabled
@@ -638,3 +645,87 @@ def test_ctrl_z_and_ctrl_y_undo_and_redo_and_the_menu_follows(app):
     press_key(window, "z", ctrl=True)
     press_key(window, "z", ctrl=True)
     assert "Nothing to undo" in window.layout.chrome.status.message
+
+
+def test_the_floor_has_no_switch_in_the_panel_or_the_menu(app):
+    """It is part of how demuvo looks; every other layer can be turned off."""
+    _, program = app
+    assert "floor" not in program.layer_boxes and "costmap" in program.layer_boxes
+    assert "floor" not in [i.text for i in program.menu_items("View")]
+    assert program.session.scene.layers.shown["floor"] == 1.0
+
+
+def test_the_goal_tool_is_grey_until_a_robot_is_selected_and_g_says_why(app):
+    """No robot, no goal tool; selecting one turns it on; deselecting turns it off."""
+    window, program = app
+    assert not program.buttons["goal"].enabled
+    press_key(window, "g")
+    assert program.session.tool == "select"
+    assert "Select a robot first" in window.layout.chrome.status.message
+    program.select("r1")
+    assert program.buttons["goal"].enabled
+    press_key(window, "g")
+    assert program.session.tool == "goal"
+    program.select(None)
+    assert not program.buttons["goal"].enabled and program.session.tool == "select"
+
+
+def test_a_drawn_shape_returns_to_the_select_tool_so_the_next_drag_moves_it(app):
+    """After a box is drawn the pointer selects again."""
+    _, program = app
+    program.set_tool("box")
+    program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 0.5))
+    assert program.session.tool == "select"
+    program.set_tool("polygon")
+    program.pane.actions.outline_drawn("polygon", [(5, 1), (6, 1), (5.5, 2)])
+    assert program.session.tool == "select"
+    program.set_tool("box")
+    program.pane.actions.obstacle_drawn("box", (5.0, 3.0, 0.0), (1.0, 1.0))
+    assert program.session.tool == "box"
+
+
+def test_a_dragged_robot_takes_its_path_with_it_before_it_is_dropped(app, monkeypatch):
+    """While the pointer moves the world follows now and then, path included."""
+    window, program = app
+    clock = [100.0]
+    monkeypatch.setattr("demuvo.gui.paneactions.time.perf_counter", lambda: clock[0])
+    session = program.session
+    session.set_goal("r1", (9.0, 5.0, 0.0))
+    program.refresh()
+    x, y = at(program, 5.0, 3.0)
+    window.mouse_move(x, y)
+    window.mouse_press(Event(x, y))
+    tx, ty = at(program, 2.0, 2.0)
+    clock[0] += 1.0
+    window.mouse_move(tx, ty)
+    assert session.run.poses["r1"][:2] == pytest.approx([2.0, 2.0], abs=0.05)
+    assert session.run.path("r1")[0][:2] == pytest.approx([2.0, 2.0], abs=0.05)
+    nx, ny = at(program, 1.0, 1.0)
+    window.mouse_move(nx, ny)  # too soon: the world waits
+    assert session.run.poses["r1"][:2] == pytest.approx([2.0, 2.0], abs=0.05)
+    window.mouse_release(Event(nx, ny))
+    assert session.run.poses["r1"][:2] == pytest.approx([1.0, 1.0], abs=0.05)
+    assert session.history.undo() is None
+    assert session.run.poses["r1"][:2] == pytest.approx([5.0, 3.0], abs=0.05)
+
+
+def test_a_dragged_robot_over_an_obstacle_leaves_the_world_as_it_was(app, monkeypatch):
+    """A refused place is skipped; the drop reports it."""
+    window, program = app
+    clock = [100.0]
+    monkeypatch.setattr("demuvo.gui.paneactions.time.perf_counter", lambda: clock[0])
+    program.pane.actions.obstacle_drawn("box", (8.0, 3.0, 0.0), (1.0, 1.0))
+    x, y = at(program, 5.0, 3.0)
+    window.mouse_move(x, y)
+    window.mouse_press(Event(x, y))
+    clock[0] += 1.0
+    tx, ty = at(program, 8.0, 3.0)
+    window.mouse_move(tx, ty)
+    assert session_pose(program) == pytest.approx([5.0, 3.0], abs=0.05)
+    window.mouse_release(Event(tx, ty))
+    assert "overlap" in window.layout.chrome.status.message
+
+
+def session_pose(program):
+    """Where r1 is in the run."""
+    return program.session.run.poses["r1"][:2]

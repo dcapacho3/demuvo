@@ -1,5 +1,6 @@
 """Tests for a run: the world in motion that a window or a benchmark steps."""
 
+import dataclasses
 from pathlib import Path
 
 import numpy as np
@@ -126,12 +127,34 @@ def test_the_local_costmap_appears_after_the_first_update():
     assert run.local_costmap("r1") is not None
 
 
-def test_a_robot_has_a_path_once_its_planner_has_run():
-    """None before the first step, rows of (x, y, angle) after."""
+def test_a_robot_shows_the_path_its_planner_will_make_before_the_first_step():
+    """The preview is the first path, to the last number, and is made once."""
     run = Run(DEMO)
-    assert run.path("r1") is None
+    preview = run.path("r1")
+    assert preview.shape[1] == 3 and run.path("r1") is preview
     run.step(5)
-    assert run.path("r1").shape[1] == 3
+    assert run.path("r1").shape == preview.shape
+    assert (run.path("r1") == preview).all()
+
+
+def test_the_preview_is_none_for_a_robot_with_no_goal_or_a_planner_with_no_costmap():
+    """A robot that has nothing to plan, or whose planner cannot run, shows no path."""
+    bare = dataclasses.replace(load_world(DEMO), tasks=())
+    assert Run(bare).path("r1") is None
+    astar = edit.set_part(load_world(DEMO), "r1", "planner", "demuvo.planners:AStar")
+    off = dataclasses.replace(
+        astar, costmap=dataclasses.replace(astar.costmap, enabled=False)
+    )
+    assert Run(off).path("r1") is None
+
+
+def test_the_preview_does_not_change_the_run():
+    """Looking at the preview first gives the same result as never looking."""
+    looked, blind = Run(DEMO), Run(DEMO)
+    looked.path("r1")
+    looked.until_done(60)
+    blind.until_done(60)
+    assert looked.result() == blind.result()
 
 
 @pytest.mark.parametrize("method", ["scans", "local_costmap", "path"])
@@ -146,3 +169,16 @@ def test_a_run_in_this_process_has_no_news_to_take_and_nothing_to_close():
     run = Run(DEMO)
     assert run.poll() is False
     assert run.close() is None
+
+
+def test_the_preview_shows_the_smoothed_path_when_the_robot_has_a_smoother():
+    """The smoother changes the path, and the preview is the path of the first step."""
+    world = edit.set_part(load_world(DEMO), "r1", "planner", "demuvo.planners:AStar")
+    smooth = edit.set_part(
+        world, "r1", "smoother", "demuvo.smoothers.line_of_sight:LineOfSight"
+    )
+    plain, smoothed = Run(world), Run(smooth)
+    preview = smoothed.path("r1")
+    assert preview.shape != plain.path("r1").shape
+    smoothed.step(5)
+    assert (smoothed.path("r1") == preview).all()
