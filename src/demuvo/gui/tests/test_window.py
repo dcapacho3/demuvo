@@ -336,3 +336,21 @@ def test_the_loop_gives_the_window_the_title_and_again_when_it_changes():
     app.tick = tick
     window.run(app)
     assert titles == [b"demuvo - test", b"demuvo - changed *"]
+
+
+def test_the_window_gets_the_demuvo_icon_in_every_size_and_survives_without_one(
+    monkeypatch,
+):
+    """Four sizes go to GLFW; a missing file or an old GLFW only means no icon."""
+    _, glfw, _ = build()
+    images = glfw.lib.glfwSetWindowIcon.call_args
+    assert images.args[1] == len(module.ICON_SIZES)
+    monkeypatch.setattr(module, "ASSETS", module.ASSETS / "nowhere")
+    _, glfw, _ = build()
+    glfw.lib.glfwSetWindowIcon.assert_not_called()
+    monkeypatch.undo()
+    glfw2 = Glfw(MagicMock())
+    glfw2.lib.glfwInit.return_value = 1
+    glfw2.lib.glfwCreateWindow.return_value = 11
+    del glfw2.lib.glfwSetWindowIcon
+    Window("demuvo", 200, 100, glfw=glfw2, gl=MagicMock())

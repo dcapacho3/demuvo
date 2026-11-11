@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import os
 import time
+from pathlib import Path
 
 from . import look
-from .inputs import Combo, MenuItem, PromptPopup, Row, TreeList
+from .clock import Clock
+from .filedialog import Browse, FileDialog
+from .inputs import Combo, MenuItem, Row, TreeList
 from .inspector import Inspector
 from .keys import KEY
 from .paneactions import PaneActions
@@ -43,6 +46,8 @@ BADGES = {
 }
 # The floor is part of how demuvo looks, so it has no switch.
 ALWAYS_ON = ("floor",)
+# The real-time figure shows as slow below this many per cent.
+SLOW_BELOW = 90
 # Layers whose opacity the slider sets.
 FADING = ("costmap", "local")
 BUTTON = 32
@@ -81,7 +86,7 @@ class Sandbox:
         self.layer_on["rays"] = len(session.world.robots) <= RAYS_UP_TO
         self.inspector: Inspector | None = None
         self.pane: ScenePane | None = None
-        self._last_tick = time.perf_counter()
+        self.clock = Clock()
         self.alpha: Slider | None = None
         self.palette: Combo | None = None
         self.scene_heading = Section("Scene")
@@ -374,10 +379,28 @@ class Sandbox:
 
     def after_tick(self, now: float) -> None:
         """Advance a playing run by the real time since the last tick."""
-        elapsed, self._last_tick = now - self._last_tick, now
+        elapsed = self.clock.elapsed(now)
         if self.session.playing:
             self.session.advance(elapsed)
             self._after_run()
+        self._measure_rate(now)
+
+    def _measure_rate(self, now: float) -> None:
+        """Show how much of real time a run keeps up with, as the speed asked for.
+
+        100% means no lag. It is worked out every half second while playing.
+        """
+        status = self.shell.layout.chrome.status
+        if not self.session.playing:
+            self.clock.restart()
+            if status.rate:
+                status.rate, status.slow = "", False
+                status.invalidate()
+            return
+        share = self.clock.share(now, self.session.run.time, self.session.speed)
+        if share is not None:
+            status.rate, status.slow = f"real time {share:.0f}%", share < SLOW_BELOW
+            status.invalidate()
 
     # -- feedback --
     def message(self, text: str) -> None:
@@ -498,6 +521,7 @@ class Sandbox:
     def _speed(self, speed: float) -> None:
         """The playback speed."""
         self.session.speed = speed
+        self.clock.restart()
 
     # -- files --
     @property
@@ -518,25 +542,22 @@ class Sandbox:
         )
         return False
 
-    def _prompt(self, title: str, text: str, hint: str, action) -> None:
-        """Ask for a line of text in a card near the top of the window."""
-        width = min(560.0, self.shell.screen.width - 40)
-        x = (self.shell.screen.width - width) / 2
+    def _browse(self, title: str, name: str, action, *, save: bool) -> None:
+        """Open the file dialog near the top of the window."""
+        screen = self.shell.screen
+        width = min(680.0, screen.width - 40)
+        height = min(500.0, screen.height - MENU_H - TOOL_H - 40)
+        place = ((screen.width - width) / 2, MENU_H + TOOL_H + 16, width, height)
+        path = self.session.edits.path
+        folder = Path(path).parent if path else Path.cwd()
         self.shell.open_popup(
-            PromptPopup(
-                title, text, action, (x, MENU_H + TOOL_H + 20, width), hint=hint
-            )
+            FileDialog(Browse(title, action, name, save), folder, place)
         )
 
     def _open_prompt(self) -> None:
         """Ask which world file to open."""
         if self.session.mode == "sandbox" and self._discard_ok("Open"):
-            self._prompt(
-                "Open a world file",
-                self.session.edits.path or "",
-                "Type the path of a .toml world file, then press Enter. Esc cancels.",
-                self._open,
-            )
+            self._browse("Open a world", "", self._open, save=False)
 
     def _open(self, path: str) -> None:
         """Open the file at a path, and show the new world."""
@@ -569,12 +590,9 @@ class Sandbox:
 
     def _save_prompt(self) -> None:
         """Ask where to save the world."""
-        self._prompt(
-            "Save the world as",
-            self.session.edits.path or "world.toml",
-            "Type a path ending in .toml, then press Enter. An old file is replaced.",
-            self._save_to,
-        )
+        path = self.session.edits.path
+        name = os.path.basename(path) if path else "world.toml"
+        self._browse("Save the world as", name, self._save_to, save=True)
 
     def _save_to(self, path: str) -> None:
         """Write the world to a path and say so."""
@@ -633,7 +651,7 @@ class Sandbox:
         """Start or pause the run."""
         self.session.toggle_play()
         self.pane.pill.set_playing(self.session.playing)
-        self._last_tick = time.perf_counter()
+        self.clock.last = time.perf_counter()
         self._refresh_lock()
         self.shell.invalidate_all()
 

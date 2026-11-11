@@ -168,20 +168,20 @@ There are two modes:
 
 The scene list and the layer switches are on the left, the world is in the middle with
 a playback pill (play, step, reset, speed 0.25x to 8x, the clock), and the inspector is
-on the right. The layers are floor, global and local costmap, obstacles, trails, paths,
-goals, lidar rays and robots, with an opacity and a palette for the costmaps; a world
+on the right. The layers are global and local costmap, obstacles, trails, paths, goals, lidar rays
+and robots (the floor is always shown), with an opacity and a palette for the costmaps; a world
 with up to ten robots starts with the lidar rays on. Every robot has its own colour,
 and is drawn with its real footprint and a white arrow for its heading.
 
 **Building a world.** Pick a tool from the tool bar or by key, then use the pointer:
 
 - *Select*: click a robot or an obstacle; drag it to move it.
-- *Goal*: click the floor to set the selected robot's goal; Shift and click adds a
+- *Goal* (grey until a robot is selected): click the floor to set the selected robot's goal; Shift and click adds a
   waypoint after the goals it has.
-- *Box* and *circle*: drag on the floor. A box is drawn from one corner to the other, a
+- *Box* and *circle*: drag on the floor; the pointer then goes back to *select*. A box is drawn from one corner to the other, a
   circle from its centre outwards.
-- *Polygon* and *line*: click the corners. Click the first corner of a polygon, or press
-  Enter, to close it; Enter ends a line; Esc cancels.
+- *Polygon* and *line*: click the corners. Double click, click near the first corner of
+  a polygon, or press Enter to finish it; Esc cancels.
 - *Add robot* and *delete*: the tool bar, Ctrl+N and Delete.
 
 The inspector shows what is selected, and every field applies as you leave it. With
@@ -193,10 +193,21 @@ controller with their settings, where the controller gets its pose, and the sens
 encoders and any number of lidars. A number field selects its number when you click, so
 typing replaces it; Left, Right, Home, End, Delete and Ctrl+A work as in a text box.
 
-**Files.** The File menu has New world, Open, Save and Save as. Open and Save as ask for
-a path in a card over the window. The title bar shows the file and a star if there are
-unsaved changes; New, Open and Quit say so the first time and go ahead the second.
-Saving writes a new file: comments and the order of keys in the old file are not kept.
+**Files.** The File menu has New world, Open, Save and Save as. Open and Save as show a
+file browser drawn by demuvo: click a folder twice to go in, click a file twice to take
+it, use Up and Home, or type a name or a whole path in the Name box. Save as adds
+`.toml` and asks before it replaces a file. The title bar shows the file and a star if
+there are unsaved changes; New, Open and Quit say so the first time and go ahead the
+second. Saving writes a new file: comments and the order of keys in the old file are not
+kept. The icon is the demuvo logo tile.
+
+**Undo.** Ctrl+Z takes back the last edit and Ctrl+Y makes it again; a drag is one step.
+Opening or starting a world forgets the list.
+
+**Lag.** While a run plays, the status bar shows "real time 100%": the simulated seconds
+gained for each real second, as a share of the speed you chose. It turns amber below 90%.
+Before the first step a robot with a goal already shows the path its planner, and its
+smoother, will make; the path follows a robot you drag.
 
 | Key | Does |
 | --- | --- |
@@ -207,6 +218,7 @@ Saving writes a new file: comments and the order of keys in the old file are not
 | Enter, Esc | end or cancel a polygon or line |
 | Ctrl+N, Delete | add a robot, delete the selected robot or obstacle |
 | Ctrl+O, Ctrl+S | open a world file, save the world |
+| Ctrl+Z, Ctrl+Y | undo, redo |
 | Ctrl+1, Ctrl+2 | show or hide the scene list, the inspector |
 | Tab, Shift+Tab | move the keyboard focus |
 | Ctrl+Q | quit |

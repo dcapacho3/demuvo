@@ -9,3 +9,10 @@ The files came from the `assets/fonts/Roboto` folder of the `imgui-bundle` 1.93.
 wheel from PyPI, which carries the Apache 2.0 licence file for them. Nothing else
 from that wheel is used: its Font Awesome, Inconsolata, GUST and Playbox files are
 under licences that are not on the project's allowed list.
+
+# Icon
+
+`icon_32.png`, `icon_64.png`, `icon_128.png` and `icon_180.png` are the demuvo logo
+tile, made for this project (`brand/demuvo/` in the repository) and under the
+project's Apache License 2.0. The window shows them as its icon. They are saved as
+PNG files that `imgio.read_png` can read.

@@ -518,14 +518,30 @@ def test_open_asks_for_a_path_and_shows_the_world_in_the_file(app, tmp_path):
     assert "box 1" in [row.text for row in program.tree.rows]
 
 
-def test_a_bad_path_is_reported_and_nothing_changes(app, tmp_path):
-    """The prompt closes and the status bar says why."""
+def test_a_missing_file_keeps_the_dialog_open_with_a_note_and_changes_nothing(
+    app, tmp_path
+):
+    """The dialog says there is no such file and stays, so the name can be fixed."""
     window, program = app
     press_key(window, "o", ctrl=True)
     type_text(window, str(tmp_path / "missing.toml"))
     press_key(window, "enter")
-    assert "Could not open" in window.layout.chrome.status.message
+    dialog = window.input.popup
+    assert dialog is not None and dialog.note == "There is no such file."
     assert not program.session.world.obstacles
+    press_key(window, "escape")
+    assert window.input.popup is None
+
+
+def test_a_file_that_will_not_load_is_reported_in_the_status_bar(app, tmp_path):
+    """The dialog takes the file; the world says what is wrong with it."""
+    window, _ = app
+    bad = tmp_path / "bad.toml"
+    bad.write_text("version = 2\n")
+    press_key(window, "o", ctrl=True)
+    type_text(window, str(bad))
+    press_key(window, "enter")
+    assert "Could not open" in window.layout.chrome.status.message
 
 
 def test_escape_closes_the_prompt_and_new_world_starts_blank(app):
@@ -729,3 +745,41 @@ def test_a_dragged_robot_over_an_obstacle_leaves_the_world_as_it_was(app, monkey
 def session_pose(program):
     """Where r1 is in the run."""
     return program.session.run.poses["r1"][:2]
+
+
+def test_the_status_bar_shows_how_much_of_real_time_a_run_keeps_up_with(app):
+    """Frames at the pace of the clock read 100%; a stalled one reads low and warns."""
+    window, program = app
+    status = window.layout.chrome.status
+    assert status.rate == ""
+    program.toggle_play()
+    now = program.clock.last
+    for _ in range(7):
+        now += 0.1
+        program.after_tick(now)
+    assert status.rate == "real time 100%" and not status.slow
+    now += 2.0  # one frame took two seconds, and the run only counts a tenth of it
+    program.after_tick(now)
+    now += 0.6
+    program.after_tick(now)
+    assert status.slow and int(status.rate.split()[-1].rstrip("%")) < 90
+    canvas_before = window.render()
+    assert canvas_before.shape[2] == 3
+    program.toggle_play()
+    program.after_tick(now + 0.1)
+    assert status.rate == "" and not status.slow
+
+
+def test_the_percentage_is_of_the_speed_chosen_and_starts_over_when_it_changes(app):
+    """At 4x the run is on time if it gains four seconds for each real second."""
+    _, program = app
+    program.pane.pill.speed.choose("4x")
+    program.toggle_play()
+    status = program.shell.layout.chrome.status
+    now = program.clock.last
+    for _ in range(14):
+        now += 0.1
+        program.after_tick(now)
+    assert status.rate == "real time 100%"
+    program.pane.pill.speed.choose("1x")
+    assert program.clock.share(program.clock.last, 0.0, 1.0) is None

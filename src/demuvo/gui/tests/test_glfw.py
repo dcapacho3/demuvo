@@ -197,3 +197,12 @@ def test_the_real_library_opens_a_window_on_a_virtual_display():
     require_library()
     result = on_virtual_display(SNIPPET)
     assert "window ok" in result.stdout, result.stderr
+
+
+def test_a_window_icon_is_handed_over_as_pictures_of_several_sizes():
+    """GLFW gets a count and an array of width, height and pointer."""
+    lib = MagicMock()
+    glfw = Glfw(lib)
+    glfw.set_icon(7, [(2, 2, bytes(16)), (4, 4, bytes(64))])
+    args = lib.glfwSetWindowIcon.call_args.args
+    assert args[0] == 7 and args[1] == 2

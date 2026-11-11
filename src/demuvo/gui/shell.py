@@ -263,6 +263,8 @@ class StatusBar(Panel):
         default: the text to return to.
         coords: the pointer's world place as (x, y), or None.
         count: the text at the right, such as "2 robots".
+        rate: how fast a run goes, such as "real time 100%", or "".
+        slow: True if the run falls behind real time, which lights `rate`.
     """
 
     def __init__(self) -> None:
@@ -272,6 +274,8 @@ class StatusBar(Panel):
         self.until = 0.0
         self.coords: tuple[float, float] | None = None
         self.count = ""
+        self.rate = ""
+        self.slow = False
 
     def show(self, text: str, seconds: float = MESSAGE_SECONDS) -> None:
         """Show a temporary message; after `seconds` the default text returns."""
@@ -293,6 +297,15 @@ class StatusBar(Panel):
         canvas.text(face, self.message, (12, baseline), size=12, color=muted)
         right = self.width - 12 - face.width(self.count, 12)
         canvas.text(face, self.count, (right, baseline), size=12, color=muted)
+        if self.rate:
+            colour = rgba(look.WARN_TEXT if self.slow else look.TEAL)
+            left = (
+                self.width
+                - 340
+                - face.width(self.count, 12)
+                - face.width(self.rate, 12)
+            )
+            canvas.text(face, self.rate, (left, baseline), size=12, color=colour)
         place = "x  -   y  -"
         if self.coords is not None:
             place = f"x {self.coords[0]:5.2f} m   y {self.coords[1]:5.2f} m"

@@ -30,6 +30,18 @@ CALLBACKS = {
     "refresh": ("glfwSetWindowRefreshCallback", (_WINDOW,)),
     "resize": ("glfwSetFramebufferSizeCallback", (_WINDOW, _C_INT, _C_INT)),
 }
+
+
+class _Image(ctypes.Structure):  # pylint: disable=too-few-public-methods
+    """GLFW's picture of an icon: a size and a pointer to RGBA rows."""
+
+    _fields_ = [
+        ("width", _C_INT),
+        ("height", _C_INT),
+        ("pixels", ctypes.c_void_p),
+    ]
+
+
 # The other calls: name, argument types and result type.
 FUNCTIONS = {
     "glfwInit": ((), _C_INT),
@@ -46,6 +58,7 @@ FUNCTIONS = {
     "glfwWindowShouldClose": ((_WINDOW,), _C_INT),
     "glfwSetWindowShouldClose": ((_WINDOW, _C_INT), None),
     "glfwSetWindowTitle": ((_WINDOW, ctypes.c_char_p), None),
+    "glfwSetWindowIcon": ((_WINDOW, _C_INT, ctypes.c_void_p), None),
     "glfwGetFramebufferSize": ((_WINDOW, ctypes.c_void_p, ctypes.c_void_p), None),
     "glfwGetWindowSize": ((_WINDOW, ctypes.c_void_p, ctypes.c_void_p), None),
     "glfwGetCursorPos": ((_WINDOW, ctypes.c_void_p, ctypes.c_void_p), None),
@@ -146,6 +159,24 @@ class Glfw:
     def set_should_close(self, window, value: bool = True) -> None:
         """Ask the loop to end."""
         self.lib.glfwSetWindowShouldClose(window, TRUE if value else FALSE)
+
+    def set_icon(self, window, images) -> None:
+        """Give the window an icon, as pictures of several sizes.
+
+        Args:
+            window: the window.
+            images: (width, height, bytes) for each size, the bytes being RGBA rows.
+        """
+        array = (_Image * len(images))()
+        keep = []  # GLFW copies the pixels in the call, so these must live that long
+        for slot, (width, height, pixels) in zip(array, images):
+            buffer = ctypes.create_string_buffer(pixels, len(pixels))
+            keep.append(buffer)
+            slot.width, slot.height = width, height
+            slot.pixels = ctypes.cast(buffer, ctypes.c_void_p).value
+        self.lib.glfwSetWindowIcon(
+            window, len(images), ctypes.cast(array, ctypes.c_void_p)
+        )
 
     def set_title(self, window, title: str) -> None:
         """Put a title on the window's bar."""

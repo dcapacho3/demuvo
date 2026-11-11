@@ -10,11 +10,13 @@ from __future__ import annotations
 import ctypes
 import ctypes.util
 import time
+from pathlib import Path
 from typing import Protocol
 
 import numpy as np
 
 from .glfw import PRESS, REPEAT, Glfw, open_library
+from .imgio import read_png
 from .widgets import Event
 
 GL_TEXTURE_2D = 0x0DE1
@@ -25,6 +27,9 @@ GL_UNPACK_SKIP_PIXELS, GL_UNPACK_SKIP_ROWS = 0x0CF4, 0x0CF3
 GL_COLOR_BUFFER_BIT = 0x4000
 # The corners of the quad: texture x and y, then screen x and y.
 QUAD = ((0, 0, -1, 1), (1, 0, 1, 1), (1, 1, 1, -1), (0, 1, -1, -1))
+# The icon is shipped as pictures of these sizes, in pixels.
+ICON_SIZES = (32, 64, 128, 180)
+ASSETS = Path(__file__).parent / "assets"
 # Seconds to wait for an event: briefly while something moves, long when idle.
 BUSY_WAIT, IDLE_WAIT = 0.004, 0.25
 # The modifier bits GLFW reports.
@@ -128,11 +133,23 @@ class Window:
             self.glfw.terminate()
             raise RuntimeError("could not open a window")
         self.glfw.make_current(self.handle)
+        self._set_icon()
         self.gl = gl or load_gl()
         self.app: Application | None = None
         self.texture = ctypes.c_uint(0)
         self.texture_size = (0, 0)
         self._prepare()
+
+    def _set_icon(self) -> None:
+        """Put the demuvo icon on the window; a window without one is still fine."""
+        try:
+            images = [
+                (size, size, read_png(ASSETS / f"icon_{size}.png").tobytes())
+                for size in ICON_SIZES
+            ]
+            self.glfw.set_icon(self.handle, images)
+        except (OSError, ValueError, AttributeError):
+            pass
 
     def _prepare(self) -> None:
         """Make the texture that holds the frame and set how it is read."""

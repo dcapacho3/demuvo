@@ -8,7 +8,6 @@ from demuvo.gui.inputs import (
     MenuItem,
     NumberSpec,
     Popup,
-    PromptPopup,
     Row,
     Spin,
     TextField,
@@ -18,7 +17,7 @@ from demuvo.gui.keys import KEY
 from demuvo.gui.raster import Canvas
 from demuvo.gui.widgets import Event
 
-from .fakes import FakeHost, click, hosted, ink
+from .fakes import click, hosted, ink
 
 
 def key(code, ctrl=False):
@@ -495,33 +494,3 @@ def test_a_text_box_copies_pastes_and_moves_the_caret():
     canvas = Canvas(320, 50, look.WINDOW)
     box.draw(canvas)
     assert (canvas.px != look.WINDOW[:3]).any()
-
-
-def test_a_prompt_takes_the_focus_and_hands_the_text_over_after_closing():
-    """The card shows a title, a box and a hint; Enter closes it and submits."""
-    seen = []
-    prompt = PromptPopup(
-        "Open a world file", "a.toml", seen.append, (100, 50, 560), hint="hint"
-    )
-    host = FakeHost()
-    prompt.adopt(host)
-    assert host.focus is prompt.field and prompt.field.editing
-    canvas = Canvas(700, 300, look.WINDOW)
-    prompt.draw(canvas)
-    assert (canvas.px != look.WINDOW[:3]).any()
-    prompt.on_press(Event(prompt.field.x + 5, prompt.field.y + 5))
-    prompt.on_press(Event(prompt.x + 2, prompt.y + 2))
-    prompt.on_move(Event(prompt.x + 2, prompt.y + 2))
-    prompt.on_release(Event(prompt.x + 2, prompt.y + 2))
-    prompt.field.on_key(key(KEY["enter"]))
-    assert host.closed == 1 and host.focus is None and seen == ["a.toml"]
-
-
-def test_escape_closes_a_prompt_without_submitting():
-    """Giving up closes the card and hands nothing over."""
-    seen = []
-    prompt = PromptPopup("Save", "a.toml", seen.append, (0, 0, 400))
-    host = FakeHost()
-    prompt.adopt(host)
-    prompt.field.on_key(key(KEY["escape"]))
-    assert host.closed == 1 and not seen
