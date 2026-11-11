@@ -48,44 +48,63 @@ class NumberSpec:
     integer: bool = False
 
 
-class Spin(Widget):
-    """A number field: click to type, Enter to accept, Esc to cancel.
+class LineEdit(Widget):
+    """What a text box and a number field share - a buffer, a caret and a selection.
 
-    Clicking selects the whole number, so typing replaces it. Left, Right, Home,
-    End, Delete and Backspace edit it where the caret is, and a click puts the
-    caret there. Up, Down and the wheel change the value by one step; Ctrl+A,
-    Ctrl+C and Ctrl+V select, copy and paste.
-
-    Args:
-        value: the starting value.
-        spec: the range, step and look; see `NumberSpec`.
-        on_change: called with the new value.
+    A click selects everything; Left, Right, Home, End, Delete, Backspace and
+    Ctrl+A edit at the caret, and a click while editing puts the caret there.
     """
 
     takes_focus_on_press = True
 
-    def __init__(self, value: float, spec: NumberSpec, on_change=None) -> None:
-        """Make a number field."""
+    def __init__(self) -> None:
+        """Start not editing, with an empty buffer."""
         super().__init__()
-        self.value, self.spec, self.on_change = value, spec, on_change
         self.editing = False
         self.buffer = ""
         self.cursor = 0
         self.selected = False
         self.focusable = True
 
-    def _digits(self) -> str:
-        """The value as typed: whole, or to the number of decimals."""
-        if self.spec.integer:
-            return f"{int(self.value)}"
-        return f"{self.value:.{self.spec.decimals}f}"
+    @staticmethod
+    def accepts(char: str) -> bool:
+        """True if a typed character belongs in the buffer."""
+        return char.isprintable()
 
-    def text(self) -> str:
-        """The value as shown when not editing, with its suffix."""
-        return self._digits() + self.spec.suffix
+    def start(self, text: str) -> None:
+        """Begin editing a text, all of it selected, so typing replaces it."""
+        self.editing = True
+        self.buffer = text
+        self.cursor, self.selected = len(text), True
 
-    def draw(self, canvas: Canvas) -> None:
-        """Draw the field; a teal edge and a cursor while editing."""
+    def place_caret(self, x: float) -> None:
+        """Put the caret in the gap nearest a pixel x, and drop the selection."""
+        face = font.regular()
+        offset = x - (self.x + TEXT_PAD)
+        self.cursor = min(
+            range(len(self.buffer) + 1),
+            key=lambda i: abs(face.width(self.buffer[:i], 13) - offset),
+        )
+        self.selected = False
+
+    def draw_text(self, canvas: Canvas, shown: str) -> None:
+        """Draw the text, with the caret or the selection band when editing."""
+        face = font.regular()
+        left = self.x + TEXT_PAD
+        if self.editing and self.selected and shown:
+            width = face.width(shown, 13)
+            canvas.rect(
+                (left, self.y + 5, width, self.height - 10), rgba(look.TEAL, 0.25)
+            )
+        elif self.editing:
+            caret = left + face.width(shown[: self.cursor], 13)
+            canvas.rect((caret, self.y + 6, 1.5, self.height - 12), rgba(look.TEAL))
+        color = rgba(look.NAVY, fade(self.enabled))
+        baseline = text_baseline(self.y, self.height, 13)
+        canvas.text(face, shown, (left, baseline), size=13, color=color)
+
+    def draw_frame(self, canvas: Canvas) -> None:
+        """Draw the white box, with a teal edge while editing."""
         box = (self.x, self.y, self.width, self.height)
         canvas.rect(box, rgba("#ffffff"), radius=4)
         if self.editing:
@@ -93,70 +112,12 @@ class Spin(Widget):
         else:
             edge = BORDER if self.hover and self.enabled else look.LINE
             canvas.rect_outline(box, rgba(edge), width=1, radius=4)
-        face = font.regular()
-        left = self.x + TEXT_PAD
-        if self.editing:
-            shown = self.buffer
-            if self.selected and shown:
-                width = face.width(shown, 13)
-                canvas.rect(
-                    (left, self.y + 5, width, self.height - 10), rgba(look.TEAL, 0.25)
-                )
-            else:
-                caret = left + face.width(shown[: self.cursor], 13)
-                canvas.rect((caret, self.y + 6, 1.5, self.height - 12), rgba(look.TEAL))
-        else:
-            shown = self.text()
-        baseline = text_baseline(self.y, self.height, 13)
-        color = rgba(look.NAVY, fade(self.enabled))
-        canvas.text(face, shown, (left, baseline), size=13, color=color)
 
-    def set(self, value: float, notify: bool = True) -> None:
-        """Set the value, held between the ends and rounded to the field's kind."""
-        value = min(max(value, self.spec.low), self.spec.high)
-        if self.spec.integer:
-            value = int(round(value))
-        else:
-            value = round(value, max(self.spec.decimals, 3))
-        changed = value != self.value
-        self.value = value
-        self.invalidate()
-        if changed and notify and self.on_change:
-            self.on_change(value)
-
-    def on_press(self, event: Event) -> None:
-        """A click takes the focus, which starts editing; another puts the caret."""
-        super().on_press(event)
-        if not self.enabled:
-            return
-        if self.editing:
-            face = font.regular()
-            offset = event.x - (self.x + TEXT_PAD)
-            self.cursor = min(
-                range(len(self.buffer) + 1),
-                key=lambda i: abs(face.width(self.buffer[:i], 13) - offset),
-            )
-            self.selected = False
-        else:
-            self.host.set_focus(self)
-
-    def on_focus_change(self, gained: bool) -> None:
-        """Start editing with the number selected, or accept what was typed."""
-        if gained and self.enabled:
-            self.editing = True
-            self.buffer = self._digits()
-            self.cursor, self.selected = len(self.buffer), True
-        elif not gained and self.editing:
-            self._commit()
-        self.invalidate()
-
-    def _commit(self) -> None:
-        """Take the typed text as the value if it is a number; else keep the old one."""
-        self.editing = False
-        try:
-            self.set(float(self.buffer))
-        except ValueError:
-            pass
+    def on_char(self, char: str) -> None:
+        """Add a typed character the field accepts."""
+        if self.editing and self.accepts(char):
+            self._insert(char)
+            self.invalidate()
 
     def _insert(self, text: str) -> None:
         """Put text at the caret, in place of the selection if there is one."""
@@ -179,27 +140,6 @@ class Spin(Widget):
         """Put the caret at a place, clear the selection."""
         self.cursor, self.selected = min(max(to, 0), len(self.buffer)), False
 
-    def on_char(self, char: str) -> None:
-        """Add a typed digit, point or minus sign."""
-        if self.editing and char in DIGITS:
-            self._insert(char)
-            self.invalidate()
-
-    def _paste(self) -> None:
-        """Put the digits of the clipboard at the caret."""
-        pasted = "".join(c for c in self.host.clip_get().strip() if c in DIGITS)
-        if pasted:
-            self.editing = True
-            self._insert(pasted)
-
-    def _step(self, up: bool) -> None:
-        """Change the value by one step and show it in the buffer."""
-        self.editing = False
-        self.set(self.value + (self.spec.step if up else -self.spec.step))
-        self.editing = True
-        self.buffer = self._digits()
-        self.cursor, self.selected = len(self.buffer), True
-
     def _caret_key(self, event: Event) -> bool:
         """Select all, delete, or move the caret; True if the key was one of those."""
         key = event.key
@@ -217,6 +157,100 @@ class Spin(Widget):
         else:
             return False
         return True
+
+
+class Spin(LineEdit):
+    """A number field: click to type, Enter to accept, Esc to cancel.
+
+    Clicking selects the whole number, so typing replaces it. Left, Right, Home,
+    End, Delete and Backspace edit it where the caret is, and a click puts the
+    caret there. Up, Down and the wheel change the value by one step; Ctrl+A,
+    Ctrl+C and Ctrl+V select, copy and paste.
+
+    Args:
+        value: the starting value.
+        spec: the range, step and look; see `NumberSpec`.
+        on_change: called with the new value.
+    """
+
+    takes_focus_on_press = True
+
+    def __init__(self, value: float, spec: NumberSpec, on_change=None) -> None:
+        """Make a number field."""
+        super().__init__()
+        self.value, self.spec, self.on_change = value, spec, on_change
+
+    @staticmethod
+    def accepts(char: str) -> bool:
+        """A digit, a point or a minus sign."""
+        return char in DIGITS
+
+    def _digits(self) -> str:
+        """The value as typed: whole, or to the number of decimals."""
+        if self.spec.integer:
+            return f"{int(self.value)}"
+        return f"{self.value:.{self.spec.decimals}f}"
+
+    def text(self) -> str:
+        """The value as shown when not editing, with its suffix."""
+        return self._digits() + self.spec.suffix
+
+    def draw(self, canvas: Canvas) -> None:
+        """Draw the field; a teal edge and a caret while editing."""
+        self.draw_frame(canvas)
+        self.draw_text(canvas, self.buffer if self.editing else self.text())
+
+    def set(self, value: float, notify: bool = True) -> None:
+        """Set the value, held between the ends and rounded to the field's kind."""
+        value = min(max(value, self.spec.low), self.spec.high)
+        if self.spec.integer:
+            value = int(round(value))
+        else:
+            value = round(value, max(self.spec.decimals, 3))
+        changed = value != self.value
+        self.value = value
+        self.invalidate()
+        if changed and notify and self.on_change:
+            self.on_change(value)
+
+    def on_press(self, event: Event) -> None:
+        """A click takes the focus, which starts editing; another puts the caret."""
+        super().on_press(event)
+        if not self.enabled:
+            return
+        if self.editing:
+            self.place_caret(event.x)
+        else:
+            self.host.set_focus(self)
+
+    def on_focus_change(self, gained: bool) -> None:
+        """Start editing with the number selected, or accept what was typed."""
+        if gained and self.enabled:
+            self.start(self._digits())
+        elif not gained and self.editing:
+            self._commit()
+        self.invalidate()
+
+    def _commit(self) -> None:
+        """Take the typed text as the value if it is a number; else keep the old one."""
+        self.editing = False
+        try:
+            self.set(float(self.buffer))
+        except ValueError:
+            pass
+
+    def _paste(self) -> None:
+        """Put the digits of the clipboard at the caret."""
+        pasted = "".join(c for c in self.host.clip_get().strip() if c in DIGITS)
+        if pasted:
+            self.editing = True
+            self._insert(pasted)
+
+    def _step(self, up: bool) -> None:
+        """Change the value by one step and show it in the buffer."""
+        self.editing = False
+        self.set(self.value + (self.spec.step if up else -self.spec.step))
+        self.start(self._digits())
 
     def on_key(self, event: Event) -> bool:
         """Copy, paste, delete, accept, cancel and step; True if the key was used."""
@@ -248,6 +282,66 @@ class Spin(Widget):
             self.set(self.value + (self.spec.step if event.dy > 0 else -self.spec.step))
             return True
         return False
+
+
+class TextField(LineEdit):
+    """A box for one line of text: Enter hands it over, Esc gives up.
+
+    Args:
+        text: the starting text.
+        on_submit: called with the text when Enter is pressed.
+        on_cancel: called when Esc is pressed.
+    """
+
+    def __init__(self, text: str = "", on_submit=None, on_cancel=None) -> None:
+        """Make a text box."""
+        super().__init__()
+        self.buffer = text
+        self.on_submit, self.on_cancel = on_submit, on_cancel
+
+    def draw(self, canvas: Canvas) -> None:
+        """Draw the box and its text."""
+        self.draw_frame(canvas)
+        self.draw_text(canvas, self.buffer)
+
+    def on_press(self, event: Event) -> None:
+        """A click takes the focus; a click while editing puts the caret."""
+        super().on_press(event)
+        if not self.enabled:
+            return
+        if self.editing:
+            self.place_caret(event.x)
+        else:
+            self.host.set_focus(self)
+
+    def on_focus_change(self, gained: bool) -> None:
+        """Start editing with the text selected, or stop."""
+        if gained and self.enabled:
+            self.start(self.buffer)
+        else:
+            self.editing = False
+        self.invalidate()
+
+    def on_key(self, event: Event) -> bool:
+        """Copy, paste, edit, hand over or give up; True if the key was used."""
+        if not self.enabled:
+            return False
+        key = event.key
+        if event.ctrl and key == KEY["c"]:
+            self.host.clip_set(self.buffer)
+        elif event.ctrl and key == KEY["v"]:
+            pasted = "".join(c for c in self.host.clip_get() if self.accepts(c))
+            self._insert(pasted)
+        elif self.editing and self._caret_key(event):
+            pass
+        elif key in (KEY["enter"], KEY["kp_enter"]) and self.on_submit:
+            self.on_submit(self.buffer)
+        elif key == KEY["escape"] and self.on_cancel:
+            self.on_cancel()
+        else:
+            return False
+        self.invalidate()
+        return True
 
 
 @dataclass
@@ -398,6 +492,93 @@ class Popup(Widget):
             self.host.close_popup()
             if action:
                 action()
+
+
+class PromptPopup(Popup):
+    """A small card over the window that asks for one line of text.
+
+    Args:
+        title: what is asked, for instance "Open a world file".
+        text: the text the box starts with.
+        on_submit: called with the text when Enter is pressed; the card closes first.
+        place: (x, y, width) of the card - its left and top edges and its width.
+        hint: a line of help under the box.
+    """
+
+    HEIGHT = 124
+
+    def __init__(
+        self,
+        title: str,
+        text: str,
+        on_submit,
+        place: tuple[float, float, float],
+        *,
+        hint: str = "",
+    ) -> None:
+        """Make the card with its box."""
+        x, y, width = place
+        self.field = TextField(text, self._submit, self._close)
+        super().__init__([], x, y)
+        self.title, self.hint, self.on_submit = title, hint, on_submit
+        self.add(self.field)
+        self.set_rect(x, y, width, self.HEIGHT)
+
+    def layout(self) -> None:
+        """Put the box inside the card."""
+        self.field.set_rect(self.x + 16, self.y + 42, self.width - 32, 36)
+
+    def adopt(self, host) -> None:
+        """Take the host and the keyboard focus, so typing goes to the box."""
+        super().adopt(host)
+        host.set_focus(self.field)
+
+    def _close(self) -> None:
+        """Close the card and give the focus up."""
+        self.host.set_focus(None)
+        self.host.close_popup()
+
+    def _submit(self, text: str) -> None:
+        """Close the card, then hand the text over."""
+        self._close()
+        self.on_submit(text)
+
+    def draw(self, canvas: Canvas) -> None:
+        """Draw a shadow, the card, the title, the box and the hint."""
+        card = (self.x, self.y, self.width, self.height)
+        canvas.rect(
+            (self.x + 1, self.y + 5, self.width, self.height),
+            rgba(look.NAVY, 0.10),
+            radius=12,
+        )
+        canvas.rect(card, rgba(look.PANEL), radius=10)
+        canvas.rect_outline(card, rgba(look.LINE), width=1, radius=10)
+        canvas.text(
+            font.bold(),
+            self.title,
+            (self.x + 16, text_baseline(self.y + 8, 28, 14)),
+            size=14,
+            color=rgba(look.NAVY),
+        )
+        self.field.draw(canvas)
+        canvas.text(
+            font.regular(),
+            self.hint,
+            (self.x + 16, text_baseline(self.y + 84, 28, 12)),
+            size=12,
+            color=rgba(look.MUTED),
+        )
+
+    def on_press(self, event: Event) -> None:
+        """A click on the box goes to the box."""
+        if self.field.contains(event.x, event.y):
+            self.field.on_press(event)
+
+    def on_move(self, event: Event) -> None:
+        """Nothing to light."""
+
+    def on_release(self, event: Event) -> None:
+        """Nothing to run."""
 
 
 class Combo(Widget):

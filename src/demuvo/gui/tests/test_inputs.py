@@ -3,12 +3,22 @@
 import pytest
 
 from demuvo.gui import look
-from demuvo.gui.inputs import Combo, MenuItem, NumberSpec, Popup, Row, Spin, TreeList
+from demuvo.gui.inputs import (
+    Combo,
+    MenuItem,
+    NumberSpec,
+    Popup,
+    PromptPopup,
+    Row,
+    Spin,
+    TextField,
+    TreeList,
+)
 from demuvo.gui.keys import KEY
 from demuvo.gui.raster import Canvas
 from demuvo.gui.widgets import Event
 
-from .fakes import click, hosted, ink
+from .fakes import FakeHost, click, hosted, ink
 
 
 def key(code, ctrl=False):
@@ -432,3 +442,86 @@ def test_typing_over_a_selection_or_deleting_it_leaves_only_what_is_typed():
     assert spin.buffer == "" and not spin.selected
     spin.on_char("3")
     assert spin.buffer == "3"
+
+
+def text_box(text="world.toml"):
+    """A hosted text box that records what it hands over."""
+    done = []
+    box = TextField(text, done.append, lambda: done.append("cancelled"))
+    return box, hosted(box, (10, 10, 300, 32)), done
+
+
+def test_a_text_box_is_selected_by_a_click_and_typing_replaces_it():
+    """Any printable character goes in; Enter hands the text over."""
+    box, _, done = text_box()
+    click(box)
+    assert box.editing and box.selected
+    for char in "a/b c.toml":
+        box.on_char(char)
+    box.on_char("\n")
+    assert box.buffer == "a/b c.toml"
+    box.on_key(key(KEY["enter"]))
+    assert done == ["a/b c.toml"]
+
+
+def test_a_text_box_gives_up_on_escape_and_is_ignored_when_disabled():
+    """Esc calls the cancel handler; a disabled box takes no key."""
+    box, _, done = text_box()
+    click(box)
+    box.on_key(key(KEY["escape"]))
+    assert done == ["cancelled"]
+    box.editing = False
+    box.enabled = False
+    assert not box.on_key(key(KEY["enter"]))
+    box.on_press(Event(box.x + 5, box.y + 5))
+    assert not box.editing
+    assert not text_box()[0].on_key(key(KEY["up"]))
+
+
+def test_a_text_box_copies_pastes_and_moves_the_caret():
+    """Ctrl+C copies, Ctrl+V pastes at the caret, a second click moves the caret."""
+    box, host, _ = text_box("abc")
+    click(box)
+    box.on_key(key(KEY["c"], ctrl=True))
+    assert host.clipboard == "abc"
+    host.clipboard = "XY\n"
+    box.on_key(key(KEY["right"]))
+    box.on_key(key(KEY["v"], ctrl=True))
+    assert box.buffer == "abcXY" and box.cursor == 5
+    box.on_press(Event(box.x + 10, box.y + 5))
+    assert box.cursor == 0 and box.editing
+    box.on_focus_change(False)
+    assert not box.editing
+    canvas = Canvas(320, 50, look.WINDOW)
+    box.draw(canvas)
+    assert (canvas.px != look.WINDOW[:3]).any()
+
+
+def test_a_prompt_takes_the_focus_and_hands_the_text_over_after_closing():
+    """The card shows a title, a box and a hint; Enter closes it and submits."""
+    seen = []
+    prompt = PromptPopup(
+        "Open a world file", "a.toml", seen.append, (100, 50, 560), hint="hint"
+    )
+    host = FakeHost()
+    prompt.adopt(host)
+    assert host.focus is prompt.field and prompt.field.editing
+    canvas = Canvas(700, 300, look.WINDOW)
+    prompt.draw(canvas)
+    assert (canvas.px != look.WINDOW[:3]).any()
+    prompt.on_press(Event(prompt.field.x + 5, prompt.field.y + 5))
+    prompt.on_press(Event(prompt.x + 2, prompt.y + 2))
+    prompt.on_move(Event(prompt.x + 2, prompt.y + 2))
+    prompt.on_release(Event(prompt.x + 2, prompt.y + 2))
+    prompt.field.on_key(key(KEY["enter"]))
+    assert host.closed == 1 and host.focus is None and seen == ["a.toml"]
+
+
+def test_escape_closes_a_prompt_without_submitting():
+    """Giving up closes the card and hands nothing over."""
+    seen = []
+    prompt = PromptPopup("Save", "a.toml", seen.append, (0, 0, 400))
+    host = FakeHost()
+    prompt.adopt(host)
+    prompt.field.on_key(key(KEY["escape"]))
+    assert host.closed == 1 and not seen
