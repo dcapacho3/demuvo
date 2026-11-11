@@ -30,7 +30,7 @@ WARN_BG, WARN_LINE, WARN_TEXT = "#fff4dc", "#f5d28a", "#7a4a00"
 GRADED_ALPHA, INSCRIBED_ALPHA, UNKNOWN_ALPHA = 0.50, 0.45, 0.60
 PALETTES = ("navy and amber", "mint to teal")
 # Milliseconds: a press or hover, a layer fading, a panel sliding.
-MS = {"press": 100, "fade": 150, "panel": 200}
+MS = {"press": 100, "fade": 90, "panel": 200}
 # Robot colours: the logo's hue, a step of the golden ratio, a chroma and lightness.
 TEAL_HUE, GOLDEN, CHROMA = 184.0, 0.6180339887498949, 0.15
 LIGHTNESS = (0.42, 0.52, 0.47)

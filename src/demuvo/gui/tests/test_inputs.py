@@ -346,3 +346,89 @@ def test_a_list_draws_selection_hover_dots_and_indent():
     assert canvas.px[32 + 4, 100, 0] < canvas.px[64 + 4, 100, 0] < 1.0
     assert canvas.px[10, 100, 0] == 1.0
     assert canvas.px[32 + 16, 10 + 14 + 9, 2] < 0.5
+
+
+def test_a_click_selects_the_number_so_typing_replaces_it():
+    """Typing after a click gives the new number, not the old one with more digits."""
+    spin, _, seen = field(5.0)
+    click(spin)
+    assert spin.editing and spin.selected and spin.buffer == "5.00"
+    for char in "7.5":
+        spin.on_char(char)
+    spin.on_key(key(KEY["enter"]))
+    assert spin.value == 7.5 and seen == [7.5]
+
+
+def test_the_arrow_keys_home_and_end_move_the_caret_and_delete_works_there():
+    """Edit the middle of a number: caret keys, Backspace and Delete."""
+    spin, _, _ = field(5.0)
+    click(spin)
+    spin.on_key(key(KEY["right"]))
+    assert not spin.selected and spin.cursor == 4
+    spin.on_key(key(KEY["left"]))
+    spin.on_key(key(KEY["left"]))
+    assert spin.cursor == 2
+    spin.on_key(key(KEY["backspace"]))
+    assert spin.buffer == "500" and spin.cursor == 1
+    spin.on_key(key(KEY["delete"]))
+    assert spin.buffer == "50"
+    spin.on_key(key(KEY["home"]))
+    spin.on_char("1")
+    assert spin.buffer == "150" and spin.cursor == 1
+    spin.on_key(key(KEY["end"]))
+    assert spin.cursor == 3
+    spin.on_key(key(KEY["backspace"]))
+    spin.on_key(key(KEY["backspace"]))
+    spin.on_key(key(KEY["backspace"]))
+    spin.on_key(key(KEY["backspace"]))
+    spin.on_key(key(KEY["delete"]))
+    assert spin.buffer == "" and spin.cursor == 0
+
+
+def test_left_and_right_over_a_selection_go_to_its_ends_and_ctrl_a_selects_all():
+    """Left goes to the start, Right to the end, Ctrl+A selects it all again."""
+    spin, _, _ = field(5.0)
+    click(spin)
+    spin.on_key(key(KEY["left"]))
+    assert spin.cursor == 0 and not spin.selected
+    spin.on_key(key(KEY["a"], ctrl=True))
+    assert spin.selected
+    spin.on_key(key(KEY["right"]))
+    assert spin.cursor == 4
+    spin.on_key(key(KEY["delete"]))
+    assert spin.buffer == "5.00"
+
+
+def test_a_second_click_puts_the_caret_between_the_digits_it_lands_on():
+    """The click's x picks the nearest gap; no second click selects again."""
+    spin, _, _ = field(5.0)
+    click(spin)
+    spin.on_press(Event(spin.x + 10, spin.y + 5))
+    assert spin.cursor == 0 and not spin.selected
+    spin.on_press(Event(spin.x + spin.width, spin.y + 5))
+    assert spin.cursor == 4
+
+
+def test_the_caret_and_the_selection_are_drawn():
+    """The edited field shows a teal mark: a caret, or a band over a selection."""
+    spin, _, _ = field(5.0)
+    plain = Canvas(200, 40, look.WINDOW)
+    spin.draw(plain)
+    click(spin)
+    band = Canvas(200, 40, look.WINDOW)
+    spin.draw(band)
+    spin.on_key(key(KEY["left"]))
+    caret = Canvas(200, 40, look.WINDOW)
+    spin.draw(caret)
+    assert ink(band) != ink(caret) != ink(plain)
+    assert (band.px != plain.px).any()
+
+
+def test_typing_over_a_selection_or_deleting_it_leaves_only_what_is_typed():
+    """Backspace on a selected number empties the field."""
+    spin, _, _ = field(5.0)
+    click(spin)
+    spin.on_key(key(KEY["backspace"]))
+    assert spin.buffer == "" and not spin.selected
+    spin.on_char("3")
+    assert spin.buffer == "3"

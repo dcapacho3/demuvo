@@ -214,17 +214,23 @@ def test_a_second_step_does_not_lock_again_and_only_redraws_the_changed_boxes(ap
     assert program.session.run.time == pytest.approx(0.10)
 
 
-def test_a_layer_fades_out_through_an_animation_and_its_box_and_menu_follow(app):
-    """Unchecking the floor box animates its fade to zero."""
+def test_a_cached_layer_switches_at_once_and_a_live_one_fades(app):
+    """The floor goes with the click; the trails fade through an animation."""
     window, program = app
+    shown = program.session.scene.layers.shown
     box = program.layer_boxes["floor"]
     click(window, box)
     assert program.layer_on["floor"] is False and not box.checked
-    window.animator.tick(time.perf_counter() + 1.0)
-    assert program.session.scene.layers.shown["floor"] == 0.0
+    assert shown["floor"] == 0.0
     program.set_layer("floor", True)
+    assert shown["floor"] == 1.0
+    click(window, program.layer_boxes["trails"])
+    assert shown["trails"] == 1.0 and window.animator.busy()
     window.animator.tick(time.perf_counter() + 1.0)
-    assert program.session.scene.layers.shown["floor"] == 1.0
+    assert shown["trails"] == 0.0
+    program.set_layer("trails", True)
+    window.animator.tick(time.perf_counter() + 1.0)
+    assert shown["trails"] == 1.0
     assert window.render().shape == (780, 1280, 3)
 
 
@@ -446,3 +452,14 @@ def test_a_click_on_an_obstacle_in_the_scene_selects_it_and_shows_its_form(app):
     window.mouse_release(Event(x, y))
     assert program.session.scene.selected_obstacle == 0
     assert "ox" in program.inspector.fields
+
+
+def test_the_lidar_rays_start_on_for_a_few_robots_and_off_for_a_swarm():
+    """Ten robots or fewer show their rays; more would cover the floor."""
+    _, few = start(Session(EXAMPLES / "lidar.toml"))
+    assert few.layer_on["rays"] and few.session.scene.layers.shown["rays"] == 1.0
+    many = edit.new_world()
+    for k in range(2, 13):
+        many = edit.add_robot(many, f"r{k}", edit.free_pose(many))
+    _, crowd = start(Session(many))
+    assert not crowd.layer_on["rays"]

@@ -92,5 +92,5 @@ def test_the_easing_curve_holds_its_ends_outside_zero_to_one():
 
 
 def test_the_motion_times_are_the_design_values():
-    """100, 150 and 200 ms."""
-    assert look.MS == {"press": 100, "fade": 150, "panel": 200}
+    """100, 90 and 200 ms."""
+    assert look.MS == {"press": 100, "fade": 90, "panel": 200}

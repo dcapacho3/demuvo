@@ -23,6 +23,8 @@ from .widgets import (
 )
 
 DIGITS = "0123456789.-"
+# Pixels between the field's left edge and its text.
+TEXT_PAD = 10
 
 
 @dataclass(frozen=True)
@@ -49,8 +51,10 @@ class NumberSpec:
 class Spin(Widget):
     """A number field: click to type, Enter to accept, Esc to cancel.
 
-    The arrow keys and the wheel change the value by one step, and Ctrl+C and
-    Ctrl+V copy and paste the number.
+    Clicking selects the whole number, so typing replaces it. Left, Right, Home,
+    End, Delete and Backspace edit it where the caret is, and a click puts the
+    caret there. Up, Down and the wheel change the value by one step; Ctrl+A,
+    Ctrl+C and Ctrl+V select, copy and paste.
 
     Args:
         value: the starting value.
@@ -66,6 +70,8 @@ class Spin(Widget):
         self.value, self.spec, self.on_change = value, spec, on_change
         self.editing = False
         self.buffer = ""
+        self.cursor = 0
+        self.selected = False
         self.focusable = True
 
     def _digits(self) -> str:
@@ -87,12 +93,23 @@ class Spin(Widget):
         else:
             edge = BORDER if self.hover and self.enabled else look.LINE
             canvas.rect_outline(box, rgba(edge), width=1, radius=4)
-        shown = self.buffer + "|" if self.editing else self.text()
+        face = font.regular()
+        left = self.x + TEXT_PAD
+        if self.editing:
+            shown = self.buffer
+            if self.selected and shown:
+                width = face.width(shown, 13)
+                canvas.rect(
+                    (left, self.y + 5, width, self.height - 10), rgba(look.TEAL, 0.25)
+                )
+            else:
+                caret = left + face.width(shown[: self.cursor], 13)
+                canvas.rect((caret, self.y + 6, 1.5, self.height - 12), rgba(look.TEAL))
+        else:
+            shown = self.text()
         baseline = text_baseline(self.y, self.height, 13)
         color = rgba(look.NAVY, fade(self.enabled))
-        canvas.text(
-            font.regular(), shown, (self.x + 10, baseline), size=13, color=color
-        )
+        canvas.text(face, shown, (left, baseline), size=13, color=color)
 
     def set(self, value: float, notify: bool = True) -> None:
         """Set the value, held between the ends and rounded to the field's kind."""
@@ -108,16 +125,27 @@ class Spin(Widget):
             self.on_change(value)
 
     def on_press(self, event: Event) -> None:
-        """A click takes the focus, which starts editing."""
+        """A click takes the focus, which starts editing; another puts the caret."""
         super().on_press(event)
-        if self.enabled:
+        if not self.enabled:
+            return
+        if self.editing:
+            face = font.regular()
+            offset = event.x - (self.x + TEXT_PAD)
+            self.cursor = min(
+                range(len(self.buffer) + 1),
+                key=lambda i: abs(face.width(self.buffer[:i], 13) - offset),
+            )
+            self.selected = False
+        else:
             self.host.set_focus(self)
 
     def on_focus_change(self, gained: bool) -> None:
-        """Start editing with the number in the buffer, or accept what was typed."""
+        """Start editing with the number selected, or accept what was typed."""
         if gained and self.enabled:
             self.editing = True
             self.buffer = self._digits()
+            self.cursor, self.selected = len(self.buffer), True
         elif not gained and self.editing:
             self._commit()
         self.invalidate()
@@ -130,25 +158,65 @@ class Spin(Widget):
         except ValueError:
             pass
 
+    def _insert(self, text: str) -> None:
+        """Put text at the caret, in place of the selection if there is one."""
+        if self.selected:
+            self.buffer, self.cursor, self.selected = "", 0, False
+        self.buffer = self.buffer[: self.cursor] + text + self.buffer[self.cursor :]
+        self.cursor += len(text)
+
+    def _delete(self, backwards: bool) -> None:
+        """Remove the selection, else the character before or after the caret."""
+        if self.selected:
+            self.buffer, self.cursor, self.selected = "", 0, False
+        elif backwards and self.cursor > 0:
+            self.buffer = self.buffer[: self.cursor - 1] + self.buffer[self.cursor :]
+            self.cursor -= 1
+        elif not backwards:
+            self.buffer = self.buffer[: self.cursor] + self.buffer[self.cursor + 1 :]
+
+    def _move(self, to: int) -> None:
+        """Put the caret at a place, clear the selection."""
+        self.cursor, self.selected = min(max(to, 0), len(self.buffer)), False
+
     def on_char(self, char: str) -> None:
         """Add a typed digit, point or minus sign."""
         if self.editing and char in DIGITS:
-            self.buffer += char
+            self._insert(char)
             self.invalidate()
 
     def _paste(self) -> None:
-        """Replace the buffer with the digits of the clipboard."""
+        """Put the digits of the clipboard at the caret."""
         pasted = "".join(c for c in self.host.clip_get().strip() if c in DIGITS)
         if pasted:
             self.editing = True
-            self.buffer = pasted
+            self._insert(pasted)
 
     def _step(self, up: bool) -> None:
         """Change the value by one step and show it in the buffer."""
         self.editing = False
         self.set(self.value + (self.spec.step if up else -self.spec.step))
         self.editing = True
-        self.buffer = f"{self.value:.{self.spec.decimals}f}"
+        self.buffer = self._digits()
+        self.cursor, self.selected = len(self.buffer), True
+
+    def _caret_key(self, event: Event) -> bool:
+        """Select all, delete, or move the caret; True if the key was one of those."""
+        key = event.key
+        if event.ctrl and key == KEY["a"]:
+            self.selected = True
+        elif key in (KEY["backspace"], KEY["delete"]):
+            self._delete(key == KEY["backspace"])
+        elif key in (KEY["left"], KEY["right"]):
+            if self.selected:
+                self._move(0 if key == KEY["left"] else len(self.buffer))
+            else:
+                self._move(self.cursor + (-1 if key == KEY["left"] else 1))
+        elif key in (KEY["home"], KEY["end"]):
+            self._move(0 if key == KEY["home"] else len(self.buffer))
+        else:
+            return False
+        return True
 
     def on_key(self, event: Event) -> bool:
         """Copy, paste, delete, accept, cancel and step; True if the key was used."""
@@ -159,8 +227,8 @@ class Spin(Widget):
             self.host.clip_set(self.buffer if self.editing else f"{self.value}")
         elif event.ctrl and key == KEY["v"]:
             self._paste()
-        elif key == KEY["backspace"] and self.editing:
-            self.buffer = self.buffer[:-1]
+        elif self.editing and self._caret_key(event):
+            pass
         elif key in (KEY["enter"], KEY["kp_enter"]):
             self._commit()
             self.host.set_focus(None)

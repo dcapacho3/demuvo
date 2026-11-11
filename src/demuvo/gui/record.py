@@ -60,6 +60,8 @@ def _studio(world, framing: Framing) -> tuple[Session, Sandbox, Shell]:
         for dock in window.layout.docks.values():
             dock.width = 0.0
         window.layout.apply()
+    # a recording shows the layers it was asked for, not the window's own choice
+    program.set_layer("rays", False)
     for name in framing.layers:
         program.set_layer(name, True)
     window.animator.tick(time.perf_counter() + FADES_DONE)

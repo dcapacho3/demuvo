@@ -16,7 +16,7 @@ from .inspector import Inspector
 from .keys import KEY
 from .paneactions import PaneActions
 from .panels import Badge, FormRow, Pill
-from .scenedraw import LAYERS
+from .scenedraw import LAYERS, STATIC
 from .scenepane import ScenePane
 from .session import Session
 from .shell import MENU_H, TOOL_H, Shell
@@ -39,6 +39,8 @@ BADGES = {
 # Layers whose opacity the slider sets.
 FADING = ("costmap", "local")
 BUTTON = 32
+# Worlds with up to this many robots start with the lidar rays shown.
+RAYS_UP_TO = 10
 # The key of an obstacle row in the scene list, followed by its 0-based place.
 OBSTACLE_KEY = "obstacle:"
 
@@ -68,6 +70,8 @@ class Sandbox:
         self.tree = TreeList(on_select=self.select)
         self.layer_boxes: dict[str, Checkbox] = {}
         self.layer_on = {name: on for name, (_, on) in LAYERS.items()}
+        # a few robots show their rays; a swarm would hide the floor under them
+        self.layer_on["rays"] = len(session.world.robots) <= RAYS_UP_TO
         self.inspector: Inspector | None = None
         self.pane: ScenePane | None = None
         self._last_tick = time.perf_counter()
@@ -372,10 +376,18 @@ class Sandbox:
         self.shell.invalidate_all()
 
     def set_layer(self, name: str, on: bool) -> None:
-        """Fade a layer in or out."""
+        """Show or hide a layer; one that is drawn every step fades, the rest switch.
+
+        A cached layer would be drawn again in full on every frame of a fade, which
+        is slower than the fade is long, so it switches at once.
+        """
         self.layer_on[name] = on
         self.layer_boxes[name].checked = on
         layers = self.session.scene.layers
+        if name in STATIC:
+            layers.shown[name] = 1.0 if on else 0.0
+            self.scene_changed()
+            return
         self.shell.animator.start(
             f"layer_{name}",
             layers.shown[name],
@@ -388,7 +400,6 @@ class Sandbox:
         """Set how far a layer is faded in."""
         self.session.scene.layers.shown[name] = value
         self.scene_changed()
-        self.shell.invalidate(self.shell.layout.chrome.right)
 
     def _set_opacity(self, value: float) -> None:
         """The opacity of the costmap layers."""
