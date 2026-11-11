@@ -546,3 +546,17 @@ def test_a_popup_that_would_leave_the_window_goes_above_its_anchor_or_up(toy):
     cramped.set_rect(20, height - 30, cramped.width, cramped.height)
     toy.open_popup(cramped)
     assert cramped.y + cramped.height == pytest.approx(height - 4)
+
+
+def test_a_right_click_goes_to_the_widget_under_it_unless_a_menu_is_open(toy):
+    """The right button reaches `on_secondary`; other buttons do nothing."""
+    seen = []
+    toy.program.one.on_secondary = seen.append
+    x, y = toy.program.one.x + 5, toy.program.one.y + 5
+    toy.mouse_press(Event(x, y, button=1))
+    assert len(seen) == 1
+    toy.mouse_press(Event(x, y, button=2))
+    toy.open_popup(Popup([MenuItem("a")], 400, 200))
+    toy.mouse_press(Event(x, y, button=1))
+    assert len(seen) == 1
+    toy.mouse_press(Event(900, 650, button=1))

@@ -215,3 +215,27 @@ def test_seeds_refuse_a_count_below_one(capsys):
     """A count, job number or limit of zero is a message, not a hang."""
     assert main([DEMO, "--seeds", "0"]) == 1
     assert "must be above 0" in capsys.readouterr().err
+
+
+def test_install_desktop_writes_the_launcher_entry_and_the_icons(tmp_path, monkeypatch):
+    """The entry names the command and the window class; three icon sizes follow."""
+    monkeypatch.setattr(cli.desktop.Path, "home", classmethod(lambda cls: tmp_path))
+    assert main(["--install-desktop"]) == 0
+    entry = tmp_path / ".local" / "share" / "applications" / "demuvo.desktop"
+    text = entry.read_text()
+    assert "StartupWMClass=demuvo" in text and "Icon=demuvo" in text
+    for size in (32, 64, 128):
+        icon = (
+            tmp_path / ".local/share/icons/hicolor" / f"{size}x{size}/apps/demuvo.png"
+        )
+        assert icon.read_bytes()[:4] == b"\x89PNG"
+
+
+def test_install_desktop_uses_the_python_module_when_no_command_is_on_the_path(
+    tmp_path, monkeypatch
+):
+    """Without a `demuvo` command the entry runs the module."""
+    monkeypatch.setattr(cli.desktop.shutil, "which", lambda name: None)
+    cli.desktop.install(tmp_path)
+    entry = tmp_path / ".local/share/applications/demuvo.desktop"
+    assert "-m demuvo" in entry.read_text()

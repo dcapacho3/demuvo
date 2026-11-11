@@ -1,7 +1,7 @@
 """The demuvo command - open a world file in the sandbox window.
 
 demuvo [world.toml] [--bench] [--check] [--dt S] [--result] [--seconds S]
-       [--seeds N [--jobs J] [--limit S]]
+       [--seeds N [--jobs J] [--limit S]] [--install-desktop]
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from ..gui.app import show
 from ..gui.session import Session
 from ..runner import Run
 from ..world import load_world
+from . import desktop
 from .seeds import run_seeds, table
 
 
@@ -66,6 +67,11 @@ def _parser() -> argparse.ArgumentParser:
         default=120.0,
         help="simulated seconds before a run with --seeds stops (default 120)",
     )
+    parser.add_argument(
+        "--install-desktop",
+        action="store_true",
+        help="add demuvo and its icon to your desktop's launcher, then exit",
+    )
     return parser
 
 
@@ -81,6 +87,10 @@ def main(argv: list[str] | None = None) -> int:
         is wrong. A malformed option ends the program with code 2, as argparse does.
     """
     args = _parser().parse_args(argv)
+    if args.install_desktop:
+        for path in desktop.install():
+            print(path)
+        return 0
     where = f"{args.world}: " if args.world else ""
     try:
         world = load_world(args.world) if args.world else None

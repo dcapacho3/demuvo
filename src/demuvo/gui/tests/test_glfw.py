@@ -206,3 +206,16 @@ def test_a_window_icon_is_handed_over_as_pictures_of_several_sizes():
     glfw.set_icon(7, [(2, 2, bytes(16)), (4, 4, bytes(64))])
     args = lib.glfwSetWindowIcon.call_args.args
     assert args[0] == 7 and args[1] == 2
+
+
+def test_a_window_is_made_with_the_program_name_for_the_desktop_to_match():
+    """The class, instance and app id hints carry the name, whatever the title says."""
+    lib = MagicMock()
+    glfw = Glfw(lib)
+    glfw.create_window(100, 80, "untitled * - demuvo")
+    hints = {c.args[0]: c.args[1] for c in lib.glfwWindowHintString.call_args_list}
+    assert hints == {
+        binding.X11_CLASS_NAME: b"demuvo",
+        binding.X11_INSTANCE_NAME: b"demuvo",
+        binding.WAYLAND_APP_ID: b"demuvo",
+    }

@@ -13,21 +13,26 @@ import math
 import time
 
 import numpy as np
+from robomath import Transform2D
 
+from ..world.shapes import Circle
+from . import font, look
 from .look import TEAL
 from .panels import Pill
 from .raster import Canvas, rgba
 from .session import Session
 from .strokes import polyline
-from .widgets import Event, Widget
+from .widgets import Event, Widget, text_baseline
 
 # The smallest obstacle a drag makes, in metres; less is taken for a click.
 MIN_SIZE = 0.1
+# Said while a polygon or line is being drawn.
+OUTLINE_HINT = "Double click, right click or press Enter to finish. Esc cancels."
 # A click this close, in pixels, to the first corner closes a polygon.
 CLOSE_PIXELS = 20.0
 # Two clicks within this many seconds and pixels are a double click, which ends a
 # polygon or line.
-DOUBLE_CLICK = (0.45, 8.0)
+DOUBLE_CLICK = (0.6, 12.0)
 
 
 class ScenePane(Widget):
@@ -52,6 +57,7 @@ class ScenePane(Widget):
         self.dragging: str | None = None
         self.grab = (0.0, 0.0)
         self.moving: int | None = None
+        self.ghost: tuple[int, float, float] | None = None
         self.sketch: tuple[float, float, float, float] | None = None
         self.outline: list[tuple[float, float]] = []
         self.cursor: tuple[float, float] | None = None
@@ -77,6 +83,7 @@ class ScenePane(Widget):
         self.session.scene.draw(canvas)
         self._draw_sketch(canvas)
         self._draw_outline(canvas)
+        self._draw_ghost(canvas)
         self.pill.draw(canvas)
 
     def _draw_sketch(self, canvas: Canvas) -> None:
@@ -95,12 +102,43 @@ class ScenePane(Widget):
             box = (min(x0, x1), min(y0, y1), abs(x1 - x0), abs(y1 - y0))
             canvas.rect_outline(box, color, width=2, radius=0)
 
+    def _draw_ghost(self, canvas: Canvas) -> None:
+        """Outline the obstacle where the pointer holds it.
+
+        The world follows a few times a second, so the outline is what moves smoothly.
+        """
+        if self.ghost is None:
+            return
+        index, x, y = self.ghost
+        item = self.session.world.obstacles[index]
+        pose = Transform2D.from_xyt((x, y, float(item.pose.xyt[2])))
+        view, color = self.session.scene.view, rgba(TEAL)
+        if isinstance(item.shape, Circle):
+            cx, cy = (float(v) for v in view.to_screen(x, y))
+            canvas.circle(
+                (cx, cy), item.shape.radius * view.scale, stroke=color, width=2
+            )
+            return
+        corners = np.array(item.shape.points(pose), dtype=float)
+        sx, sy = view.to_screen(corners[:, 0], corners[:, 1])
+        ring = np.column_stack([sx, sy])
+        if item.shape.closed:
+            ring = np.vstack([ring, ring[:1]])
+        polyline(canvas, ring, 2, color, dash=(6, 4))
+
     def _draw_outline(self, canvas: Canvas) -> None:
         """Draw the polygon or line so far, with a dashed segment to the pointer."""
         if not self.outline:
             return
         view = self.session.scene.view
         color = rgba(TEAL)
+        canvas.text(
+            font.regular(),
+            OUTLINE_HINT,
+            (self.x + 16, text_baseline(self.y + 8, 24, 12)),
+            size=12,
+            color=rgba(look.NAVY),
+        )
         points = [tuple(float(v) for v in view.to_screen(*p)) for p in self.outline]
         if len(points) > 1:
             polyline(canvas, np.array(points), 2.5, color)
@@ -174,7 +212,9 @@ class ScenePane(Widget):
             self.actions.dragged()
         elif self.moving is not None:
             x, y = self.session.scene.view.to_world(event.x, event.y)
-            self.actions.obstacle_moved(self.moving, x + self.grab[0], y + self.grab[1])
+            self.ghost = (self.moving, x + self.grab[0], y + self.grab[1])
+            self.actions.obstacle_moved(*self.ghost)
+            self.actions.sketch_changed()
         elif self.dragging:
             scene = self.session.scene
             x, y = scene.view.to_world(event.x, event.y)
@@ -185,7 +225,11 @@ class ScenePane(Widget):
             self.actions.robot_moved(self.dragging, *place)
 
     def on_release(self, event: Event) -> None:
-        """Drop the dragged robot, or finish the obstacle being drawn."""
+        """Drop the dragged robot or obstacle, or finish the obstacle being drawn."""
+        if self.moving is not None and self.ghost is not None:
+            self.actions.obstacle_moved(*self.ghost, force=True)
+            self.ghost = None
+            self.actions.sketch_changed()
         self.moving = None
         if self.sketch is not None:
             x0, y0, x1, y1 = self.sketch
@@ -236,6 +280,11 @@ class ScenePane(Widget):
         self.outline.append(point)
         self.cursor = point
         self.actions.sketch_changed()
+
+    def on_secondary(self, event: Event) -> None:
+        """A right click ends the polygon or line being drawn."""
+        if self.outline:
+            self.finish_outline()
 
     def finish_outline(self) -> None:
         """Make the polygon or line from the corners so far, if there are enough."""

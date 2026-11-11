@@ -13,6 +13,9 @@ import os
 
 # Hints and values, as in glfw3.h.
 VISIBLE = 0x00020004
+# Names a desktop matches to its launcher entry and icon.
+X11_CLASS_NAME, X11_INSTANCE_NAME, WAYLAND_APP_ID = 0x00024001, 0x00024002, 0x00026001
+APP_NAME = b"demuvo"
 TRUE, FALSE = 1, 0
 RELEASE, PRESS, REPEAT = 0, 1, 2
 # Set this to the path of a libglfw to use that one.
@@ -47,6 +50,7 @@ FUNCTIONS = {
     "glfwInit": ((), _C_INT),
     "glfwTerminate": ((), None),
     "glfwWindowHint": ((_C_INT, _C_INT), None),
+    "glfwWindowHintString": ((_C_INT, ctypes.c_char_p), None),
     "glfwCreateWindow": (
         (_C_INT, _C_INT, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p),
         _WINDOW,
@@ -136,6 +140,9 @@ class Glfw:
     def create_window(self, width: int, height: int, title: str, visible: bool = True):
         """Open a window with an OpenGL context; None if it cannot be opened."""
         self.lib.glfwWindowHint(VISIBLE, TRUE if visible else FALSE)
+        # the title changes with the file, so the desktop is told the program's name
+        for hint in (X11_CLASS_NAME, X11_INSTANCE_NAME, WAYLAND_APP_ID):
+            self.lib.glfwWindowHintString(hint, APP_NAME)
         window = self.lib.glfwCreateWindow(width, height, title.encode(), None, None)
         return window or None
 

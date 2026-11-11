@@ -47,9 +47,9 @@ class Actions:
         self.log.append(("obstacle selected", index))
         self.session.select_obstacle(index)
 
-    def obstacle_moved(self, index, x, y):
+    def obstacle_moved(self, index, x, y, force=False):
         """Note a move and apply it."""
-        self.log.append(("obstacle moved", index, round(x, 2), round(y, 2)))
+        self.log.append(("obstacle moved", index, round(x, 2), round(y, 2), force))
         self.session.edits.move_obstacle(index, (x, y, 0.0))
 
     def waypoint_added(self, name, x, y, heading):
@@ -201,10 +201,14 @@ def test_a_click_on_an_obstacle_selects_it_and_a_drag_moves_it_by_the_offset():
     pane.on_press(Event(*at(pane, 2.2, 2.0)))
     assert session.scene.selected_obstacle == 0 and pane.moving == 0
     pane.on_move(Event(*at(pane, 4.2, 2.0)))
-    assert actions.log[-1] == ("obstacle moved", 0, 4.0, 2.0)
+    assert ("obstacle moved", 0, 4.0, 2.0, False) in actions.log
+    assert pane.ghost == (0, pytest.approx(4.0, abs=0.02), pytest.approx(2.0, abs=0.02))
+    canvas = Canvas(900, 600, (1, 1, 1, 1))
+    pane.draw(canvas)
     assert session.world.obstacles[0].pose.xyt[0] == pytest.approx(4.0, abs=0.02)
     pane.on_release(Event(*at(pane, 4.2, 2.0)))
-    assert pane.moving is None
+    assert pane.moving is None and pane.ghost is None
+    assert actions.log[-2][-1] is True
 
 
 def test_an_obstacle_is_selected_but_not_moved_while_a_run_is_in_progress():
@@ -380,3 +384,17 @@ def test_a_double_click_ends_a_polygon_or_a_line_at_the_last_corner(monkeypatch)
     clock[0] += 1.0
     click_at(pane, 1.0, 1.0)
     assert len(pane.outline) == 2
+
+
+def test_a_right_click_ends_the_outline_being_drawn_and_does_nothing_otherwise():
+    """Right click is the third way to finish, beside a double click and Enter."""
+    pane, session, actions = build()
+    pane.on_secondary(Event(*at(pane, 1.0, 1.0)))
+    session.set_tool("line")
+    click_at(pane, 1.0, 1.0)
+    click_at(pane, 4.0, 5.0)
+    canvas = Canvas(900, 600, (1, 1, 1, 1))
+    pane.draw(canvas)
+    pane.on_secondary(Event(*at(pane, 4.0, 5.0)))
+    assert ("outline", "linestring", 2) in actions.log
+    assert session.world.obstacles[0].shape.name == "linestring"

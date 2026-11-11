@@ -418,9 +418,9 @@ def test_dragging_an_obstacle_shows_its_place_and_a_bad_place_is_refused(app):
     """The pose fields follow the drag; into the robot it stays where it was."""
     window, program = app
     program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 1.0))
-    program.pane.actions.obstacle_moved(0, 3.0, 2.0)
+    program.pane.actions.obstacle_moved(0, 3.0, 2.0, force=True)
     assert program.inspector.fields["ox"].value == pytest.approx(3.0)
-    program.pane.actions.obstacle_moved(0, 5.0, 3.0)
+    program.pane.actions.obstacle_moved(0, 5.0, 3.0, force=True)
     assert "overlap" in window.layout.chrome.status.message
     assert program.session.world.obstacles[0].pose.xyt[0] == pytest.approx(3.0)
 
@@ -783,3 +783,38 @@ def test_the_percentage_is_of_the_speed_chosen_and_starts_over_when_it_changes(a
     assert status.rate == "real time 100%"
     program.pane.pill.speed.choose("1x")
     assert program.clock.share(program.clock.last, 0.0, 1.0) is None
+
+
+def test_a_dragged_obstacle_shows_an_outline_and_the_world_follows_at_the_drop(app):
+    """The outline moves with the pointer; the world is edited once, on release."""
+    window, program = app
+    program.pane.actions.obstacle_drawn("circle", (2.0, 2.0, 0.0), (0.4,))
+    program.pane.actions.obstacle_drawn("box", (7.0, 4.0, 0.0), (1.0, 1.0))
+    sx, sy = at(program, 2.0, 2.0)
+    window.mouse_move(sx, sy)
+    window.mouse_press(Event(sx, sy))
+    before = program.session.world
+    for x in (3.0, 4.0):
+        mx, my = at(program, x, 2.0)
+        window.mouse_move(mx, my)
+        window.render()
+        assert program.pane.ghost is not None
+        assert program.session.world is before
+    window.mouse_release(Event(mx, my))
+    assert program.session.world.obstacles[0].pose.xyt[0] == pytest.approx(
+        4.0, abs=0.03
+    )
+    assert program.pane.ghost is None
+    px, py = at(program, 7.0, 4.0)
+    window.mouse_press(Event(px, py))
+    qx, qy = at(program, 8.0, 4.0)
+    window.mouse_move(qx, qy)
+    window.render()
+    window.mouse_release(Event(qx, qy))
+    assert program.session.world.obstacles[1].pose.xyt[0] == pytest.approx(
+        8.0, abs=0.03
+    )
+    assert program.session.history.undo() is None
+    assert program.session.world.obstacles[1].pose.xyt[0] == pytest.approx(
+        7.0, abs=0.03
+    )

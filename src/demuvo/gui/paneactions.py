@@ -70,8 +70,17 @@ class PaneActions:
         """A dragged robot was dropped."""
         self.program.edited(self.session.move_robot(name, (x, y, angle)))
 
-    def obstacle_moved(self, index: int, x: float, y: float) -> None:
-        """An obstacle is being dragged; keep it where it can be."""
+    def obstacle_moved(
+        self, index: int, x: float, y: float, force: bool = False
+    ) -> None:
+        """An obstacle is being dragged; the world follows only at the drop.
+
+        Making the world follow costs about a tenth of a second, which would make the
+        drag stutter, so the pane draws an outline that moves with the pointer, and
+        the drop passes `force` to make the edit.
+        """
+        if not force:
+            return
         angle = float(self.session.world.obstacles[index].pose.xyt[2])
         error = self.session.edits.move_obstacle(index, (x, y, angle))
         if error is not None:

@@ -229,6 +229,9 @@ class Widget:  # pylint: disable=unused-argument
         self.down = False
         self.invalidate()
 
+    def on_secondary(self, event: Event) -> None:
+        """The right button went down on the widget; most widgets ignore it."""
+
     def on_move(self, event: Event) -> None:
         """The pointer moved over the widget, or while it is held."""
 

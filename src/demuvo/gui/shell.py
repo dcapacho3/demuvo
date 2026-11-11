@@ -516,6 +516,11 @@ class Input:
 
     def press(self, event: Event) -> None:
         """A mouse button went down."""
+        if event.button == 1:
+            target = self.hit(event.x, event.y)
+            if target is not None and self.popup is None:
+                target.on_secondary(event)
+            return
         if event.button != 0:
             return
         shell = self.shell
