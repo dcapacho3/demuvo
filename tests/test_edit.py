@@ -492,3 +492,40 @@ def test_a_model_without_wheels_cannot_run_dead_reckoning(world, monkeypatch):
     with pytest.raises(WorldError, match="cannot run 'dead_reckoning'"):
         edit.set_estimator(sliding, "r1", "dead_reckoning")
     assert edit.set_estimator(sliding, "r1", "ground_truth").robots[0].estimator
+
+
+def test_a_world_built_with_every_edit_survives_save_and_load(world, tmp_path):
+    """Whatever the window can set comes back from the file it saves."""
+    w = edit.set_size(world, (12.0, 8.0))
+    w = edit.set_origin(w, (-1.0, -1.0))
+    w = edit.set_seed(edit.set_step(w, 0.025), 9)
+    w = edit.add_obstacle(w, "box", (2.0, 2.0, 0.5), (1.0, 0.5))
+    w = edit.add_obstacle(w, "circle", (8.0, 5.0, 0.0), (0.4,))
+    w = edit.add_outline(w, "polygon", [(1, 5), (2, 5), (1.5, 6.5)])
+    w = edit.add_outline(w, "linestring", [(9, 1), (10, 2)])
+    w = edit.set_robot_shape(w, "r1", "box", (0.5, 0.3))
+    w = edit.set_estimator(w, "r1", "dead_reckoning")
+    w = edit.set_control_pose(w, "r1", "truth")
+    w = edit.set_sensor(w, "r1", "encoders", {"noise": 0.02, "ticks_per_rev": 1024})
+    w = edit.set_sensor(
+        w, "r1", "front", {"type": "lidar", "beams": 60, "mount": [0.1, 0, 0]}
+    )
+    w = edit.set_sensor(w, None, "encoders", {"noise": 0.01})
+    w = edit.add_goal(w, "r1", (9.0, 1.0, 0.0))
+    w = edit.add_goal(w, "r1", (9.0, 5.0, 1.0))
+    w = edit.set_goal_options(w, 0, tolerance=(0.2, 0.1), stop=True, wait=1.5)
+    w = edit.set_costmap(w, "global", {"resolution": 0.1, "plugins": ["inflation"]})
+    w = edit.set_costmap(w, "local", {"window": 4.0, "plugins": ["obstacle"]})
+    path = tmp_path / "all.toml"
+    save_world(w, path)
+    back = load_world(path)
+    assert (back.size, back.origin, back.seed, back.dt) == (w.size, w.origin, 9, 0.025)
+    assert [o.shape for o in back.obstacles] == [o.shape for o in w.obstacles]
+    robot, again = w.robots[0], back.robots[0]
+    assert again.shape == robot.shape and again.estimator == "dead_reckoning"
+    assert again.control_pose == "truth" and again.sensors == robot.sensors
+    assert back.sensors == w.sensors
+    assert [(t.goal_tolerance, t.stop, t.wait) for t in back.tasks] == [
+        (t.goal_tolerance, t.stop, t.wait) for t in w.tasks
+    ]
+    assert back.costmap == w.costmap and back.local_costmap == w.local_costmap

@@ -38,16 +38,18 @@ Working today:
   own scan rate, and a local costmap that the robot builds from their scans (see
   "Lidar and the local costmap" below);
 - a step length and a controller rate that you set apart (see "Time" below);
-- a native window, `demuvo`, to open a world, build one by adding robots and choosing
-  their planner, smoother and controller, set goals and run it (see "The window"
-  below), and a recorder that writes GIFs with no window;
+- a native window, `demuvo`, to build a world with the pointer and the forms, save it
+  to a file, open one, and run it (see "The window" below), and a recorder that
+  writes GIFs with no window;
 - a `Run` for scripts and benchmarks, and functions that build, edit and save a world
   (see "Use it from Python" below);
 - a result, printed with `--result` when the window closes: for each task, whether the
   robot reached it and when, the distance it drove, and the number of collisions.
 
 Not yet: the other kinematic models (car-like, forklift, mecanum, skid-steer), and a
-runner that compares controllers on the same worlds and seeds.
+runner that compares controllers on the same worlds and seeds. In the window, a
+polygon or line can be moved and deleted but not reshaped, a robot body is a disc or a
+box, and the lidar rays appear after the first step.
 
 ## Try it
 
@@ -156,29 +158,55 @@ installed and else from a copy that ships with demuvo.
 
 There are two modes:
 
-- **sandbox** (`demuvo` or `demuvo world.toml`): the world is yours. Add and delete
-  robots, drag them, pick a goal, choose each robot's model, planner, smoother and
-  controller and their settings, then run. A change is allowed only while no run is in
-  progress; Reset ends the run and unlocks editing. A change that cannot work is
-  refused in the status bar, in words that name the robot and the setting.
+- **sandbox** (`demuvo` or `demuvo world.toml`): the world is yours, and the window
+  can set everything the world file holds. `demuvo` alone opens a blank world with one
+  robot, `r1`, to build on. A change is allowed only while no run is in progress;
+  Reset ends the run and unlocks editing. A change that cannot work is refused in the
+  status bar, in words that name the robot and the setting.
 - **benchmark** (`demuvo world.toml --bench`): the world is fixed, so every run is the
   same. Reset repeats it. Layers and panels still work.
 
-The scene list is on the left, the world in the middle with a playback pill (play,
-step, reset, speed 0.25x to 8x, the clock), and the inspector on the right. The
-inspector shows the selected robot's pose, goal, parts and settings, and the layer
-switches: floor, global and local costmap, obstacles, trails, paths, goals, lidar rays
-and robots, with an opacity and a palette for the costmaps. Every robot has its own
-colour, and is drawn with its real footprint, a disc, a box or any polygon, and a white
-arrow for its heading.
+The scene list and the layer switches are on the left, the world is in the middle with
+a playback pill (play, step, reset, speed 0.25x to 8x, the clock), and the inspector is
+on the right. The layers are floor, global and local costmap, obstacles, trails, paths,
+goals, lidar rays and robots, with an opacity and a palette for the costmaps; a world
+with up to ten robots starts with the lidar rays on. Every robot has its own colour,
+and is drawn with its real footprint and a white arrow for its heading.
+
+**Building a world.** Pick a tool from the tool bar or by key, then use the pointer:
+
+- *Select*: click a robot or an obstacle; drag it to move it.
+- *Goal*: click the floor to set the selected robot's goal; Shift and click adds a
+  waypoint after the goals it has.
+- *Box* and *circle*: drag on the floor. A box is drawn from one corner to the other, a
+  circle from its centre outwards.
+- *Polygon* and *line*: click the corners. Click the first corner of a polygon, or press
+  Enter, to close it; Enter ends a line; Esc cancels.
+- *Add robot* and *delete*: the tool bar, Ctrl+N and Delete.
+
+The inspector shows what is selected, and every field applies as you leave it. With
+nothing selected it shows the world: its size, corner, seed and step, the sensors every
+robot starts with, and the global and local costmap. With an obstacle selected it shows
+the pose and size. With a robot selected it shows the pose, each goal with its
+tolerance, stop rule and wait, the body (disc or box), the model, planner, smoother and
+controller with their settings, where the controller gets its pose, and the sensors,
+encoders and any number of lidars. A number field selects its number when you click, so
+typing replaces it; Left, Right, Home, End, Delete and Ctrl+A work as in a text box.
+
+**Files.** The File menu has New world, Open, Save and Save as. Open and Save as ask for
+a path in a card over the window. The title bar shows the file and a star if there are
+unsaved changes; New, Open and Quit say so the first time and go ahead the second.
+Saving writes a new file: comments and the order of keys in the old file are not kept.
 
 | Key | Does |
 | --- | --- |
 | Space | play or pause |
 | S | step by one control period |
 | R | reset |
-| V, G | the select tool, the goal tool (click the floor to set the selected robot's goal) |
-| Ctrl+N, Delete | add a robot, delete the selected one |
+| V, G, B, C, P, L | the select, goal, box, circle, polygon and line tools |
+| Enter, Esc | end or cancel a polygon or line |
+| Ctrl+N, Delete | add a robot, delete the selected robot or obstacle |
+| Ctrl+O, Ctrl+S | open a world file, save the world |
 | Ctrl+1, Ctrl+2 | show or hide the scene list, the inspector |
 | Tab, Shift+Tab | move the keyboard focus |
 | Ctrl+Q | quit |
