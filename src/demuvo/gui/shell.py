@@ -558,7 +558,8 @@ class Input:
                 shell.keyboard_focus = False
             shell.program.command(key, False)
         elif event.ctrl and key == KEY["q"]:
-            shell.quit_requested = True
+            # a program may ask first, for instance about unsaved work
+            shell.quit_requested = shell.program.can_quit()
         else:
             shell.program.command(key, event.ctrl)
 
@@ -762,6 +763,11 @@ class Shell:
         """A character was typed."""
         if self.focus is not None:
             self.focus.on_char(char)
+
+    @property
+    def title(self) -> str:
+        """The text for the window's title bar."""
+        return self.program.title
 
     @property
     def dirty(self) -> bool:

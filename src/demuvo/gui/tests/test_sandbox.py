@@ -279,6 +279,9 @@ def test_the_menus_list_the_commands_and_run_them(app):
     assert program.layer_on["trails"] is False
     view[-1].action()
     program.menu_items("File")[-1].action()
+    assert not window.quit_requested
+    assert "Unsaved changes" in window.layout.chrome.status.message
+    program.menu_items("File")[-1].action()
     assert window.quit_requested
 
 
@@ -526,6 +529,9 @@ def test_escape_closes_the_prompt_and_new_world_starts_blank(app):
     assert window.input.popup is None
     program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 0.5))
     program.menu_items("File")[0].action()
+    assert program.session.world.obstacles
+    assert "Choose New world again" in window.layout.chrome.status.message
+    program.menu_items("File")[0].action()
     assert not program.session.world.obstacles
 
 
@@ -567,3 +573,48 @@ def test_p_and_l_pick_the_outline_tools_and_enter_and_escape_end_a_drawing(app):
     window.mouse_release(Event(px, py))
     program.set_tool("select")
     assert not program.pane.outline
+
+
+def test_the_title_names_the_file_and_stars_unsaved_changes(app, tmp_path):
+    """Untitled at first; a star after an edit; the file name after a save."""
+    window, program = app
+    assert program.title == "untitled - demuvo" and window.title == program.title
+    program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 0.5))
+    assert program.title == "untitled * - demuvo"
+    path = tmp_path / "mine.toml"
+    program._save_to(str(path))  # pylint: disable=protected-access
+    assert program.title == "mine.toml - demuvo"
+    program.pane.actions.obstacle_drawn("circle", (7.0, 4.0, 0.0), (0.3,))
+    assert program.title == "mine.toml * - demuvo"
+
+
+def test_ctrl_q_asks_twice_when_there_is_unsaved_work_and_open_and_new_ask_too(app):
+    """A saved world quits at once; an edited one needs the second ask."""
+    window, program = app
+    press_key(window, "q", ctrl=True)
+    assert window.quit_requested
+    window.quit_requested = False
+    program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 0.5))
+    press_key(window, "q", ctrl=True)
+    assert not window.quit_requested
+    press_key(window, "o", ctrl=True)
+    assert window.input.popup is None
+    press_key(window, "o", ctrl=True)
+    assert window.input.popup is not None
+    window.input.close_popup()
+    press_key(window, "q", ctrl=True)
+    assert not window.quit_requested
+
+
+def test_shift_click_with_the_goal_tool_adds_a_waypoint_through_the_window(app):
+    """A click sets the goal, a Shift click adds another, and the form lists both."""
+    window, program = app
+    program.select("r1")
+    program.set_tool("goal")
+    for y, shift in ((1.0, False), (5.0, True)):
+        x, py = at(program, 8.0, y)
+        window.mouse_move(x, py)
+        window.mouse_press(Event(x, py, shift=shift))
+        window.mouse_release(Event(x, py))
+    assert edit.goals_of(program.session.world, "r1") == [0, 1]
+    assert "g1x" in program.inspector.fields

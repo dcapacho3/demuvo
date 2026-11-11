@@ -73,6 +73,11 @@ class ToyProgram:
         """A line that says which menu it is in."""
         return [MenuItem(f"{title} item", action=lambda: self.commands.append(title))]
 
+    @staticmethod
+    def can_quit():
+        """The toy never has unsaved work."""
+        return True
+
     def command(self, key, ctrl):
         """Note a key nothing else used."""
         self.commands.append((key, ctrl))

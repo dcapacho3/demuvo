@@ -24,7 +24,9 @@ from .shell import MENU_H, TOOL_H, Shell
 from .widgets import Checkbox, IconButton, Section, Slider
 
 DEFAULT_MESSAGE = "Drag a robot to move it. Ctrl+1 and Ctrl+2 show or hide the panels."
-GOAL_MESSAGE = "Click on the floor to set the goal of the selected robot."
+GOAL_MESSAGE = (
+    "Click the floor to set the goal of the selected robot; Shift adds a waypoint."
+)
 # The tools, and what the status bar says when one is chosen.
 TOOL_MESSAGES = {
     "select": DEFAULT_MESSAGE,
@@ -81,6 +83,7 @@ class Sandbox:
         self.alpha: Slider | None = None
         self.palette: Combo | None = None
         self.scene_heading = Section("Scene")
+        self._warned: str | None = None
 
     # -- building --
     def build(self, shell: Shell) -> None:
@@ -467,6 +470,24 @@ class Sandbox:
         self.session.speed = speed
 
     # -- files --
+    @property
+    def title(self) -> str:
+        """The window title: the file, a star if it has unsaved changes, the program."""
+        edits = self.session.edits
+        name = os.path.basename(edits.path) if edits.path else "untitled"
+        return f"{name}{' *' if edits.modified else ''} - demuvo"
+
+    def _discard_ok(self, what: str) -> bool:
+        """True if nothing is unsaved, or this is the second ask in a row."""
+        if not self.session.edits.modified or self._warned == what:
+            self._warned = None
+            return True
+        self._warned = what
+        self.message(
+            f"Unsaved changes. Choose {what} again to drop them, or save first."
+        )
+        return False
+
     def _prompt(self, title: str, text: str, hint: str, action) -> None:
         """Ask for a line of text in a card near the top of the window."""
         width = min(560.0, self.shell.screen.width - 40)
@@ -479,7 +500,7 @@ class Sandbox:
 
     def _open_prompt(self) -> None:
         """Ask which world file to open."""
-        if self.session.mode == "sandbox":
+        if self.session.mode == "sandbox" and self._discard_ok("Open"):
             self._prompt(
                 "Open a world file",
                 self.session.edits.path or "",
@@ -501,6 +522,8 @@ class Sandbox:
 
     def _new_world(self) -> None:
         """Start again with a blank world."""
+        if not self._discard_ok("New world"):
+            return
         error = self.session.edits.new()
         self.pane.pill.set_playing(False)
         self.pane.pill.set_time(0.0)
@@ -529,9 +552,14 @@ class Sandbox:
         error = self.session.edits.save(path)
         self.message(error or f"Saved {path}.")
 
+    def can_quit(self) -> bool:
+        """True if the window may close: nothing is unsaved, or it was asked twice."""
+        return self._discard_ok("Quit")
+
     def _quit(self) -> None:
-        """Ask the window to close."""
-        self.shell.quit_requested = True
+        """Ask the window to close, unless there are unsaved changes."""
+        if self._discard_ok("Quit"):
+            self.shell.quit_requested = True
 
     # -- editing: what the pane tells --
     def select(self, name: str | None) -> None:

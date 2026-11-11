@@ -1,10 +1,10 @@
 """The scene pane - the world in the window, and what the mouse does to it.
 
-Click a robot or an obstacle to select it; drag it to move it while editing; with
-the goal tool, click the floor to give the selected robot a goal; with the box or
-circle tool, drag on the floor to draw an obstacle; with the polygon or line tool,
-click its corners. The playback pill floats over
-the bottom of the pane.
+Click a robot or an obstacle to select it; drag it to move it while editing. With
+the goal tool, click the floor to give the selected robot a goal, or Shift and click
+to add a waypoint. With the box or circle tool, drag on the floor to draw an
+obstacle; with the polygon or line tool, click its corners. The playback pill floats
+over the bottom of the pane.
 """
 
 from __future__ import annotations
@@ -34,7 +34,8 @@ class ScenePane(Widget):
         pill: the playback pill.
         actions: an object that is told what the mouse did; it has
             `select(name)`, `select_obstacle(index)`, `goal_set(name, x, y,
-            heading)`, `dragged()`, `dropped(name, x, y, angle)`,
+            heading)`, `waypoint_added(name, x, y, heading)`, `dragged()`,
+            `dropped(name, x, y, angle)`,
             `obstacle_moved(index, x, y)`, `obstacle_drawn(kind, pose, size)`,
             `outline_drawn(kind, vertices)` and `sketch_changed()`.
     """
@@ -131,7 +132,10 @@ class ScenePane(Widget):
         ):
             x, y = scene.view.to_world(event.x, event.y)
             heading = scene.heading_to(scene.selected, x, y)
-            self.actions.goal_set(scene.selected, x, y, heading)
+            if event.shift:
+                self.actions.waypoint_added(scene.selected, x, y, heading)
+            else:
+                self.actions.goal_set(scene.selected, x, y, heading)
             return
         place = None if name else scene.obstacle_at(event.x, event.y)
         if place is not None:

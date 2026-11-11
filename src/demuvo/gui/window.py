@@ -38,6 +38,7 @@ class Application(Protocol):
         dirty: True when a new frame is needed.
         dirty_rect: (x0, y0, x1, y1) of what changed, or None for all of it.
         quit_requested: True when the program wants the window closed.
+        title: the text for the window's title bar.
         clip_get: a function the window sets, that returns the clipboard text.
         clip_set: a function the window sets, that puts text on the clipboard.
     """
@@ -47,6 +48,7 @@ class Application(Protocol):
     dirty: bool
     dirty_rect: tuple[int, int, int, int] | None
     quit_requested: bool
+    title: str
 
     def mouse_move(self, x: float, y: float) -> None:
         """The pointer moved to a pixel of the frame."""
@@ -263,9 +265,13 @@ class Window:
         """
         self.attach(app)
         started = time.perf_counter()
+        title = None
         while not self.glfw.should_close(self.handle):
             self.glfw.wait_events(BUSY_WAIT if app.busy() else IDLE_WAIT)
             app.tick(time.perf_counter())
+            if app.title != title:
+                title = app.title
+                self.glfw.set_title(self.handle, title)
             if app.quit_requested:
                 self.glfw.set_should_close(self.handle)
             if app.dirty:

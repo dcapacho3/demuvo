@@ -23,12 +23,19 @@ class WorldEdits:
 
     Attributes:
         path: the file the world came from or was last saved to, or None.
+        saved: the world as it was then; `modified` compares with it.
     """
 
     def __init__(self, session) -> None:
         """Work on a session's world."""
         self.session = session
         self.path: str | None = None
+        self.saved = session.world
+
+    @property
+    def modified(self) -> bool:
+        """True if the world has changed since it was opened or saved."""
+        return self.session.world is not self.saved
 
     def _edit(
         self,
@@ -122,7 +129,7 @@ class WorldEdits:
             save_world(self.session.world, path)
         except OSError as error:
             return f"Could not save: {error}"
-        self.path = path
+        self.path, self.saved = path, self.session.world
         return None
 
     def open(self, path: str) -> str | None:
@@ -148,5 +155,5 @@ class WorldEdits:
         message = session.apply(world, rebuild=True, select="")
         if message is None:
             session.scene.selected_obstacle = None
-            self.path = path
+            self.path, self.saved = path, session.world
         return message

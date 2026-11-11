@@ -6,6 +6,8 @@ and then shows the result or the reason it was refused.
 
 from __future__ import annotations
 
+from .. import edit
+
 
 class PaneActions:
     """The pane's side of the sandbox.
@@ -36,6 +38,14 @@ class PaneActions:
     def goal_set(self, name: str, x: float, y: float, heading: float) -> None:
         """A goal was picked with the goal tool."""
         self.program.edited(self.session.set_goal(name, (x, y, heading)))
+
+    def waypoint_added(self, name: str, x: float, y: float, heading: float) -> None:
+        """A goal was added after the robot's others, with Shift and the goal tool."""
+        self.program.edited(
+            self.session.edits.change_robot(
+                name, lambda w: edit.add_goal(w, name, (x, y, heading))
+            )
+        )
 
     def dropped(self, name: str, x: float, y: float, angle: float) -> None:
         """A dragged robot was dropped."""

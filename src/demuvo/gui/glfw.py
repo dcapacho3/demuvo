@@ -45,6 +45,7 @@ FUNCTIONS = {
     "glfwSwapBuffers": ((_WINDOW,), None),
     "glfwWindowShouldClose": ((_WINDOW,), _C_INT),
     "glfwSetWindowShouldClose": ((_WINDOW, _C_INT), None),
+    "glfwSetWindowTitle": ((_WINDOW, ctypes.c_char_p), None),
     "glfwGetFramebufferSize": ((_WINDOW, ctypes.c_void_p, ctypes.c_void_p), None),
     "glfwGetWindowSize": ((_WINDOW, ctypes.c_void_p, ctypes.c_void_p), None),
     "glfwGetCursorPos": ((_WINDOW, ctypes.c_void_p, ctypes.c_void_p), None),
@@ -145,6 +146,10 @@ class Glfw:
     def set_should_close(self, window, value: bool = True) -> None:
         """Ask the loop to end."""
         self.lib.glfwSetWindowShouldClose(window, TRUE if value else FALSE)
+
+    def set_title(self, window, title: str) -> None:
+        """Put a title on the window's bar."""
+        self.lib.glfwSetWindowTitle(window, title.encode())
 
     def framebuffer_size(self, window) -> tuple[int, int]:
         """The size of the drawing area in pixels."""

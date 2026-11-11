@@ -69,6 +69,8 @@ def test_the_context_loop_calls_map_to_glfw():
     lib.glfwSetWindowShouldClose.assert_called_with(7, binding.TRUE)
     glfw.set_should_close(7, False)
     lib.glfwSetWindowShouldClose.assert_called_with(7, binding.FALSE)
+    glfw.set_title(7, "a.toml - demuvo")
+    lib.glfwSetWindowTitle.assert_called_with(7, b"a.toml - demuvo")
     glfw.wait_events(0.25)
     lib.glfwWaitEventsTimeout.assert_called_with(0.25)
     glfw.poll_events()

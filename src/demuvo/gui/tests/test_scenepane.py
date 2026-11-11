@@ -2,6 +2,7 @@
 
 import pytest
 
+from demuvo import edit
 from demuvo.gui.panels import Pill
 from demuvo.gui.raster import Canvas
 from demuvo.gui.scenepane import ScenePane
@@ -46,6 +47,13 @@ class Actions:
         """Note a move and apply it."""
         self.log.append(("obstacle moved", index, round(x, 2), round(y, 2)))
         self.session.edits.move_obstacle(index, (x, y, 0.0))
+
+    def waypoint_added(self, name, x, y, heading):
+        """Note a waypoint and add it."""
+        self.log.append(("waypoint", name, round(x, 2), round(y, 2)))
+        self.session.edits.change_robot(
+            name, lambda w: edit.add_goal(w, name, (x, y, heading))
+        )
 
     def outline_drawn(self, kind, vertices):
         """Note an outline and add it."""
@@ -327,3 +335,14 @@ def test_an_outline_tool_does_nothing_while_a_run_is_in_progress():
     session.step_once()
     click_at(pane, 1.0, 1.0)
     assert not pane.outline
+
+
+def test_shift_with_the_goal_tool_adds_a_waypoint_after_the_first_goal():
+    """A plain click sets the goal; Shift keeps it and adds another."""
+    pane, session, actions = build()
+    session.select("r1")
+    session.set_tool("goal")
+    pane.on_press(Event(*at(pane, 8.0, 3.0)))
+    pane.on_press(Event(*at(pane, 8.0, 5.0), shift=True))
+    assert ("waypoint", "r1", 8.0, 5.0) in actions.log
+    assert edit.goals_of(session.world, "r1") == [0, 1]

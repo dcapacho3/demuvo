@@ -27,6 +27,7 @@ class FakeApp:
     def __init__(self, frames=1):
         """Start dirty, with `frames` frames to show, then ask to quit."""
         self.dirty, self.dirty_rect, self.quit_requested = True, None, False
+        self.title = "demuvo - test"
         self.events, self.ticks, self.frames, self.shown = [], 0, frames, []
 
     def mouse_move(self, x, y):
@@ -316,3 +317,22 @@ def test_an_upload_box_is_kept_inside_the_frame():
     window.upload(frame, (-8, -4, 120, 70))
     args = gl.glTexSubImage2D.call_args.args
     assert args[2:6] == (0, 0, 80, 50)
+
+
+def test_the_loop_gives_the_window_the_title_and_again_when_it_changes():
+    """The title is set on the first turn and then only when the text changes."""
+    window, glfw, _ = build()
+    app = FakeApp(frames=3)
+    titles = []
+    glfw.lib.glfwSetWindowTitle.side_effect = lambda _h, text: titles.append(text)
+    glfw.lib.glfwWindowShouldClose.side_effect = [0, 0, 0, 0, 0, 1]
+    original = app.tick
+
+    def tick(now):
+        original(now)
+        if app.ticks == 2:
+            app.title = "demuvo - changed *"
+
+    app.tick = tick
+    window.run(app)
+    assert titles == [b"demuvo - test", b"demuvo - changed *"]
