@@ -281,7 +281,7 @@ def click_at(pane, x, y):
 
 
 def test_the_polygon_tool_collects_corners_and_closes_on_the_first_one():
-    """Three corners, then a click on the first makes the polygon."""
+    """Three corners, then a click near the first makes the polygon."""
     pane, session, actions = build()
     session.set_tool("polygon")
     for x, y in ((1.0, 1.0), (3.0, 1.0), (2.0, 2.5)):
@@ -290,7 +290,7 @@ def test_the_polygon_tool_collects_corners_and_closes_on_the_first_one():
     canvas = Canvas(900, 600, (1, 1, 1, 1))
     pane.draw(canvas)
     assert len(pane.outline) == 3 and pane.cursor == pytest.approx((2.0, 4.0), abs=0.02)
-    click_at(pane, 1.0, 1.0)
+    click_at(pane, 1.2, 1.1)
     assert ("outline", "polygon", 3) in actions.log
     assert session.world.obstacles[0].shape.name == "polygon"
     assert not pane.outline and pane.cursor is None
@@ -346,3 +346,33 @@ def test_shift_with_the_goal_tool_adds_a_waypoint_after_the_first_goal():
     pane.on_press(Event(*at(pane, 8.0, 5.0), shift=True))
     assert ("waypoint", "r1", 8.0, 5.0) in actions.log
     assert edit.goals_of(session.world, "r1") == [0, 1]
+
+
+def test_a_double_click_ends_a_polygon_or_a_line_at_the_last_corner(monkeypatch):
+    """Two quick clicks in one place finish the drawing, whatever is near."""
+    clock = [10.0]
+    monkeypatch.setattr("demuvo.gui.scenepane.time.perf_counter", lambda: clock[0])
+    pane, session, actions = build()
+    session.set_tool("polygon")
+    for x, y in ((1.0, 1.0), (4.0, 1.0)):
+        clock[0] += 1.0
+        click_at(pane, x, y)
+    clock[0] += 1.0
+    click_at(pane, 4.0, 4.0)
+    clock[0] += 0.2
+    click_at(pane, 4.0, 4.0)
+    assert ("outline", "polygon", 3) in actions.log
+    assert session.world.obstacles[0].shape.name == "polygon"
+    session.set_tool("line")
+    clock[0] += 1.0
+    click_at(pane, 2.0, 5.0)
+    clock[0] += 1.0
+    click_at(pane, 5.0, 5.0)
+    clock[0] += 0.2
+    click_at(pane, 5.0, 5.0)
+    assert session.world.obstacles[1].shape.name == "linestring"
+    clock[0] += 1.0
+    click_at(pane, 1.0, 1.0)
+    clock[0] += 1.0
+    click_at(pane, 1.0, 1.0)
+    assert len(pane.outline) == 2

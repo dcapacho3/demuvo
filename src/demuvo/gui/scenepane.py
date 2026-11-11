@@ -10,6 +10,7 @@ over the bottom of the pane.
 from __future__ import annotations
 
 import math
+import time
 
 import numpy as np
 
@@ -23,7 +24,10 @@ from .widgets import Event, Widget
 # The smallest obstacle a drag makes, in metres; less is taken for a click.
 MIN_SIZE = 0.1
 # A click this close, in pixels, to the first corner closes a polygon.
-CLOSE_PIXELS = 12.0
+CLOSE_PIXELS = 20.0
+# Two clicks within this many seconds and pixels are a double click, which ends a
+# polygon or line.
+DOUBLE_CLICK = (0.45, 8.0)
 
 
 class ScenePane(Widget):
@@ -51,6 +55,7 @@ class ScenePane(Widget):
         self.sketch: tuple[float, float, float, float] | None = None
         self.outline: list[tuple[float, float]] = []
         self.cursor: tuple[float, float] | None = None
+        self._last_click: tuple[float, float, float] | None = None
 
     def on_hover(self, inside: bool) -> None:
         """Note that the pointer is over the scene; it looks the same, so no redraw."""
@@ -104,6 +109,8 @@ class ScenePane(Widget):
             polyline(canvas, np.array([points[-1], ahead]), 1.5, color, dash=(6, 4))
         for x, y in points:
             canvas.circle((x, y), 4, fill=color)
+        if self.session.tool == "polygon" and len(points) >= 3:
+            canvas.circle(points[0], CLOSE_PIXELS, stroke=rgba(TEAL, 0.5), width=1.5)
 
     def hit(self, px: float, py: float) -> Widget | None:
         """The pill if the point is on it, else the pane."""
@@ -205,9 +212,20 @@ class ScenePane(Widget):
         self.actions.dragged()
 
     def _add_vertex(self, event: Event) -> None:
-        """Add a corner; a click on the first corner of a polygon closes it."""
+        """Add a corner; a click on the first corner, or a double click, ends it."""
         scene = self.session.scene
         point = scene.view.to_world(event.x, event.y)
+        now = time.perf_counter()
+        last, self._last_click = self._last_click, (now, event.x, event.y)
+        seconds, pixels = DOUBLE_CLICK
+        if (
+            last is not None
+            and now - last[0] <= seconds
+            and math.hypot(event.x - last[1], event.y - last[2]) <= pixels
+        ):
+            self._last_click = None
+            self.finish_outline()
+            return
         if self.session.tool == "polygon" and len(self.outline) >= 3:
             fx, fy = scene.view.to_screen(*self.outline[0])
             if math.hypot(event.x - float(fx), event.y - float(fy)) <= CLOSE_PIXELS:
@@ -229,6 +247,6 @@ class ScenePane(Widget):
     def cancel_outline(self) -> None:
         """Forget the corners drawn so far."""
         had = bool(self.outline)
-        self.outline, self.cursor = [], None
+        self.outline, self.cursor, self._last_click = [], None, None
         if had:
             self.actions.sketch_changed()
