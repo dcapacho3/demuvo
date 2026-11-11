@@ -212,8 +212,8 @@ def test_the_world_form_changes_the_size_seed_and_step():
     inspector.fields["height"].set(8.0)
     assert session.world.size == (12.0, 8.0)
     inspector.fields["seed"].set(9)
-    inspector.fields["dt"].set(0.02)
-    assert (session.world.seed, session.world.dt) == (9, 0.02)
+    inspector.fields["dt"].set(0.025)
+    assert (session.world.seed, session.world.dt) == (9, 0.025)
     assert refreshed and not reports
     inspector.fields["width"].set(1.0)
     assert "robot 'r1'" in reports[-1]
