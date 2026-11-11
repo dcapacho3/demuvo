@@ -151,6 +151,13 @@ show up in the window's lists.
   (Ackermann), mecanum, skid-steer and forklift.
 - [ ] An extended Kalman filter (EKF), written from scratch, as a robot's estimator.
 - [ ] SLAM, written from scratch, so a robot builds a map and finds itself in it.
+- [ ] A map generator: a seeded Gaussian random field turned into obstacles, so each seed
+  makes a different, repeatable world (clutter, caves), with start and goal checked to be
+  connected.
+- [ ] An optional terrain layer, also from a seeded Gaussian map: friction, slip or a speed
+  limit that makes a world harder. Off by default, so the ideal world stays as it is.
+- [ ] Swarms: many robots, each running the same rule from its own sensors and its
+  neighbours, with collisions and time reported over seeds.
 - [ ] A local planner that steers round what the lidar sees and the map does not show.
 - [ ] Moving actors, and replanning while the robot drives.
 - [ ] A benchmark runner that compares planners and controllers over worlds and seeds, with
