@@ -280,3 +280,52 @@ def test_an_edited_world_can_be_saved_and_loaded(world, tmp_path):
     assert names(again) == ["r1", "r2"]
     assert edit.goal_of(again, "r2") == pytest.approx((8.0, 1.0, 0.0))
     assert edit.settings_of_robot(again, "r2", "controller") == {"lookahead": 0.9}
+
+
+def test_obstacles_are_added_moved_resized_and_removed(world):
+    """Each edit returns a new world; the old one stays as it was."""
+    box = edit.add_obstacle(world, "box", (2.0, 2.0, 0.0), (1.0, 0.5))
+    both = edit.add_obstacle(box, "circle", (7.0, 4.0, 0.0), (0.4,))
+    assert [o.shape.name for o in both.obstacles] == ["box", "circle"]
+    assert not world.obstacles
+    moved = edit.move_obstacle(both, 0, (3.0, 2.0, 0.5))
+    assert [float(v) for v in moved.obstacles[0].pose.xyt] == [3.0, 2.0, 0.5]
+    wider = edit.resize_obstacle(moved, 0, (2.0, 0.5))
+    assert wider.obstacles[0].shape.size == (2.0, 0.5)
+    rounder = edit.resize_obstacle(wider, 1, (0.6,))
+    assert rounder.obstacles[1].shape.radius == 0.6
+    assert [o.shape.name for o in edit.remove_obstacle(rounder, 0).obstacles] == [
+        "circle"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("call", "message"),
+    [
+        (lambda w: edit.add_obstacle(w, "star", (1, 1, 0), (1,)), "unknown obstacle"),
+        (lambda w: edit.add_obstacle(w, "box", (99, 1, 0), (1, 1)), "inside the world"),
+        (lambda w: edit.add_obstacle(w, "box", (5, 3, 0), (1, 1)), "overlap"),
+        (lambda w: edit.move_obstacle(w, 5, (1, 1, 0)), "no obstacle number 6"),
+        (lambda w: edit.move_obstacle(w, 0, (99, 1, 0)), "inside the world"),
+        (lambda w: edit.move_obstacle(w, 0, (5, 3, 0)), "overlap"),
+        (lambda w: edit.remove_obstacle(w, 3), "no obstacle number 4"),
+    ],
+)
+def test_a_bad_obstacle_edit_is_refused_in_plain_words(world, call, message):
+    """Outside the world, onto a robot, or a missing number gives a WorldError."""
+    with_one = edit.add_obstacle(world, "box", (2.0, 2.0, 0.0), (1.0, 0.5))
+    with pytest.raises(WorldError, match=message):
+        call(with_one)
+
+
+def test_the_world_size_changes_if_everything_still_fits(world):
+    """Growing always works; shrinking past a robot, obstacle or goal is refused."""
+    assert edit.set_size(world, (20.0, 8.0)).size == (20.0, 8.0)
+    with pytest.raises(WorldError, match="robot 'r1'"):
+        edit.set_size(world, (2.0, 2.0))
+    boxed = edit.add_obstacle(world, "box", (9.0, 1.0, 0.0), (1.0, 1.0))
+    with pytest.raises(WorldError, match="an obstacle"):
+        edit.set_size(boxed, (8.0, 6.0))
+    goal = edit.set_goal(world, "r1", (9.0, 3.0, 0.0))
+    with pytest.raises(WorldError, match="goal of 'r1'"):
+        edit.set_size(goal, (8.0, 6.0))

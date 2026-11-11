@@ -22,7 +22,7 @@ from .sim.collisions import Checker
 from .sim.simulation import Simulation
 from .verify import WorldError, inside, numbers
 from .world import DEFAULT_GOAL_TOLERANCE, RobotSpec, World
-from .world.load import _parse_robot, _parse_task
+from .world.load import _parse_obstacle, _parse_robot, _parse_task
 
 # The field of a robot that holds the settings of each part.
 SETTINGS_FIELD = {
@@ -197,6 +197,105 @@ def set_pose(world: World, name: str, pose: Sequence[float]) -> World:
         raise WorldError(f"{label}: 'pose' must lie inside the world")
     edited = _replace_robot(world, dataclasses.replace(spec, pose=moved))
     _no_overlap(edited, name)
+    return edited
+
+
+def _obstacle(world: World, index: int):
+    """The obstacle at a 0-based place, or a plain error."""
+    if not 0 <= index < len(world.obstacles):
+        raise WorldError(f"no obstacle number {index + 1}")
+    return world.obstacles[index]
+
+
+def _with_obstacles(world: World, obstacles: tuple) -> World:
+    """The world with these obstacles, refused if a robot would touch one."""
+    edited = dataclasses.replace(world, obstacles=obstacles)
+    if edited.robots:
+        _no_overlap(edited, "")
+    return edited
+
+
+def add_obstacle(
+    world: World, kind: str, pose: Sequence[float], size: Sequence[float]
+) -> World:
+    """Add a box or a circle.
+
+    Args:
+        world: the world to start from.
+        kind: "box" or "circle".
+        pose: (x, y, angle) of its centre.
+        size: (length, width) of a box, or (radius,) of a circle.
+
+    Raises:
+        WorldError: if the kind is unknown, or the obstacle would leave the world
+            or touch a robot.
+    """
+    if kind == "box":
+        shape = {"name": "box", "size": list(size)}
+    elif kind == "circle":
+        shape = {"name": "circle", "radius": size[0]}
+    else:
+        raise WorldError(f"unknown obstacle '{kind}', expected box or circle")
+    made = _parse_obstacle(
+        {"shape": shape, "pose": list(pose)}, len(world.obstacles) + 1, world.bounds
+    )
+    return _with_obstacles(world, (*world.obstacles, made))
+
+
+def move_obstacle(world: World, index: int, pose: Sequence[float]) -> World:
+    """Move the obstacle at a 0-based place to a pose."""
+    old = _obstacle(world, index)
+    label = f"obstacle {index + 1}"
+    moved = Transform2D.from_xyt(numbers(list(pose), 3, label, "pose"))
+    if not inside(old.shape.points(moved), world.bounds):
+        raise WorldError(f"{label}: must lie inside the world")
+    items = list(world.obstacles)
+    items[index] = dataclasses.replace(old, pose=moved)
+    return _with_obstacles(world, tuple(items))
+
+
+def resize_obstacle(world: World, index: int, size: Sequence[float]) -> World:
+    """Give the obstacle at a 0-based place a new size, keeping its pose."""
+    old = _obstacle(world, index)
+    shape = (
+        {"name": "circle", "radius": size[0]}
+        if old.shape.name == "circle"
+        else {"name": "box", "size": list(size)}
+    )
+    made = _parse_obstacle(
+        {"shape": shape, "pose": [float(v) for v in old.pose.xyt]},
+        index + 1,
+        world.bounds,
+    )
+    items = list(world.obstacles)
+    items[index] = made
+    return _with_obstacles(world, tuple(items))
+
+
+def remove_obstacle(world: World, index: int) -> World:
+    """Remove the obstacle at a 0-based place."""
+    _obstacle(world, index)
+    kept = tuple(o for i, o in enumerate(world.obstacles) if i != index)
+    return dataclasses.replace(world, obstacles=kept)
+
+
+def set_size(world: World, size: Sequence[float]) -> World:
+    """Give the world a new width and height, keeping its origin.
+
+    Raises:
+        WorldError: if a robot, a goal or an obstacle would fall outside.
+    """
+    width, height = numbers(list(size), 2, "world", "size", True)
+    edited = dataclasses.replace(world, size=(width, height))
+    for obstacle in edited.obstacles:
+        if not inside(obstacle.shape.points(obstacle.pose), edited.bounds):
+            raise WorldError("world: an obstacle would fall outside a world that size")
+    for spec in edited.robots:
+        if not inside(spec.shape.points(spec.pose), edited.bounds):
+            raise WorldError(f"robot '{spec.name}' would fall outside that size")
+    for task in edited.tasks:
+        if not inside([tuple(task.goal.translation)], edited.bounds):
+            raise WorldError(f"the goal of '{task.robot}' would fall outside")
     return edited
 
 
