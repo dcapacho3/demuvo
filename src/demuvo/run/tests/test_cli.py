@@ -241,3 +241,21 @@ def test_install_desktop_uses_the_python_module_when_no_command_is_on_the_path(
     cli.desktop.install(tmp_path)
     entry = tmp_path / ".local/share/applications/demuvo.desktop"
     assert "-m demuvo" in entry.read_text()
+
+
+def test_install_desktop_asks_the_desktop_tools_to_refresh_when_they_exist(
+    tmp_path, monkeypatch
+):
+    """The icon cache and the launcher list are rebuilt; a missing tool is skipped."""
+    ran = []
+    monkeypatch.setattr(
+        cli.desktop.shutil,
+        "which",
+        lambda name: name if name != "update-desktop-database" else None,
+    )
+    monkeypatch.setattr(
+        cli.desktop.subprocess, "run", lambda command, **_k: ran.append(command)
+    )
+    cli.desktop.install(tmp_path, exe="demuvo")
+    assert [c[0] for c in ran] == ["gtk-update-icon-cache"]
+    assert ran[0][-1].endswith("hicolor")

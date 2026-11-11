@@ -9,6 +9,7 @@ for the whole system does the same job.
 from __future__ import annotations
 
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -49,4 +50,18 @@ def install(home: Path | None = None, exe: str | None = None) -> list[Path]:
     entry.parent.mkdir(parents=True, exist_ok=True)
     entry.write_text(ENTRY.format(exe=exe), encoding="utf-8")
     written.append(entry)
+    _refresh(data)
     return written
+
+
+def _refresh(data: Path) -> None:
+    """Ask the desktop's own tools to re-read what was written, where they exist.
+
+    Without this the desktop may keep an older list of icons and show a gear.
+    """
+    for command in (
+        ["gtk-update-icon-cache", "-f", "-t", str(data / "icons" / "hicolor")],
+        ["update-desktop-database", str(data / "applications")],
+    ):
+        if shutil.which(command[0]):
+            subprocess.run(command, check=False, capture_output=True)
