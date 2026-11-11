@@ -397,6 +397,57 @@ class IconButton(Widget):
         self.invalidate()
 
 
+class TextButton(Widget):
+    """A button with words on it, for an action such as "Add goal".
+
+    Args:
+        text: the label.
+        on_click: called with no argument.
+    """
+
+    def __init__(self, text: str, on_click=None) -> None:
+        """Make a button."""
+        super().__init__()
+        self.text, self.on_click = text, on_click
+        self.preferred_height = 34.0
+        self.focusable = True
+
+    def draw(self, canvas: Canvas) -> None:
+        """Draw the button, lit when it is pressed or under the pointer."""
+        box = (self.x, self.y + 2, self.width, self.height - 4)
+        if self.enabled and self.down:
+            canvas.rect(box, rgba(look.MINT2), radius=4)
+        elif self.enabled and self.hover:
+            canvas.rect(box, rgba(look.MINT), radius=4)
+        canvas.rect_outline(box, rgba(look.LINE), width=1, radius=4)
+        face = font.regular()
+        left = self.x + (self.width - face.width(self.text, 13)) / 2
+        canvas.text(
+            face,
+            self.text,
+            (left, text_baseline(self.y, self.height, 13)),
+            size=13,
+            color=rgba(look.NAVY, fade(self.enabled)),
+        )
+        self.ring(canvas)
+
+    def on_release(self, event: Event) -> None:
+        """A click ends here: press and release on the button."""
+        if self._clicked_up(event):
+            self.click()
+
+    def activate(self) -> None:
+        """Enter or Space clicks it."""
+        if self.enabled:
+            self.click()
+
+    def click(self) -> None:
+        """Call the handler."""
+        if self.on_click:
+            self.on_click()
+        self.invalidate()
+
+
 class Checkbox(Widget):
     """A box with a label that is on or off.
 

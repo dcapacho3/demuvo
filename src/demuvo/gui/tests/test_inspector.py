@@ -1,15 +1,18 @@
 """Tests for the inspector: its sections, its edits and its lock."""
 
+import dataclasses
 import math
 
 import pytest
 
 from demuvo import edit
 from demuvo.gui.inputs import Combo, Spin
-from demuvo.gui.inspector import HINT, NO_GOAL, Inspector
+from demuvo.gui.inspector import HINT, Inspector
+from demuvo.gui.robotform import NO_GOAL
 from demuvo.gui.session import Session
 from demuvo.gui.widgets import Checkbox, Column, Label
 from demuvo.gui.worldform import NO_SIZE
+from demuvo.world.shapes import Polygon
 
 from .fakes import EXAMPLES, FakeHost
 
@@ -23,9 +26,13 @@ def build(session=None, name="r1"):
     column.adopt(host)
     reports, refreshed = [], []
     footer = [Checkbox("rays")]
-    inspector = Inspector(
-        column, session, reports.append, lambda: refreshed.append(1), footer
-    )
+
+    def refresh():
+        """Note it, and show the form again as the window does."""
+        refreshed.append(1)
+        inspector.show(session.scene.selected)
+
+    inspector = Inspector(column, session, reports.append, refresh, footer)
     session.select(name)
     inspector.show(name)
     return inspector, session, reports, refreshed
@@ -42,7 +49,7 @@ def test_with_nothing_selected_the_inspector_shows_a_hint_and_the_footer():
     session.select(None)
     inspector.show(None)
     assert HINT in texts(inspector.column)
-    assert set(inspector.fields) == {"width", "height", "seed", "dt"}
+    assert {"width", "height", "seed", "dt", "ox0", "oy0"} <= set(inspector.fields)
     assert inspector.column.children[-1] is inspector.footer[0]
     assert inspector.name is None
 
@@ -53,6 +60,8 @@ def test_a_robot_gets_pose_goal_choices_settings_and_a_control_period():
     assert set(inspector.fields) == {
         "x", "y", "th", "gx", "gy", "gth",
         "model", "planner", "smoother", "controller", "period",
+        "body", "radius", "estimator", "control_pose", "add_goal",
+        "add_encoders", "add_lidar",
     }  # fmt: skip
     f = inspector.fields
     assert (f["x"].value, f["y"].value, f["th"].value) == (5.0, 3.0, 0.0)
@@ -251,3 +260,134 @@ def test_a_shape_without_a_size_form_says_where_it_is_set():
     session.select_obstacle(2)
     inspector.show(None)
     assert NO_SIZE in texts(column) and set(inspector.fields) == {"ox", "oy", "oth"}
+
+
+def test_a_robot_body_changes_kind_and_size_through_the_form():
+    """Disc to box keeps the reach; the size fields apply; a refusal is reported."""
+    inspector, session, reports, _ = build()
+    inspector.fields["radius"].set(0.3)
+    assert session.world.robots[0].shape.radius == 0.3
+    inspector.fields["body"].choose("box")
+    assert session.world.robots[0].shape.size == (0.6, 0.6)
+    inspector.fields["length"].set(1.0)
+    inspector.fields["width"].set(0.5)
+    assert session.world.robots[0].shape.size == (1.0, 0.5)
+    inspector.fields["body"].choose("circle")
+    assert session.world.robots[0].shape.radius == 0.5
+    inspector.fields["body"].choose("circle")
+    inspector.fields["radius"].set(50.0)
+    assert reports and "leave the world" in reports[-1]
+
+
+def test_a_polygon_body_is_left_to_the_file():
+    """The form says so instead of showing fields that cannot apply."""
+    world = edit.new_world()
+    spec = world.robots[0]
+    shape = Polygon(((-0.2, -0.2), (0.2, -0.2), (0.0, 0.3)))
+    polygon = dataclasses.replace(
+        world, robots=(dataclasses.replace(spec, shape=shape),)
+    )
+    inspector, _, _, _ = build(Session(polygon))
+    assert any("polygon" in t for t in texts(inspector.column))
+    assert "body" not in inspector.fields
+
+
+def test_the_estimator_and_the_pose_the_controller_sees_are_chosen():
+    """Both are drop-downs; a bad edit would be reported."""
+    inspector, session, _, _ = build()
+    inspector.fields["estimator"].choose("dead_reckoning")
+    assert session.world.robots[0].estimator == "dead_reckoning"
+    inspector.fields["control_pose"].choose("truth")
+    assert session.world.robots[0].control_pose == "truth"
+
+
+def test_sensors_are_added_edited_and_removed_in_the_form():
+    """Encoders and a lidar get their fields; each has a remove button."""
+    inspector, session, reports, _ = build()
+    inspector.fields["add_encoders"].click()
+    assert "encoders" in session.world.robots[0].sensors
+    assert "add_encoders" not in inspector.fields
+    inspector.fields["encoders.noise"].set(0.02)
+    assert session.world.robots[0].sensors["encoders"]["noise"] == 0.02
+    inspector.fields["add_lidar"].click()
+    inspector.fields["add_lidar"].click()
+    assert {"lidar", "lidar_2"} <= set(session.world.robots[0].sensors)
+    inspector.fields["lidar.beams"].set(90)
+    inspector.fields["lidar.mount0"].set(0.1)
+    lidar = session.world.robots[0].sensors["lidar"]
+    assert lidar["beams"] == 90 and lidar["mount"][0] == 0.1
+    inspector.fields["lidar.max_range"].set(0.0)
+    assert reports
+    inspector.fields["lidar_2.remove"].click()
+    inspector.fields["encoders.remove"].click()
+    assert set(session.world.robots[0].sensors) == {"lidar"}
+
+
+def test_goals_are_typed_added_tuned_and_removed_in_the_form():
+    """The first goal keeps its keys; waypoints get numbered ones."""
+    inspector, session, _, _ = build()
+    inspector.fields["gx"].set(8.0)
+    assert edit.goals_of(session.world, "r1") == [0]
+    inspector.fields["add_goal"].click()
+    assert edit.goals_of(session.world, "r1") == [0, 1]
+    assert {"g1x", "g1y", "g1th", "tol1d", "tol1a", "stop1", "wait1"} <= set(
+        inspector.fields
+    )
+    inspector.fields["g1y"].set(5.0)
+    inspector.fields["tol1d"].set(0.3)
+    inspector.fields["tol1a"].set(10.0)
+    inspector.fields["stop1"].choose("yes")
+    inspector.fields["wait1"].set(2.0)
+    task = session.world.tasks[1]
+    assert float(task.goal.xyt[1]) == 5.0
+    assert (task.stop, task.wait, task.goal_tolerance[0]) == (True, 2.0, 0.3)
+    assert task.goal_tolerance[1] == pytest.approx(math.radians(10.0))
+    inspector.fields["stop1"].choose("default")
+    inspector.fields["remove0"].click()
+    assert edit.goals_of(session.world, "r1") == [0]
+    inspector.fields["remove0"].click()
+    assert not session.world.tasks and "gx" in inspector.fields
+
+
+def test_a_waypoint_is_put_beside_the_last_goal_inside_the_world():
+    """Near the right wall the next goal goes to the left instead."""
+    inspector, session, _, _ = build()
+    session.set_goal("r1", (9.8, 3.0, 0.0))
+    inspector.show("r1")
+    inspector.fields["add_goal"].click()
+    assert float(session.world.tasks[1].goal.xyt[0]) == pytest.approx(9.3)
+
+
+def test_the_world_form_edits_the_corner_the_costmaps_and_the_default_sensors():
+    """Switches, numbers, layers, a map file box and the sensors every robot gets."""
+    inspector, session, reports, _ = build(name=None)
+    session.select(None)
+    inspector.show(None)
+    f = inspector.fields
+    f["ox0"].set(-1.0)
+    assert session.world.origin == (-1.0, 0.0)
+    f["ox0"].set(0.0)
+    f["cm.resolution"].set(0.1)
+    f["cm.inflation_radius"].set(0.4)
+    f["cm.enabled"].on_change(False)
+    assert session.world.costmap.resolution == 0.1 and not session.world.costmap.enabled
+    f["cm.inflation"].checked = False
+    f["cm.inflation"].on_change(False)
+    assert session.world.costmap.plugins == ("static",)
+    f["cm.unknown"].choose("blocked")
+    assert session.world.costmap.unknown == "blocked"
+    f["cm.source"].on_submit("generate")
+    f["cm.source"].on_submit("/no/such/map.yaml")
+    assert "no map file" in reports[-1]
+    f["lc.window"].set(4.0)
+    f["lc.obstacle"].checked = False
+    f["lc.obstacle"].on_change(False)
+    assert session.world.local_costmap.window == 4.0
+    assert session.world.local_costmap.plugins == ("inflation",)
+    f["add_default_encoders"].click()
+    assert session.world.sensors == {"encoders": {}}
+    assert "add_default_encoders" not in inspector.fields
+    inspector.fields["encoders.noise"].set(0.05)
+    assert session.world.sensors["encoders"]["noise"] == 0.05
+    inspector.fields["encoders.remove"].click()
+    assert session.world.sensors == {}

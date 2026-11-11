@@ -30,8 +30,19 @@ class WorldEdits:
         self.session = session
         self.path: str | None = None
 
-    def _edit(self, make: Callable[[World], World], keep: int | None = None):
-        """Apply an edit to the world; `keep` is the obstacle left selected."""
+    def _edit(
+        self,
+        make: Callable[[World], World],
+        keep: int | None = None,
+        *,
+        rebuild: bool = False,
+        select: str | None = None,
+    ):
+        """Apply an edit to the world; `keep` is the obstacle left selected.
+
+        `rebuild` is for an edit of the robots, and `select` names the robot to
+        leave selected.
+        """
         session = self.session
         if (why := session.guard()) is not None:
             return why
@@ -39,10 +50,18 @@ class WorldEdits:
             world = make(session.world)
         except WorldError as error:
             return REFUSED.format(error)
-        message = session.apply(world, select=None)
+        message = session.apply(world, rebuild=rebuild, select=select)
         if message is None:
             session.scene.selected_obstacle = keep
         return message
+
+    def change_world(self, make: Callable[[World], World]) -> str | None:
+        """Apply any edit of the world that is not about one robot."""
+        return self._edit(make, self.session.scene.selected_obstacle)
+
+    def change_robot(self, name: str, make: Callable[[World], World]) -> str | None:
+        """Apply an edit that changes a robot, and keep that robot selected."""
+        return self._edit(make, rebuild=True, select=name)
 
     def add_obstacle(
         self, kind: str, pose: tuple[float, float, float], size: tuple[float, ...]

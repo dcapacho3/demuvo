@@ -34,7 +34,7 @@ ALLOWED = {
         "world",
     },
     "gui": {"costmap", "edit", "options", "runner", "verify", "world"},
-    "options": {"models", "nav", "verify"},
+    "options": {"models", "nav", "sensing", "verify"},
     "runner": {"costmap", "evaluation", "nav", "sim", "verify", "world"},
     "edit": {
         "models",

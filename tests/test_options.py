@@ -132,3 +132,14 @@ def test_a_path_that_cannot_be_loaded_is_refused_in_plain_words(path):
     """The message names the path."""
     with pytest.raises(WorldError, match=f"cannot load '{path}'"):
         options.settings_of(path)
+
+
+def test_the_estimators_and_sensors_are_listed_with_their_settings():
+    """Names for a drop-down, and the number settings of each sensor kind."""
+    assert options.estimators() == ("ground_truth", "dead_reckoning")
+    assert options.sensor_kinds() == ("encoders", "lidar")
+    encoders = {s.name: s.kind for s in options.sensor_settings("encoders")}
+    assert encoders == {"noise": float, "ticks_per_rev": float}
+    lidar = {s.name: s.kind for s in options.sensor_settings("lidar")}
+    assert lidar["beams"] is int and lidar["max_range"] is float
+    assert "mount" not in lidar

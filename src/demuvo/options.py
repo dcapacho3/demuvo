@@ -24,6 +24,8 @@ from importlib.metadata import entry_points
 
 from .models import MODELS
 from .nav.navigation import DEFAULT_PLANNER
+from .sensing import ESTIMATORS, Encoders
+from .sensing.lidar import LidarSettings
 from .verify import WorldError
 
 NO_SMOOTHER = "none"
@@ -87,6 +89,20 @@ def controllers() -> dict[str, str | None]:
     return _with_entry_points(_CONTROLLERS, "demuvo.controllers")
 
 
+def estimators() -> tuple[str, ...]:
+    """The names of the estimators, which give a controller its pose."""
+    return tuple(ESTIMATORS)
+
+
+# The sensors a form can add, and the class that holds each one's settings.
+_SENSORS = {"encoders": Encoders, "lidar": LidarSettings}
+
+
+def sensor_kinds() -> tuple[str, ...]:
+    """The kinds of sensor a robot can carry."""
+    return tuple(_SENSORS)
+
+
 def label_of(choices: dict[str, str | None], path: str | None) -> str:
     """The friendly name of a path in a table above; the path itself if unknown."""
     for label, value in choices.items():
@@ -123,6 +139,11 @@ def _fields(cls) -> list[Setting]:
         for name, kind, default in raw
         if not name.startswith("_") and kind in _KINDS
     ]
+
+
+def sensor_settings(kind: str) -> list[Setting]:
+    """The number settings of a sensor kind; a lidar's mount is set apart."""
+    return _fields(_SENSORS[kind])
 
 
 def model_settings(name: str) -> list[Setting]:

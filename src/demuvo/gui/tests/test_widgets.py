@@ -13,6 +13,7 @@ from demuvo.gui.widgets import (
     Panel,
     Section,
     Slider,
+    TextButton,
     Widget,
     text_baseline,
 )
@@ -414,3 +415,39 @@ def test_a_column_that_overflows_draws_a_scroll_bar_and_one_that_fits_does_not()
     clean = Canvas(100, 100)
     fits.draw(clean)
     assert clean.px[10, 94, 0] == 1.0
+
+
+def test_a_text_button_clicks_on_release_inside_and_by_key_and_not_when_disabled():
+    """Press and release on it, or Enter, calls the handler; a grey one does not."""
+    calls = []
+    button = TextButton("Add goal", lambda: calls.append(1))
+    hosted(button, (10, 10, 120, 34))
+    click(button)
+    button.activate()
+    assert calls == [1, 1]
+    click(button, outside=True)
+    assert calls == [1, 1]
+    button.enabled = False
+    click(button)
+    button.activate()
+    assert calls == [1, 1]
+    assert TextButton("Nothing").click() is None
+
+
+def test_a_text_button_draws_its_words_and_lights_when_hovered_or_pressed():
+    """Ink for the label; a hover and a press each change the picture."""
+    button = TextButton("Add goal")
+    hosted(button, (10, 10, 120, 34))
+    plain = Canvas(150, 60, look.WINDOW)
+    button.draw(plain)
+    button.on_hover(True)
+    hover = Canvas(150, 60, look.WINDOW)
+    button.draw(hover)
+    button.on_press(Event(20, 20))
+    pressed = Canvas(150, 60, look.WINDOW)
+    button.draw(pressed)
+    assert (plain.px != hover.px).any() and (hover.px != pressed.px).any()
+    button.enabled = False
+    grey = Canvas(150, 60, look.WINDOW)
+    button.draw(grey)
+    assert ink(grey) < ink(plain)

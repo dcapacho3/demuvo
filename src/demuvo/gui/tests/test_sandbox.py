@@ -62,7 +62,7 @@ def test_the_window_opens_with_one_robot_a_hint_and_an_editing_badge(app):
     assert chrome.status.count == "1 robot" and chrome.status.message == DEFAULT_MESSAGE
     assert (program.badge.text, program.badge.kind) == BADGES["edit"]
     assert [row.text for row in program.tree.rows][:2] == ["Robots (1)", "r1"]
-    assert set(program.inspector.fields) == {"width", "height", "seed", "dt"}
+    assert {"width", "height", "seed", "dt"} <= set(program.inspector.fields)
     assert window.render().shape == (780, 1280, 3)
 
 

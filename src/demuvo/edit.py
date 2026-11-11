@@ -565,7 +565,11 @@ def set_sensor(
     """
     label = "world" if robot is None else f"robot '{robot}'"
     spec = None if robot is None else _robot(world, robot)
-    kept = dict(world.sensors if spec is None else spec.sensors)
+    # a mount is kept as a tuple but read as a list, so every sensor is put back
+    kept = {
+        n: {k: list(v) if isinstance(v, tuple) else v for k, v in sensor_.items()}
+        for n, sensor_ in (world.sensors if spec is None else spec.sensors).items()
+    }
     if settings is None:
         kept.pop(sensor, None)
     else:

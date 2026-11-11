@@ -401,6 +401,8 @@ def test_sensors_are_set_changed_and_removed_for_a_robot_and_for_the_world(world
     )
     assert lidar.robots[0].sensors["front"]["beams"] == 90.0
     assert lidar.robots[0].sensors["front"]["mount"] == (0.1, 0.0, 0.0)
+    both = edit.set_sensor(lidar, "r1", "encoders", {"noise": 0.03})
+    assert both.robots[0].sensors["front"]["mount"] == (0.1, 0.0, 0.0)
     bare = edit.set_sensor(lidar, "r1", "front", None)
     assert "front" not in bare.robots[0].sensors
     default = edit.set_sensor(world, None, "encoders", {"ticks_per_rev": 2048})

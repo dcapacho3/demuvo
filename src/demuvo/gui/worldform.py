@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import math
 
+from .. import edit
 from ..world.shapes import Box, Circle
 from . import look
-from .inputs import NumberSpec, Spin
-from .panels import FormRow, TitleRow
-from .widgets import Label, Section, Widget
+from .costmapform import CostmapForm
+from .formbase import FormBase
+from .inputs import NumberSpec
+from .panels import TitleRow
+from .robotform import RobotForm
+from .widgets import Label, Section
 
 # The largest world, in metres, and the shortest and longest step, in seconds.
 MAX_SIZE = 200.0
@@ -21,30 +25,12 @@ STEP_RANGE = (0.0005, 1.0)
 NO_SIZE = "This shape is drawn in the world file; here it can be moved or deleted."
 
 
-class WorldForm:
-    """Builds the world form and the obstacle form into a column.
-
-    Args:
-        column: the column to fill.
-        session: the session it edits.
-        fields: the dict that collects the fields, so the inspector can lock them.
-        done: called with the result of an edit; it reports an error or refreshes.
-    """
-
-    def __init__(self, column, session, fields: dict[str, Widget], done) -> None:
-        """Keep what the forms need."""
-        self.column, self.session, self.fields, self.done = (
-            column,
-            session,
-            fields,
-            done,
-        )
+class WorldForm(FormBase):
+    """Builds the world form and the obstacle form into a column."""
 
     def _row(self, key: str, label: str, value: float, spec: NumberSpec, change):
         """One labelled number field, kept under a key."""
-        field = Spin(value, spec, on_change=lambda _v: change())
-        self.fields[key] = field
-        self.column.add(FormRow(label, field))
+        self.number(key, label, value, spec, change)
 
     def world(self) -> None:
         """The size, seed and step of the world."""
@@ -60,6 +46,36 @@ class WorldForm:
         self._row("seed", "seed", world.seed, spec, self._seed_edited)
         spec = NumberSpec(*STEP_RANGE, 0.001, 4, " s")
         self._row("dt", "step", world.dt, spec, self._step_edited)
+        corner = NumberSpec(-1000.0, 1000.0, 0.5, 2, " m")
+        self._row("ox0", "corner x", world.origin[0], corner, self._origin_edited)
+        self._row("oy0", "corner y", world.origin[1], corner, self._origin_edited)
+        self._sensors()
+        costmaps = CostmapForm(self.column, self.session, self.fields, self.done)
+        costmaps.costmap("global")
+        costmaps.costmap("local")
+
+    def _sensors(self) -> None:
+        """The sensors every robot starts with, and buttons to add one."""
+        robots = RobotForm(self.column, self.session, self.fields, self.done)
+        self.column.add(Section("Default sensors"))
+        for sensor, settings in self.session.world.sensors.items():
+            robots.sensor(None, sensor, settings)
+        if "encoders" not in self.session.world.sensors:
+            robots.button("add_default_encoders", "Add encoders", self._add_encoders)
+
+    def _add_encoders(self) -> None:
+        """Give every robot encoders to start from."""
+        self.done(
+            self.session.edits.change_world(
+                lambda w: edit.set_sensor(w, None, "encoders", {})
+            )
+        )
+
+    def _origin_edited(self) -> None:
+        """A corner field changed."""
+        f = self.fields
+        corner = (f["ox0"].value, f["oy0"].value)
+        self.done(self.session.edits.change_world(lambda w: edit.set_origin(w, corner)))
 
     def obstacle(self, index: int) -> None:
         """The pose and size of an obstacle."""

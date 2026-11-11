@@ -11,16 +11,16 @@ from __future__ import annotations
 
 import math
 
-from .. import edit, options
+from .. import options
 from . import look
 from .inputs import Combo, NumberSpec, Spin
 from .panels import FormRow, Note, TitleRow
+from .robotform import RobotForm
 from .session import Session
 from .widgets import Checkbox, Column, Label, Section, Widget
 from .worldform import WorldForm
 
 HINT = "Select a robot or an obstacle to see and edit it."
-NO_GOAL = "No goal yet. Pick one with the Goal tool (G), or type it here."
 # Largest value a setting field accepts.
 SETTING_MAX = 1000.0
 
@@ -85,17 +85,15 @@ class Inspector:
     def _robot(self, name: str) -> None:
         """The sections for one robot."""
         spec = next(r for r in self.session.world.robots if r.name == name)
-        col, world = self.column, self.session.world
+        col = self.column
         title = TitleRow()
         title.name, title.color = name, self.session.scene.colors.get(name, look.TEAL)
         col.add(title, Section("Pose"))
         pose = self.session.scene.pose(name)
         self._triple(("x", "y", "th"), pose[0], pose[1], pose[2], self._pose_edited)
-        col.add(Section("Goal"))
-        goal = tuple(self._goal(name, pose))
-        if not any(t.robot == name for t in world.tasks):
-            col.add(Label(NO_GOAL, 12, look.MUTED, wrap=True))
-        self._triple(("gx", "gy", "gth"), *goal, self._goal_edited)
+        forms = RobotForm(col, self.session, self.fields, self._done)
+        forms.goals(name, pose)
+        forms.body(spec)
         col.add(Section("Robot"))
         for field, items, current in self._choices(spec):
             box = Combo(
@@ -104,11 +102,7 @@ class Inspector:
             self.fields[field] = box
             col.add(FormRow(field, box))
         self._settings(spec)
-
-    def _goal(self, name: str, pose):
-        """The goal to show: the robot's, or its own place."""
-        goal = edit.goal_of(self.session.world, name)
-        return goal if goal is not None else (float(pose[0]), float(pose[1]), 0.0)
+        forms.sensing(spec)
 
     def _triple(self, keys, x, y, angle, callback) -> None:
         """Three fields - x, y and a heading in degrees - added as rows."""
@@ -250,13 +244,6 @@ class Inspector:
         pose = (f["x"].value, f["y"].value, math.radians(f["th"].value))
         if self.name and self.session.editable:
             self._done(self.session.move_robot(self.name, pose))
-
-    def _goal_edited(self) -> None:
-        """A goal field changed."""
-        f = self.fields
-        goal = (f["gx"].value, f["gy"].value, math.radians(f["gth"].value))
-        if self.name and self.session.editable:
-            self._done(self.session.set_goal(self.name, goal))
 
     def _chosen(self, field: str, text: str) -> None:
         """A choice changed; the part's settings are shown afresh."""

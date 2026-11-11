@@ -356,7 +356,7 @@ class Layout:
             MenuBar(menu_titles),
             Panel(look.PANEL, edge="bottom"),
             StatusBar(),
-            Panel(look.PANEL, edge="right"),
+            Column(pad=12, gap=6, color=look.PANEL, edge="right"),
             Column(pad=12, gap=6, color=look.PANEL, edge="left"),
         )
         self.pane: Widget = Widget()

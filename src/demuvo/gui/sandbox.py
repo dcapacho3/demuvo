@@ -86,7 +86,6 @@ class Sandbox:
         self.shell = shell
         chrome = shell.layout.chrome
         self._toolbar(chrome.toolbar)
-        chrome.left.add(self.scene_heading, self.tree)
         pill = Pill(self.toggle_play, self.step_once, self.reset_run, self._speed)
         self.pane = ScenePane(self.session, pill, PaneActions(self))
         shell.layout.pane = self.pane
@@ -100,10 +99,11 @@ class Sandbox:
         self.palette = Combo(
             list(look.PALETTES), look.PALETTES[0], on_change=self._set_palette
         )
-        footer = [Section("Layers"), *self.layer_boxes.values()]
-        footer += [FormRow("opacity", self.alpha), FormRow("palette", self.palette)]
+        layers = [Section("Layers"), *self.layer_boxes.values()]
+        layers += [FormRow("opacity", self.alpha), FormRow("palette", self.palette)]
+        chrome.left.add(self.scene_heading, self.tree, *layers)
         self.inspector = Inspector(
-            chrome.right, self.session, self.message, self.refresh, footer
+            chrome.right, self.session, self.message, self.refresh
         )
         chrome.status.default = chrome.status.message = DEFAULT_MESSAGE
         for name, on in self.layer_on.items():
@@ -186,10 +186,6 @@ class Sandbox:
         self.buttons["right"].set_rect(width - 40, top, BUTTON, BUTTON)
         wide = self.badge.wanted_width()
         self.badge.set_rect(width - 40 - wide - 8, MENU_H + 10, wide, 24)
-        self.scene_heading.set_rect(12, MENU_H + TOOL_H + 10, 224, 24)
-        self.tree.set_rect(
-            12, MENU_H + TOOL_H + 38, 224, max(32 * len(self.tree.rows), 10)
-        )
 
     # -- what the shell asks --
     def menu_items(self, title: str) -> list[MenuItem]:
@@ -344,6 +340,7 @@ class Sandbox:
             label = f"{obstacle.shape.name} {k}"
             rows.append((f"{OBSTACLE_KEY}{k - 1}", label, look.NAVY2, 1))
         self.tree.set_rows([Row(*row) for row in rows])
+        self.tree.preferred_height = float(max(32 * len(rows), 10))
         place = session.scene.selected_obstacle
         self.tree.selected = (
             session.scene.selected if place is None else f"{OBSTACLE_KEY}{place}"
