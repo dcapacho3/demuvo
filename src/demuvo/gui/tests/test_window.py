@@ -288,3 +288,31 @@ def test_a_real_window_shows_exactly_the_frame_it_was_given_and_a_partial_update
         pytest.skip("libglfw3 or libgl1 is not installed")
     result = on_virtual_display(SNIPPET)
     assert "frame ok" in result.stdout, result.stderr
+
+
+def test_the_loop_uploads_the_box_that_was_damaged_before_the_render_cleared_it():
+    """A shell forgets its damage when it renders, so the loop reads it first."""
+    window, glfw, _ = build()
+    app = FakeApp(frames=1)
+    app.dirty_rect = (-8, 20, 50, 40)
+    render = app.render
+
+    def render_and_clear(width, height):
+        app.dirty_rect = None
+        return render(width, height)
+
+    app.render = render_and_clear
+    window.show_frame = MagicMock()
+    glfw.lib.glfwWindowShouldClose.side_effect = [0, 0, 1, 1]
+    window.run(app)
+    assert window.show_frame.call_args.args[1] == (-8, 20, 50, 40)
+
+
+def test_an_upload_box_is_kept_inside_the_frame():
+    """A box that spills over the edge is cut to the frame."""
+    window, _, gl = build()
+    frame = np.zeros((50, 80, 3), np.uint8)
+    window.upload(frame)
+    window.upload(frame, (-8, -4, 120, 70))
+    args = gl.glTexSubImage2D.call_args.args
+    assert args[2:6] == (0, 0, 80, 50)

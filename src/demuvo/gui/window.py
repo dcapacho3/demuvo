@@ -219,6 +219,7 @@ class Window:
             self.texture_size = (width, height)
             return
         x0, y0, x1, y1 = (0, 0, width, height) if dirty is None else dirty
+        x0, y0, x1, y1 = max(x0, 0), max(y0, 0), min(x1, width), min(y1, height)
         gl.glPixelStorei(GL_UNPACK_ROW_LENGTH, width)
         gl.glPixelStorei(GL_UNPACK_SKIP_PIXELS, x0)
         gl.glPixelStorei(GL_UNPACK_SKIP_ROWS, y0)
@@ -268,7 +269,9 @@ class Window:
             if app.quit_requested:
                 self.glfw.set_should_close(self.handle)
             if app.dirty:
-                self.show_frame(app.render(*self.framebuffer_size()), app.dirty_rect)
+                # render clears the damage, so the box is read first
+                box = app.dirty_rect
+                self.show_frame(app.render(*self.framebuffer_size()), box)
             if max_seconds is not None and time.perf_counter() - started > max_seconds:
                 break
         self.close()
