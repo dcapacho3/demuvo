@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from ..costmap import build_costmaps
 from ..runner import Beams, Run
 from ..world import World, load_world
+from .logbuf import LogBuffer, capture
 
 # The most simulated seconds sent to the worker at once; more owed time is dropped, so a
 # slow worker falls behind real time and does not spiral.
@@ -42,7 +43,18 @@ def serve(connection) -> None:
 
     Each command is a tuple and has one reply, a snapshot, except `("result",)`,
     which replies with the result lines, and `("stop",)`, which replies with nothing.
+    Warnings and log lines the run gives are not printed here; they go in the reply.
     """
+    buffer = LogBuffer()
+    release = capture(buffer)
+    try:
+        _obey(connection, buffer)
+    finally:
+        release()
+
+
+def _obey(connection, buffer: LogBuffer) -> None:
+    """Take commands and answer them; the messages the run gave go with the reply."""
     run: Run | None = None
     while True:
         command, *arguments = connection.recv()
@@ -63,7 +75,9 @@ def serve(connection) -> None:
         if command == "result":
             connection.send((run.result(), run.finished))
         else:
-            connection.send(snapshot(run))
+            reply = snapshot(run)
+            reply["log"] = buffer.drain()
+            connection.send(reply)
 
 
 @dataclass
@@ -102,6 +116,7 @@ class RemoteRun:
         self._waiting = False
         self._owed = 0.0
         self._snap: dict = {}
+        self._news: list[tuple[float, str, str]] = []
         self.world = load_world(source) if isinstance(source, str) else source
         self.sim = _Sim(self._dt or self.world.dt)
         self._load()
@@ -117,7 +132,14 @@ class RemoteRun:
         """Wait for the reply to the command in flight."""
         reply = self._connection.recv()
         self._waiting = False
+        if isinstance(reply, dict):
+            self._news.extend(reply.pop("log", []))
         return reply
+
+    def take_log(self) -> list[tuple[float, str, str]]:
+        """The messages sent since the last call, as (when, level, text)."""
+        news, self._news = self._news, []
+        return news
 
     def _ask(self, *command):
         """Send a command, wait for its reply and keep the snapshot."""

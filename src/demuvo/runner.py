@@ -74,6 +74,10 @@ class Run:
         """Take news from a simulation that runs elsewhere; here there is none."""
         return False
 
+    def take_log(self) -> list[tuple[float, str, str]]:
+        """Messages from a simulation that runs elsewhere; here they print as usual."""
+        return []
+
     def close(self) -> None:
         """Release what the run holds; a run in this process holds nothing."""
 

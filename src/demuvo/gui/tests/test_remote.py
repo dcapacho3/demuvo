@@ -145,3 +145,31 @@ def test_a_real_worker_process_gives_the_same_poses_and_stops():
     finally:
         far.close()
     assert not far._process.is_alive()  # pylint: disable=protected-access
+
+
+def test_the_warnings_of_the_worker_come_back_with_its_replies_and_only_once(pipe):
+    """A control period of odd steps warns in the worker, not on the terminal."""
+    world = edit.new_world()
+    world = edit.set_goal(world, "r1", (8.0, 3.0, 0.0))
+    odd = edit.set_step(world, 0.03)
+    run = RemoteRun(odd, connection=pipe[0])
+    news = run.take_log()
+    assert news and news[0][1] == "warning" and "whole number of steps" in news[0][2]
+    assert not run.take_log()
+    run.step(1)
+    assert not run.take_log()
+    assert not Run(odd).take_log()
+
+
+def test_a_preview_of_an_impossible_path_gives_no_warning(caplog):
+    """The planner's complaint is for a run, not for looking at the world."""
+    world = edit.set_part(edit.new_world(), "r1", "planner", "demuvo.planners:AStar")
+    world = edit.add_obstacle(world, "box", (8.0, 3.0, 0.0), (1.0, 6.0))
+    world = edit.set_goal(world, "r1", (9.0, 3.0, 0.0))
+    run = Run(world)
+    with caplog.at_level("WARNING"):
+        run.path("r1")
+    assert not caplog.records
+    with caplog.at_level("WARNING"):
+        run.step(3)
+    assert caplog.records

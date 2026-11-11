@@ -23,7 +23,9 @@ def stand_in_window(monkeypatch):
 
     real = cli.Session
     monkeypatch.setattr(cli, "show", show)
-    monkeypatch.setattr(cli, "Session", lambda world, mode, remote: real(world, mode))
+    monkeypatch.setattr(
+        cli, "Session", lambda world, mode, remote, **_named: real(world, mode)
+    )
     return shown
 
 
@@ -88,7 +90,7 @@ def test_the_simulation_gets_a_process_of_its_own_unless_told_not_to(monkeypatch
     class Probe:
         """A session stand-in."""
 
-        def __init__(self, _world, _mode, remote):
+        def __init__(self, _world, _mode, remote, **_named):
             seen.append(remote)
 
         def close(self):
@@ -108,7 +110,7 @@ def test_the_session_is_closed_even_if_the_window_fails(monkeypatch):
     class Probe:
         """A session stand-in."""
 
-        def __init__(self, _world, _mode, remote):
+        def __init__(self, _world, _mode, remote, **_named):
             """Nothing to set up."""
             assert remote
 

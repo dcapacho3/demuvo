@@ -103,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.seeds is not None:
             return _seeds(world, args)
         mode = "benchmark" if args.bench else "sandbox"
-        session = Session(world, mode, remote=not args.one_process)
+        session = Session(world, mode, remote=not args.one_process, keep_messages=True)
     except (OSError, ValueError) as error:
         print(f"demuvo: {where}{error}", file=sys.stderr)
         return 1

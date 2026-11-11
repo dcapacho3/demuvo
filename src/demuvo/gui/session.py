@@ -16,6 +16,7 @@ from ..runner import Run
 from ..verify import WorldError
 from ..world import World
 from .history import History
+from .logbuf import LogBuffer, capture
 from .remote import RemoteRun
 from .scenedraw import SceneDraw
 from .worldedits import REFUSED, WorldEdits
@@ -41,9 +42,12 @@ class Session:
         source: a world file, or a `World`; None in the sandbox starts a blank world.
         mode: "sandbox" or "benchmark".
         remote: True to simulate in a process of its own, so drawing never waits.
+        keep_messages: True to catch the warnings and log lines of this process, as
+            well as the worker's, in `log` instead of printing them.
 
     Attributes:
         mode: "sandbox" or "benchmark".
+        log: the warnings and log lines the run gave, for a window to show.
         run: the run, which the scene reads.
         scene: the drawing of the run.
         tool: "select", "goal", "box" or "circle", the tool the pointer has.
@@ -62,6 +66,7 @@ class Session:
         mode: str = "sandbox",
         *,
         remote: bool = False,
+        keep_messages: bool = False,
     ) -> None:
         """Open the world."""
         if mode not in MODES:
@@ -69,6 +74,8 @@ class Session:
         if mode == "benchmark" and source is None:
             raise ValueError("a benchmark needs a world file")
         self.mode = mode
+        self.log = LogBuffer()
+        self._release = capture(self.log) if keep_messages else None
         world = edit.new_world() if source is None else source
         self.run = RemoteRun(world) if remote else Run(world)
         self.scene = SceneDraw(self.run)
@@ -79,6 +86,11 @@ class Session:
         self.history = History(self)
         self.playing = False
         self.speed = 1.0
+        self._collect()
+
+    def _collect(self) -> None:
+        """Take the messages the run has given, so a window can show them."""
+        self.log.extend(self.run.take_log())
 
     @property
     def editable(self) -> bool:
@@ -124,6 +136,7 @@ class Session:
         keep = self.scene.selected if select is None else (select or None)
         previous = self.run.world
         self.run.set_world(world)
+        self._collect()
         if remember:
             self.history.remember(previous)
         if rebuild:
@@ -258,6 +271,7 @@ class Session:
         a fast frame rate does not make the run go faster than real time.
         """
         self.run.poll()
+        self._collect()
         if self.playing:
             self._owed += min(seconds, MAX_FRAME) * self.speed
             steps = int(self._owed / self.run.sim.dt)
@@ -271,6 +285,7 @@ class Session:
     def step_once(self) -> None:
         """Advance by about one control period."""
         self.run.step(max(1, round(STEP_SECONDS / self.run.sim.dt)))
+        self._collect()
         self._seen = self.run.time
         self.scene.record_trails()
 
@@ -279,9 +294,13 @@ class Session:
         self.playing = False
         self._owed = 0.0
         self.run.reset()
+        self._collect()
         self.scene.set_run(self.run)
         self._seen = 0.0
 
     def close(self) -> None:
-        """Stop the simulation process, if there is one."""
+        """Stop the simulation process and the catching of messages, if any."""
         self.run.close()
+        if self._release is not None:
+            self._release()
+            self._release = None

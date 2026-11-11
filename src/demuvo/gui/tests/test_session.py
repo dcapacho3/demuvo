@@ -433,3 +433,27 @@ def test_an_undo_that_cannot_run_is_reported_and_changes_nothing(sandbox, monkey
     sandbox.edits.set_seed(5)
     monkeypatch.setattr(sandbox, "apply", lambda *a, **k: "no")
     assert sandbox.history.undo() == "no" and sandbox.history.can_undo
+
+
+def test_a_session_keeps_the_warnings_of_a_run_instead_of_printing_them(capsys):
+    """With messages kept, a period that is not whole steps lands in the log."""
+    world = edit.set_step(edit.new_world(), 0.03)
+    kept = Session(world, keep_messages=True)
+    try:
+        assert any("whole number of steps" in e.text for e in kept.log.entries)
+        kept.log.clear()
+        kept.step_once()
+        kept.reset()
+        assert capsys.readouterr().err == ""
+    finally:
+        kept.close()
+    kept.close()
+
+
+def test_the_log_of_a_worker_reaches_the_session_log(remote_session):
+    """Messages the worker sent are put in the session's log when the run is read."""
+    remote_session.run._news.append(  # pylint: disable=protected-access
+        (1.0, "warning", "from the worker")
+    )
+    remote_session.advance(0.01)
+    assert remote_session.log.entries[-1].text == "from the worker"
