@@ -464,8 +464,10 @@ class Input:
             menubar.hover_title = hover
             damage.add((0, 0, shell.screen.width, MENU_H))
         status = shell.layout.chrome.status
-        status.coords = shell.program.world_at(x, y)
-        status.invalidate()
+        coords = shell.program.world_at(x, y)
+        if coords != status.coords:
+            status.coords = coords
+            status.invalidate()
         if pointer.tip:
             pointer.tip = None
             damage.everything()
@@ -581,14 +583,20 @@ class Input:
         popup.adopt(self.shell)
         self.popup = popup
         self.shell.layout.chrome.menubar.open_title = popup.owner
-        self.shell.screen.damage.everything()
+        self._damage_menu(popup)
 
     def close_popup(self) -> None:
         """Close the popup that is open."""
         if self.popup is not None:
-            self.popup = None
+            popup, self.popup = self.popup, None
             self.shell.layout.chrome.menubar.open_title = None
-            self.shell.screen.damage.everything()
+            self._damage_menu(popup)
+
+    def _damage_menu(self, popup: Popup) -> None:
+        """Redraw the menu bar and the place a popup is or was."""
+        screen = self.shell.screen
+        screen.damage.add((0, 0, screen.width, MENU_H))
+        screen.damage.widget(popup)
 
     def open_menu(self, title: str) -> None:
         """Open the menu of a title, under it."""
