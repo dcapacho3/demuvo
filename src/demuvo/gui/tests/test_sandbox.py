@@ -601,7 +601,9 @@ def test_p_and_l_pick_the_outline_tools_and_enter_and_escape_end_a_drawing(app):
 def test_the_title_names_the_file_and_stars_unsaved_changes(app, tmp_path):
     """Untitled at first; a star after an edit; the file name after a save."""
     window, program = app
-    assert program.title == "untitled - demuvo" and window.title == program.title
+    assert (
+        program.title == "untitled - demuvo" and window.appearance[0] == program.title
+    )
     program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 0.5))
     assert program.title == "untitled * - demuvo"
     path = tmp_path / "mine.toml"
@@ -818,3 +820,43 @@ def test_a_dragged_obstacle_shows_an_outline_and_the_world_follows_at_the_drop(a
     assert program.session.world.obstacles[1].pose.xyt[0] == pytest.approx(
         7.0, abs=0.03
     )
+
+
+def test_the_log_panel_opens_itself_for_the_first_message_and_the_button_toggles_it(
+    app,
+):
+    """A warning opens the bottom panel and puts a note in the status bar."""
+    window, program = app
+    docks = window.layout.docks
+    assert not docks["bottom"].open
+    program.session.log.add("warning", "AStar: no way from the start to the goal")
+    program.after_tick(program.clock.last + 0.1)
+    window.animator.tick(time.perf_counter() + 5.0)
+    assert docks["bottom"].open and docks["bottom"].width == docks["bottom"].full
+    assert program.buttons["bottom"].checked
+    assert window.layout.chrome.status.notes == "1 message in the log"
+    window.render()
+    click(window, program.buttons["bottom"])
+    window.animator.tick(time.perf_counter() + 5.0)
+    assert not docks["bottom"].open
+    program.session.log.add("warning", "another")
+    program.after_tick(program.clock.last + 0.2)
+    assert not docks["bottom"].open
+    assert window.layout.chrome.status.notes == "2 messages in the log"
+    press_key(window, "3", ctrl=True)
+    window.animator.tick(time.perf_counter() + 5.0)
+    assert docks["bottom"].open
+    view = program.menu_items("View")
+    next(i for i in view if i.text == "Log").action()
+    window.animator.tick(time.perf_counter() + 5.0)
+    assert not docks["bottom"].open
+
+
+def test_clearing_the_log_empties_it_and_the_note(app):
+    """The Clear button forgets the messages and the status note goes."""
+    window, program = app
+    program.session.log.add("warning", "one")
+    program.after_tick(program.clock.last + 0.1)
+    program.log_view.clear_button.click()
+    assert not program.session.log.entries
+    assert window.layout.chrome.status.notes == ""

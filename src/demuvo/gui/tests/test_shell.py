@@ -5,9 +5,11 @@ import time
 import numpy as np
 import pytest
 
+from demuvo.gui import look
 from demuvo.gui import shell as module
 from demuvo.gui.inputs import MenuItem, NumberSpec, Popup, Spin
 from demuvo.gui.keys import CTRL, KEY, SHIFT
+from demuvo.gui.raster import Canvas
 from demuvo.gui.shell import Animator, Damage, Shell
 from demuvo.gui.widgets import Checkbox, Event, IconButton, Widget
 
@@ -72,6 +74,8 @@ class ToyProgram:
     def menu_items(self, title):
         """A line that says which menu it is in."""
         return [MenuItem(f"{title} item", action=lambda: self.commands.append(title))]
+
+    title = "toy - demuvo"
 
     @staticmethod
     def can_quit():
@@ -560,3 +564,68 @@ def test_a_right_click_goes_to_the_widget_under_it_unless_a_menu_is_open(toy):
     toy.mouse_press(Event(x, y, button=1))
     assert len(seen) == 1
     toy.mouse_press(Event(900, 650, button=1))
+
+
+def test_dragging_a_splitter_resizes_its_panel_within_limits(toy):
+    """The left and right panels follow the pointer sideways, the bottom one up."""
+    layout = toy.layout
+    layout.slide("bottom", True)
+    toy.animator.tick(time.perf_counter() + 5.0)
+    assert layout.docks["bottom"].width == pytest.approx(module.BOTTOM_H)
+    for which, start, end in (
+        ("left", (layout.docks["left"].width, 300), (330, 300)),
+        (
+            "right",
+            (toy.screen.width - layout.docks["right"].width, 300),
+            (toy.screen.width - 400, 300),
+        ),
+        (
+            "bottom",
+            (500, toy.screen.height - module.STATUS_H - layout.docks["bottom"].width),
+            (500, toy.screen.height - module.STATUS_H - 250),
+        ),
+    ):
+        grip = layout.splitters[which]
+        assert grip.visible
+        toy.mouse_move(*start)
+        toy.mouse_press(Event(*start))
+        toy.mouse_move(*end)
+        toy.mouse_release(Event(*end))
+    assert layout.docks["left"].width == pytest.approx(330)
+    assert layout.docks["right"].width == pytest.approx(400)
+    assert layout.docks["bottom"].width == pytest.approx(250)
+    low, high = module.DOCK_LIMITS["left"]
+    toy.mouse_move(layout.docks["left"].width, 300)
+    toy.mouse_press(Event(layout.docks["left"].width, 300))
+    toy.mouse_move(5, 300)
+    assert layout.docks["left"].width == low
+    toy.mouse_move(900, 300)
+    assert layout.docks["left"].width <= high
+    toy.mouse_release(Event(900, 300))
+
+
+def test_the_pointer_shape_follows_the_splitter_and_a_closed_panel_has_none(toy):
+    """Over a splitter the shape is a resize arrow; elsewhere an arrow."""
+    layout = toy.layout
+    assert toy.appearance[1] == "arrow"
+    assert not layout.splitters["bottom"].visible
+    x = layout.docks["left"].width
+    toy.mouse_move(x, 300)
+    assert toy.appearance[1] == "hresize"
+    toy.mouse_move(500, 300)
+    assert toy.appearance[1] == "arrow"
+    canvas = Canvas(1000, 700, look.WINDOW)
+    layout.splitters["left"].on_hover(True)
+    layout.splitters["left"].draw(canvas)
+    layout.splitters["bottom"].sideways = False
+    layout.splitters["bottom"].on_hover(True)
+    layout.splitters["bottom"].draw(canvas)
+
+
+def test_hovering_a_number_field_leaves_the_pointer_an_arrow(toy):
+    """A field keeps its caret place in `cursor`; the shape is a different name."""
+    spin = Spin(1.0, NumberSpec(0, 10, 1))
+    toy.layout.chrome.root.add(spin)
+    spin.set_rect(300, 200, 100, 30)
+    toy.mouse_move(310, 210)
+    assert toy.appearance[1] == "arrow"

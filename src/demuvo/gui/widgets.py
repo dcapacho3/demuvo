@@ -206,6 +206,9 @@ class Widget:  # pylint: disable=unused-argument
     def activate(self) -> None:
         """What Enter or Space does on a focused widget; most do nothing."""
 
+    # the shape of the pointer over the widget: "arrow", "hresize" or "vresize"
+    pointer_shape = "arrow"
+
     def draw(self, canvas: Canvas) -> None:
         """Draw the children that are visible and in the clip box."""
         for child in self.children:

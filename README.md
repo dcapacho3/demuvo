@@ -180,8 +180,8 @@ and is drawn with its real footprint and a white arrow for its heading.
   waypoint after the goals it has.
 - *Box* and *circle*: drag on the floor; the pointer then goes back to *select*. A box is drawn from one corner to the other, a
   circle from its centre outwards.
-- *Polygon* and *line*: click the corners. Double click, click near the first corner of
-  a polygon, or press Enter to finish it; Esc cancels.
+- *Polygon* and *line*: click the corners. Double click, right click, click near the first
+  corner of a polygon, or press Enter to finish it; Esc cancels.
 - *Add robot* and *delete*: the tool bar, Ctrl+N and Delete.
 
 The inspector shows what is selected, and every field applies as you leave it. With
@@ -201,6 +201,12 @@ there are unsaved changes; New, Open and Quit say so the first time and go ahead
 second. Saving writes a new file: comments and the order of keys in the old file are not
 kept. The icon is the demuvo logo tile.
 
+**Log and panels.** Warnings and log lines of a run - a planner that finds no way, a
+control period that is not whole steps - appear in a log panel along the bottom of the
+window, not on the terminal. It opens by itself the first time a message comes; the tool
+bar button, View > Log and Ctrl+3 show and hide it, and Clear empties it. Every panel can
+be resized by dragging its edge, between the panel and the world.
+
 **Undo.** Ctrl+Z takes back the last edit and Ctrl+Y makes it again; a drag is one step.
 Opening or starting a world forgets the list.
 
@@ -219,7 +225,7 @@ smoother, will make; the path follows a robot you drag.
 | Ctrl+N, Delete | add a robot, delete the selected robot or obstacle |
 | Ctrl+O, Ctrl+S | open a world file, save the world |
 | Ctrl+Z, Ctrl+Y | undo, redo |
-| Ctrl+1, Ctrl+2 | show or hide the scene list, the inspector |
+| Ctrl+1, Ctrl+2, Ctrl+3 | show or hide the scene list, the inspector, the log |
 | Tab, Shift+Tab | move the keyboard focus |
 | Ctrl+Q | quit |
 

@@ -219,3 +219,14 @@ def test_a_window_is_made_with_the_program_name_for_the_desktop_to_match():
         binding.X11_INSTANCE_NAME: b"demuvo",
         binding.WAYLAND_APP_ID: b"demuvo",
     }
+
+
+def test_a_pointer_shape_is_made_once_and_set_each_time():
+    """The standard cursor is created on first use and reused."""
+    lib = MagicMock()
+    glfw = Glfw(lib)
+    glfw.set_cursor(7, "hresize")
+    glfw.set_cursor(7, "hresize")
+    assert lib.glfwCreateStandardCursor.call_count == 1
+    lib.glfwCreateStandardCursor.assert_called_with(binding.CURSORS["hresize"])
+    assert lib.glfwSetCursor.call_count == 2

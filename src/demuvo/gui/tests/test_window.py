@@ -27,7 +27,7 @@ class FakeApp:
     def __init__(self, frames=1):
         """Start dirty, with `frames` frames to show, then ask to quit."""
         self.dirty, self.dirty_rect, self.quit_requested = True, None, False
-        self.title = "demuvo - test"
+        self.appearance = ("demuvo - test", "arrow")
         self.events, self.ticks, self.frames, self.shown = [], 0, frames, []
 
     def mouse_move(self, x, y):
@@ -331,7 +331,7 @@ def test_the_loop_gives_the_window_the_title_and_again_when_it_changes():
     def tick(now):
         original(now)
         if app.ticks == 2:
-            app.title = "demuvo - changed *"
+            app.appearance = ("demuvo - changed *", "arrow")
 
     app.tick = tick
     window.run(app)
@@ -354,3 +354,23 @@ def test_the_window_gets_the_demuvo_icon_in_every_size_and_survives_without_one(
     glfw2.lib.glfwCreateWindow.return_value = 11
     del glfw2.lib.glfwSetWindowIcon
     Window("demuvo", 200, 100, glfw=glfw2, gl=MagicMock())
+
+
+def test_the_loop_changes_the_pointer_shape_when_the_application_asks():
+    """The shape is set on the first turn and then only when it changes."""
+    window, glfw, _ = build()
+    app = FakeApp(frames=3)
+    shapes = []
+    glfw.lib.glfwSetCursor.side_effect = lambda _h, cursor: shapes.append(cursor)
+    glfw.lib.glfwCreateStandardCursor.side_effect = lambda code: code
+    glfw.lib.glfwWindowShouldClose.side_effect = [0, 0, 0, 0, 0, 1]
+    original = app.tick
+
+    def tick(now):
+        original(now)
+        if app.ticks == 2:
+            app.appearance = ("demuvo - test", "hresize")
+
+    app.tick = tick
+    window.run(app)
+    assert shapes == [0x00036001, 0x00036005]

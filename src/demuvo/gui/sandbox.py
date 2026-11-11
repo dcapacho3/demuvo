@@ -18,6 +18,7 @@ from .filedialog import Browse, FileDialog
 from .inputs import Combo, MenuItem, Row, TreeList
 from .inspector import Inspector
 from .keys import KEY
+from .logview import LogView
 from .paneactions import PaneActions
 from .panels import Badge, FormRow, Pill
 from .scenedraw import LAYERS, STATIC
@@ -79,6 +80,7 @@ class Sandbox:
         self.shell: Shell | None = None
         self.buttons: dict[str, IconButton] = {}
         self.badge = Badge()
+        self.log_view: LogView | None = None
         self.tree = TreeList(on_select=self.select)
         self.layer_boxes: dict[str, Checkbox] = {}
         self.layer_on = {name: on for name, (_, on) in LAYERS.items()}
@@ -89,7 +91,6 @@ class Sandbox:
         self.clock = Clock()
         self.alpha: Slider | None = None
         self.palette: Combo | None = None
-        self.scene_heading = Section("Scene")
         self._warned: str | None = None
 
     # -- building --
@@ -97,6 +98,8 @@ class Sandbox:
         """Make the tool bar, the lists, the inspector and the pane."""
         self.shell = shell
         chrome = shell.layout.chrome
+        self.log_view = LogView(self.session.log, self._clear_log)
+        chrome.bottom.add(self.log_view)
         self._toolbar(chrome.toolbar)
         pill = Pill(self.toggle_play, self.step_once, self.reset_run, self._speed)
         self.pane = ScenePane(self.session, pill, PaneActions(self))
@@ -115,7 +118,7 @@ class Sandbox:
         )
         layers = [Section("Layers"), *self.layer_boxes.values()]
         layers += [FormRow("opacity", self.alpha), FormRow("palette", self.palette)]
-        chrome.left.add(self.scene_heading, self.tree, *layers)
+        chrome.left.add(Section("Scene"), self.tree, *layers)
         self.inspector = Inspector(
             chrome.right, self.session, self.message, self.refresh
         )
@@ -188,6 +191,14 @@ class Sandbox:
             ("add", "robot_add", self._add_robot, "Add robot (Ctrl+N)", False, None),
             ("delete", "trash", self._delete_selected, "Delete (Del)", False, None),
             (
+                "bottom",
+                "panel_bottom",
+                lambda on: self.set_panel("bottom", on),
+                "Log (Ctrl+3)",
+                True,
+                None,
+            ),
+            (
                 "right",
                 "panel_right",
                 lambda on: self.set_panel("right", on),
@@ -214,8 +225,11 @@ class Sandbox:
             self.buttons[key].set_rect(x, top, BUTTON, BUTTON)
             x += 34
         self.buttons["right"].set_rect(width - 40, top, BUTTON, BUTTON)
+        self.buttons["bottom"].set_rect(width - 76, top, BUTTON, BUTTON)
         wide = self.badge.wanted_width()
-        self.badge.set_rect(width - 40 - wide - 8, MENU_H + 10, wide, 24)
+        self.badge.set_rect(width - 76 - wide - 8, MENU_H + 10, wide, 24)
+        bottom = self.shell.layout.chrome.bottom
+        self.log_view.set_rect(bottom.x, bottom.y, bottom.width, bottom.height)
 
     # -- what the shell asks --
     def menu_items(self, title: str) -> list[MenuItem]:
@@ -329,6 +343,12 @@ class Sandbox:
                 checked=docks["right"].open,
                 action=lambda: self.set_panel("right", not docks["right"].open),
             ),
+            MenuItem(
+                "Log",
+                shortcut="Ctrl+3",
+                checked=docks["bottom"].open,
+                action=lambda: self.set_panel("bottom", not docks["bottom"].open),
+            ),
             MenuItem(separator=True),
             *layers,
             MenuItem(separator=True),
@@ -342,6 +362,7 @@ class Sandbox:
         actions = {
             (KEY["1"], True): lambda: self._toggle_panel("left"),
             (KEY["2"], True): lambda: self._toggle_panel("right"),
+            (KEY["3"], True): lambda: self._toggle_panel("bottom"),
             (KEY["n"], True): self._add_robot,
             (KEY["z"], True): self._undo,
             (KEY["y"], True): self._redo,
@@ -384,6 +405,26 @@ class Sandbox:
             self.session.advance(elapsed)
             self._after_run()
         self._measure_rate(now)
+        self._watch_log()
+
+    def _watch_log(self) -> None:
+        """Redraw the log when messages came, and open it the first time one does."""
+        news = self.log_view.news()
+        if news == "open":
+            self.set_panel("bottom", True)
+        status = self.shell.layout.chrome.status
+        count = len(self.session.log.entries)
+        notes = (
+            f"{count} message{'' if count == 1 else 's'} in the log" if count else ""
+        )
+        if news is not None and notes != status.notes:
+            status.notes = notes
+            status.invalidate()
+
+    def _clear_log(self) -> None:
+        """Forget the messages."""
+        self.session.log.clear()
+        self._watch_log()
 
     def _measure_rate(self, now: float) -> None:
         """Show how much of real time a run keeps up with, as the speed asked for.

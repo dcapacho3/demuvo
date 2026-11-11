@@ -31,7 +31,9 @@ from .raster import Canvas, rgba
 from .widgets import Column, Event, IconButton, Panel, Widget, text_baseline
 
 MENU_H, TOOL_H, STATUS_H = 34, 44, 26
-LEFT_W, RIGHT_W = 248, 312
+LEFT_W, RIGHT_W, BOTTOM_H = 248, 312, 170
+# The least and most a panel can be dragged to, in pixels, by panel.
+DOCK_LIMITS = {"left": (160, 520), "right": (200, 560), "bottom": (80, 480)}
 # The scene keeps at least this many pixels across; the panels give way.
 SCENE_MIN = 240
 # A tooltip shows after the pointer rests this long, in seconds.
@@ -264,6 +266,7 @@ class StatusBar(Panel):
         coords: the pointer's world place as (x, y), or None.
         count: the text at the right, such as "2 robots".
         rate: how fast a run goes, such as "real time 100%", or "".
+        notes: a short remark such as "2 messages in the log", or "".
         slow: True if the run falls behind real time, which lights `rate`.
     """
 
@@ -276,6 +279,7 @@ class StatusBar(Panel):
         self.count = ""
         self.rate = ""
         self.slow = False
+        self.notes = ""
 
     def show(self, text: str, seconds: float = MESSAGE_SECONDS) -> None:
         """Show a temporary message; after `seconds` the default text returns."""
@@ -297,6 +301,10 @@ class StatusBar(Panel):
         canvas.text(face, self.message, (12, baseline), size=12, color=muted)
         right = self.width - 12 - face.width(self.count, 12)
         canvas.text(face, self.count, (right, baseline), size=12, color=muted)
+        if self.notes:
+            warn = rgba(look.WARN_TEXT)
+            after = (36 + face.width(self.message, 12), baseline)
+            canvas.text(face, self.notes, after, size=12, color=warn)
         if self.rate:
             colour = rgba(look.WARN_TEXT if self.slow else look.TEAL)
             left = (
@@ -347,6 +355,39 @@ class Chrome:
     status: StatusBar
     left: Panel
     right: Column
+    bottom: Panel
+
+
+class Splitter(Widget):
+    """A thin strip along the edge of a panel that is dragged to resize it.
+
+    Args:
+        which: the panel, "left", "right" or "bottom".
+        sideways: True if it moves left and right.
+        on_drag: called with the panel, and the pointer's x and y, as it is dragged.
+    """
+
+    SIZE = 8
+
+    def __init__(self, which: str, sideways: bool, on_drag) -> None:
+        """Make a splitter."""
+        super().__init__()
+        self.which, self.sideways, self.on_drag = which, sideways, on_drag
+        self.pointer_shape = "hresize" if sideways else "vresize"
+
+    def draw(self, canvas: Canvas) -> None:
+        """Show a teal line while the pointer is over it or it is held."""
+        if self.hover or self.down:
+            if self.sideways:
+                box = (self.x + self.width / 2 - 1, self.y, 2, self.height)
+            else:
+                box = (self.x, self.y + self.height / 2 - 1, self.width, 2)
+            canvas.rect(box, rgba(look.TEAL))
+
+    def on_move(self, event: Event) -> None:
+        """Follow the pointer while it is held."""
+        if self.down:
+            self.on_drag(self.which, event.x, event.y)
 
 
 class Layout:
@@ -371,14 +412,26 @@ class Layout:
             StatusBar(),
             Column(pad=12, gap=6, color=look.PANEL, edge="right"),
             Column(pad=12, gap=6, color=look.PANEL, edge="left"),
+            Panel(look.PANEL, edge="top"),
         )
         self.pane: Widget = Widget()
-        self.docks = {"left": Dock(LEFT_W), "right": Dock(RIGHT_W)}
+        self.docks = {
+            "left": Dock(LEFT_W),
+            "right": Dock(RIGHT_W),
+            "bottom": Dock(BOTTOM_H),
+        }
+        self.docks["bottom"].width, self.docks["bottom"].open = 0.0, False
+        self.splitters = {
+            "left": Splitter("left", True, self._drag),
+            "right": Splitter("right", True, self._drag),
+            "bottom": Splitter("bottom", False, self._drag),
+        }
 
     def assemble(self) -> None:
         """Put the fixed widgets and the pane in one tree, and give it the host."""
         c = self.chrome
-        c.root.add(c.menubar, c.toolbar, c.left, self.pane, c.right, c.status)
+        c.root.add(c.menubar, c.toolbar, c.left, self.pane, c.right, c.bottom, c.status)
+        c.root.add(*self.splitters.values())
         c.root.adopt(self.shell)
 
     def apply(self) -> None:
@@ -392,6 +445,7 @@ class Layout:
             left, right = left * share, right * share
         top = MENU_H + TOOL_H
         body = h - top - STATUS_H
+        bottom = min(self.docks["bottom"].width, body * 0.6)
         c = self.chrome
         c.root.set_rect(0, 0, w, h)
         c.menubar.set_rect(0, 0, w, MENU_H)
@@ -399,11 +453,37 @@ class Layout:
         c.status.set_rect(0, h - STATUS_H, w, STATUS_H)
         c.left.set_rect(0, top, left, body)
         c.right.set_rect(w - right, top, right, body)
-        self.pane.set_rect(left, top, w - left - right, body)
+        centre = w - left - right
+        self.pane.set_rect(left, top, centre, body - bottom)
+        c.bottom.set_rect(left, top + body - bottom, centre, bottom)
         c.left.visible, c.right.visible = left > 1, right > 1
+        c.bottom.visible = bottom > 1
+        grip = Splitter.SIZE
+        for name, (x, y, width, height) in {
+            "left": (left - grip / 2, top, grip, body),
+            "right": (w - right - grip / 2, top, grip, body),
+            "bottom": (left, top + body - bottom - grip / 2, centre, grip),
+        }.items():
+            self.splitters[name].set_rect(x, y, width, height)
+            self.splitters[name].visible = (left, right, bottom)[
+                ("left", "right", "bottom").index(name)
+            ] > 1
         self.shell.program.layout_toolbar(w)
         c.right.layout()
         screen.damage.everything()
+
+    def _drag(self, which: str, x: float, y: float) -> None:
+        """A splitter was dragged to a pixel: resize its panel and lay out again."""
+        screen = self.shell.screen
+        size = {
+            "left": x,
+            "right": screen.width - x,
+            "bottom": screen.height - STATUS_H - y,
+        }[which]
+        low, high = DOCK_LIMITS[which]
+        dock = self.docks[which]
+        dock.full = dock.width = min(max(size, low), high)
+        self.apply()
 
     def slide(self, which: str, on: bool) -> None:
         """Slide a panel open or shut."""
@@ -798,9 +878,11 @@ class Shell:
             self.focus.on_char(char)
 
     @property
-    def title(self) -> str:
-        """The text for the window's title bar."""
-        return self.program.title
+    def appearance(self) -> tuple[str, str]:
+        """The window's title, and the pointer shape: "arrow" or a resize arrow."""
+        pointer = self.input.pointer
+        shape = getattr(pointer.captured or pointer.hovered, "pointer_shape", "arrow")
+        return self.program.title, shape
 
     @property
     def dirty(self) -> bool:

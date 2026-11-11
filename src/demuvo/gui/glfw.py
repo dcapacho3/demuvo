@@ -16,6 +16,8 @@ VISIBLE = 0x00020004
 # Names a desktop matches to its launcher entry and icon.
 X11_CLASS_NAME, X11_INSTANCE_NAME, WAYLAND_APP_ID = 0x00024001, 0x00024002, 0x00026001
 APP_NAME = b"demuvo"
+# The standard pointer shapes GLFW makes, by the name a widget gives.
+CURSORS = {"arrow": 0x00036001, "hresize": 0x00036005, "vresize": 0x00036006}
 TRUE, FALSE = 1, 0
 RELEASE, PRESS, REPEAT = 0, 1, 2
 # Set this to the path of a libglfw to use that one.
@@ -62,6 +64,8 @@ FUNCTIONS = {
     "glfwWindowShouldClose": ((_WINDOW,), _C_INT),
     "glfwSetWindowShouldClose": ((_WINDOW, _C_INT), None),
     "glfwSetWindowTitle": ((_WINDOW, ctypes.c_char_p), None),
+    "glfwCreateStandardCursor": ((_C_INT,), ctypes.c_void_p),
+    "glfwSetCursor": ((_WINDOW, ctypes.c_void_p), None),
     "glfwSetWindowIcon": ((_WINDOW, _C_INT, ctypes.c_void_p), None),
     "glfwGetFramebufferSize": ((_WINDOW, ctypes.c_void_p, ctypes.c_void_p), None),
     "glfwGetWindowSize": ((_WINDOW, ctypes.c_void_p, ctypes.c_void_p), None),
@@ -128,6 +132,7 @@ class Glfw:
             function = getattr(self.lib, name)
             function.argtypes, function.restype = list(arguments), result
         self._callbacks: list = []
+        self._cursors: dict[str, object] = {}
 
     def init(self) -> bool:
         """Start GLFW; False if there is no display."""
@@ -184,6 +189,12 @@ class Glfw:
         self.lib.glfwSetWindowIcon(
             window, len(images), ctypes.cast(array, ctypes.c_void_p)
         )
+
+    def set_cursor(self, window, shape: str) -> None:
+        """Show the pointer as a shape - "arrow", "hresize" or "vresize"."""
+        if shape not in self._cursors:
+            self._cursors[shape] = self.lib.glfwCreateStandardCursor(CURSORS[shape])
+        self.lib.glfwSetCursor(window, self._cursors[shape])
 
     def set_title(self, window, title: str) -> None:
         """Put a title on the window's bar."""
