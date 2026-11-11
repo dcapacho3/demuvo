@@ -11,10 +11,10 @@
 **A deterministic 2D robot simulator.**
 
 demuvo is a flat 2D world that runs with no physics engine: robots move exactly as their
-kinematic model says. You describe a world in a file or draw it in a window, put robots in
-it, choose how each one senses, plans and steers, and press play. You see the path before
-the robot moves, the costmap it plans on, and what its lidar sees. The same world and the
-same seed always give the same run, so a result can be repeated and compared.
+kinematic model says. A world is described in a file or drawn in a window, and each robot
+is given its sensors, planner and controller. The window shows the planned path before a
+robot moves, the costmap it plans on, and what its lidar sees. The same world and the same
+seed always give the same run, so a result can be repeated and compared.
 
 > **Work in progress.** demuvo is under active development and is not released yet. The
 > API and the world file may still change. The [to do list](#to-do) shows what is next.
@@ -22,51 +22,77 @@ same seed always give the same run, so a result can be repeated and compared.
 ![A session in the sandbox: draw a box, a circle and a line, rename one, give the robot a
 goal, drag an obstacle, and play the run.](docs/sandbox.gif)
 
-## Install and open
+## Installation
 
 ```bash
 pip install -e .
 sudo apt install libglfw3 libgl1      # the window; Ubuntu and Debian
-demuvo                                # a blank world to build in
-demuvo examples/worlds/demo.toml      # open a world file; Space runs it
-demuvo --install-desktop              # optional: add demuvo and its icon to your launcher
 ```
 
-`demuvo world.toml --bench` opens a world fixed, so every run is the same. `--check` checks
-a file and opens nothing. `--result` prints how a run went when the window closes. After
-the demo robot has driven to the star it prints:
+demuvo needs Python 3.12 or later. The window uses the system's GLFW and OpenGL
+(`libglfw3` and `libgl1`) and no Python package. Running without a window needs neither.
+
+## Command line
+
+```text
+demuvo [world.toml] [options]
+```
+
+| Option | Meaning |
+| --- | --- |
+| *(no file)* | open the sandbox with a blank world |
+| `world.toml` | open the sandbox with that world |
+| `--bench` | open the world fixed, as a benchmark: every run is the same |
+| `--check` | check the file, print a summary, open nothing |
+| `--result` | print how each task went when the window closes |
+| `--dt S` | step length in seconds, replacing the file's |
+| `--seconds S` | close the window after `S` seconds |
+| `--one-process` | simulate in the window's process, not in a process of its own |
+| `--seeds N` | open no window; run `N` seeds to the end and print a table |
+| `--jobs J`, `--limit S` | with `--seeds`: runs at once, and simulated seconds before a run stops |
+| `--install-desktop` | add demuvo and its icon to the desktop launcher, then exit |
+
+`--result` prints, for each task, whether the robot reached it and when, and the distance
+driven. For `examples/worlds/demo.toml` after the robot reaches the star:
 
 ```text
 r1 task 1: reached at 19.26 s
 r1 drove 8.86 m
 ```
 
-## How to use it
+## The sandbox
 
-**Build a world in the window.** Pick a tool from the tool bar, or press its key, and use
-the pointer:
+The sandbox is the window `demuvo` opens. It builds, runs, edits, saves and opens worlds.
+The scene list and layer switches are on the left, the world with a playback pill is in
+the middle, the inspector is on the right, and the log is at the bottom. Every panel
+resizes by dragging its edge.
 
-| Tool | Key | What it does |
+| Tool | Key | Action |
 | --- | --- | --- |
-| Select | V | click a robot or obstacle; drag it to move it |
+| Select | V | click a robot or obstacle to select it; drag it to move it |
 | Goal | G | click the floor to set the selected robot's goal; Shift and click adds a waypoint |
 | Box, Circle | B, C | drag on the floor |
-| Polygon, Line | P, L | click the corners; double click, right click or Enter to finish |
+| Polygon, Line | P, L | click the corners; double click, right click or Enter finishes |
 | Add robot, Delete | Ctrl+N, Delete | add a robot, delete the selected one |
 
-Select a robot, an obstacle, or nothing, and the inspector on the right shows its form:
-pose, goals, body, model, planner, smoother, controller, sensors, costmaps. Every field
-applies as you leave it. Double click a name in the scene list (or press F2) to rename it.
-Ctrl+Z and Ctrl+Y undo and redo. Space plays, S steps, R resets. Warnings from a run appear
-in the log panel at the bottom. [The sandbox](docs/sandbox.md) has everything, with all the
-keys.
+The inspector shows a form for what is selected: for a robot, its pose, goals, body,
+model, planner, smoother, controller, sensors and control period; for an obstacle, its pose
+and size; for nothing, the world and its costmaps. A field applies as it is left. A name
+in the scene list is renamed by a double click or F2. Ctrl+Z and Ctrl+Y undo and redo,
+Space plays, S steps and R resets. Warnings from a run go to the log panel. The File menu
+saves the world as TOML and opens one. [The sandbox](docs/sandbox.md) documents the whole
+window and every key.
 
-**Save and open.** The File menu saves the world as a TOML file and opens one. The world
-file is plain text; [its format](docs/world-file.md) covers obstacles, robots, goals,
-costmaps, lidar and time. A file is checked when it loads, and a mistake is named by object
-and key.
+## World files
 
-**Run it from a script.**
+A world is a TOML file: size, seed, obstacles (box, circle, polygon, wall), robots, tasks
+(goals and waypoints), sensors and costmaps. A file is checked when it loads, and a
+mistake is named by object and key. [The world file](docs/world-file.md) describes every key.
+
+## Python
+
+`Run` steps a world with no window, and the functions in `demuvo.edit` build and change a
+world. Each returns a new world.
 
 ```python
 from demuvo import Run, edit
@@ -78,9 +104,13 @@ run.until_done(60.0)
 print("\n".join(run.result()))
 ```
 
-[Python](docs/python.md) lists the edit functions.
+[Python](docs/python.md) lists the edit functions and the `Run` methods.
 
-**Run many seeds, with no window.**
+## Running many seeds
+
+`--seeds N` runs the world's seed and the `N - 1` after it, each to the end or to
+`--limit` simulated seconds, with no window. `--jobs J` runs `J` at once; the rows are the
+same for any `J`.
 
 ```bash
 demuvo examples/worlds/demo.toml --seeds 4 --jobs 4
@@ -98,10 +128,10 @@ seed  done  time (s)  collisions
 The demo world has no noise, so the rows match. A world with encoder or lidar noise gives
 rows that differ, and the same seed always gives the same row.
 
-## How to add your own algorithm
+## Adding a planner, smoother or controller
 
-A planner, a smoother or a controller is a class. Name it as `module:Class` in the world
-file and demuvo builds it and runs it beside the built-in ones:
+A planner, a smoother and a controller are classes, named as `module:Class` in a robot of
+the world file. demuvo builds the class and runs it beside the built-in ones.
 
 ```toml
 [[robot]]
@@ -109,10 +139,20 @@ name = "r1"
 model = "diff_drive"
 shape = { name = "circle", radius = 0.2 }
 pose = [1.0, 1.0, 0.0]
-planner = "breadth_first:BreadthFirst"          # your class, as module:Class
-controller = "turn_then_drive:TurnThenDrive"    # and this one
+planner = "breadth_first:BreadthFirst"
+controller = "turn_then_drive:TurnThenDrive"
 controller_params = { speed = 0.6 }
 ```
+
+| Kind | Methods |
+| --- | --- |
+| Planner | `configure(costmap)`; `plan(start, goal)` returns an array of x, y, angle, or an empty array |
+| Smoother | `configure(costmap)`; `smooth(path)` returns a path |
+| Controller | `command(obs)` returns a `Twist` |
+
+The module must be importable. `examples/plugins` holds a breadth-first planner and a
+turn-then-drive controller, and `examples/worlds/plugins.toml` races them against A* and
+pure pursuit:
 
 ```bash
 PYTHONPATH=examples/plugins demuvo examples/worlds/plugins.toml
@@ -121,11 +161,8 @@ PYTHONPATH=examples/plugins demuvo examples/worlds/plugins.toml
 ![Two robots race along two lanes. r1 uses a planner and a controller from
 examples/plugins; r2 uses A* and pure pursuit.](docs/plugins.gif)
 
-A planner has `configure(costmap)` and `plan(start, goal)`, which returns an array of x, y,
-angle. A smoother has `configure(costmap)` and `smooth(path)`. A controller has
-`command(obs)` and returns a `Twist`. The two classes in `examples/plugins` are about thirty
-lines each. [Your own algorithms](docs/plugins.md) has the details, and how to make a class
-show up in the window's lists.
+[Your own algorithms](docs/plugins.md) documents what each class receives and returns, and
+how a class is listed in the window.
 
 ## What is inside
 
@@ -172,7 +209,7 @@ show up in the window's lists.
 
 ## Documentation
 
-| Page | What is in it |
+| Page | Contents |
 | --- | --- |
 | [The sandbox](docs/sandbox.md) | the window: tools, forms, files, undo, the log, all the keys |
 | [Your own algorithms](docs/plugins.md) | write a planner, a smoother or a controller |
