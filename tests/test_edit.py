@@ -348,3 +348,145 @@ def test_only_a_box_or_a_circle_can_be_resized():
     line = next(i for i, o in enumerate(demo.obstacles) if o.shape.name == "linestring")
     with pytest.raises(WorldError, match="only a box or a circle"):
         edit.resize_obstacle(demo, line, (1.0, 1.0))
+
+
+def test_a_polygon_and_a_line_are_added_from_their_points(world):
+    """Corners in metres; a polygon needs three that do not cross."""
+    shaped = edit.add_outline(world, "polygon", [(1, 1), (2, 1), (1.5, 2)])
+    shaped = edit.add_outline(shaped, "linestring", [(6, 1), (8, 2)])
+    assert [o.shape.name for o in shaped.obstacles] == ["polygon", "linestring"]
+    with pytest.raises(WorldError, match="unknown outline"):
+        edit.add_outline(world, "blob", [(1, 1), (2, 2)])
+    with pytest.raises(WorldError, match="vertices|inside"):
+        edit.add_outline(world, "polygon", [(1, 1), (2, 1)])
+    with pytest.raises(WorldError, match="inside the world"):
+        edit.add_outline(world, "polygon", [(1, 1), (20, 1), (1.5, 2)])
+
+
+def test_a_robot_body_is_a_disc_or_a_box_that_must_fit(world):
+    """Resize the body; refuse one that would leave the world or touch something."""
+    box = edit.set_robot_shape(world, "r1", "box", (0.6, 0.4))
+    assert box.robots[0].shape.size == (0.6, 0.4)
+    disc = edit.set_robot_shape(box, "r1", "circle", (0.3,))
+    assert disc.robots[0].shape.radius == 0.3
+    with pytest.raises(WorldError, match="unknown body"):
+        edit.set_robot_shape(world, "r1", "star", (1,))
+    with pytest.raises(WorldError, match="leave the world"):
+        edit.set_robot_shape(world, "r1", "circle", (9.0,))
+    wall = edit.add_obstacle(world, "box", (7.0, 3.0, 0.0), (1.0, 1.0))
+    with pytest.raises(WorldError, match="overlap"):
+        edit.set_robot_shape(wall, "r1", "circle", (1.6,))
+    far = edit.set_goal(world, "r1", (9.7, 3.0, 0.0))
+    with pytest.raises(WorldError, match="at its goal"):
+        edit.set_robot_shape(far, "r1", "circle", (0.4,))
+
+
+def test_the_estimator_and_the_control_pose_are_chosen_and_checked(world):
+    """Dead reckoning needs wheels; a bad name is refused in words."""
+    dead = edit.set_estimator(world, "r1", "dead_reckoning")
+    assert dead.robots[0].estimator == "dead_reckoning"
+    with pytest.raises(WorldError, match="unknown estimator"):
+        edit.set_estimator(world, "r1", "magic")
+    assert edit.set_control_pose(world, "r1", "truth").robots[0].control_pose == "truth"
+    with pytest.raises(WorldError, match="estimate or truth"):
+        edit.set_control_pose(world, "r1", "guess")
+
+
+def test_sensors_are_set_changed_and_removed_for_a_robot_and_for_the_world(world):
+    """A lidar under its own name, encoders noise, and the world defaults."""
+    noisy = edit.set_sensor(world, "r1", "encoders", {"noise": 0.02})
+    assert noisy.robots[0].sensors == {"encoders": {"noise": 0.02}}
+    lidar = edit.set_sensor(
+        noisy, "r1", "front", {"type": "lidar", "beams": 90, "mount": [0.1, 0.0, 0.0]}
+    )
+    assert lidar.robots[0].sensors["front"]["beams"] == 90.0
+    assert lidar.robots[0].sensors["front"]["mount"] == (0.1, 0.0, 0.0)
+    bare = edit.set_sensor(lidar, "r1", "front", None)
+    assert "front" not in bare.robots[0].sensors
+    default = edit.set_sensor(world, None, "encoders", {"ticks_per_rev": 2048})
+    assert default.sensors == {"encoders": {"ticks_per_rev": 2048.0}}
+    assert edit.set_sensor(default, None, "encoders", None).sensors == {}
+    with pytest.raises(WorldError, match="unknown sensor"):
+        edit.set_sensor(world, "r1", "radar", {})
+    with pytest.raises(WorldError, match="negative"):
+        edit.set_sensor(world, "r1", "encoders", {"noise": -1})
+    with pytest.raises(WorldError, match="no robot named"):
+        edit.set_sensor(world, "r9", "encoders", {})
+
+
+def test_goals_are_added_moved_set_and_removed_in_order(world):
+    """Waypoints for one robot keep their order; options are checked as a file is."""
+    one = edit.add_goal(world, "r1", (8.0, 1.0, 0.0))
+    two = edit.add_goal(one, "r1", (8.0, 5.0, 0.0))
+    assert edit.goals_of(two, "r1") == [0, 1] and edit.goals_of(two, "r2") == []
+    moved = edit.move_goal(two, 0, (7.0, 1.0, 1.0))
+    assert [float(v) for v in moved.tasks[0].goal.xyt] == [7.0, 1.0, 1.0]
+    tuned = edit.set_goal_options(moved, 1, tolerance=(0.3, 0.2), stop=True, wait=2.0)
+    task = tuned.tasks[1]
+    assert (task.goal_tolerance, task.stop, task.wait) == ((0.3, 0.2), True, 2.0)
+    assert edit.set_goal_options(tuned, 1, wait=0.0).tasks[1].stop is True
+    assert edit.set_goal_options(tuned, 1, stop=None).tasks[1].stop is None
+    assert len(edit.remove_goal(tuned, 0).tasks) == 1
+    for call, message in (
+        (lambda: edit.add_goal(world, "r9", (1, 1, 0)), "no robot named"),
+        (lambda: edit.add_goal(world, "r1", (99, 1, 0)), "inside the world"),
+        (lambda: edit.move_goal(two, 5, (1, 1, 0)), "no goal number 6"),
+        (lambda: edit.remove_goal(two, 7), "no goal number 8"),
+        (lambda: edit.set_goal_options(two, 0, wait=-1.0), "wait"),
+    ):
+        with pytest.raises(WorldError, match=message):
+            call()
+
+
+def test_costmap_settings_are_checked_by_kind_and_range(world, tmp_path):
+    """Numbers, switches, layers and a map file; a bad one is refused by name."""
+    big = edit.set_costmap(world, "global", {"resolution": 0.1, "enabled": False})
+    assert big.costmap.resolution == 0.1 and not big.costmap.enabled
+    local = edit.set_costmap(world, "local", {"window": 4, "plugins": ["inflation"]})
+    assert local.local_costmap.window == 4 and local.local_costmap.plugins == (
+        "inflation",
+    )
+    layers = edit.set_costmap(
+        world, "global", {"plugins": ["static"], "unknown": "blocked"}
+    )
+    assert layers.costmap.plugins == ("static",)
+    for which, values, message in (
+        ("sky", {}, "not a costmap"),
+        ("global", {"colour": 1}, "no setting"),
+        ("global", {"resolution": "fine"}, "wrong kind"),
+        ("global", {"resolution": float("nan")}, "wrong kind"),
+        ("global", {"enabled": 1}, "wrong kind"),
+        ("global", {"resolution": 0.0}, "resolution"),
+        ("global", {"plugins": ["inflation", "static"]}, "plugins"),
+        ("global", {"plugins": "static"}, "wrong kind"),
+        ("global", {"source": str(tmp_path / "none.yaml")}, "no map file"),
+        ("global", {"unknown": "maybe"}, "free or blocked"),
+        ("local", {"plugins": ["inflation", "obstacle"]}, "plugins"),
+        ("local", {"window": -1}, "window"),
+    ):
+        with pytest.raises(WorldError, match=message):
+            edit.set_costmap(world, which, values)
+    path = tmp_path / "map.yaml"
+    path.write_text("x")
+    assert edit.set_costmap(
+        world, "global", {"source": str(path)}
+    ).costmap.source == str(path)
+
+
+def test_the_origin_moves_if_everything_still_fits(world):
+    """Shifting the corner can strand a robot, which is refused."""
+    assert edit.set_origin(world, (-2.0, -1.0)).bounds == (-2.0, -1.0, 8.0, 5.0)
+    with pytest.raises(WorldError, match="robot 'r1'"):
+        edit.set_origin(world, (-20.0, 0.0))
+    with pytest.raises(WorldError, match="finite"):
+        edit.set_origin(world, (float("inf"), 0.0))
+
+
+def test_a_model_without_wheels_cannot_run_dead_reckoning(world, monkeypatch):
+    """Dead reckoning reads wheel increments; a model with none is refused."""
+    monkeypatch.setitem(edit.MODELS, "slider", object)
+    robot = dataclasses.replace(world.robots[0], model="slider")
+    sliding = dataclasses.replace(world, robots=(robot,))
+    with pytest.raises(WorldError, match="cannot run 'dead_reckoning'"):
+        edit.set_estimator(sliding, "r1", "dead_reckoning")
+    assert edit.set_estimator(sliding, "r1", "ground_truth").robots[0].estimator

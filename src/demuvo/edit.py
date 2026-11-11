@@ -10,19 +10,29 @@ from __future__ import annotations
 
 import dataclasses
 import math
+import warnings
 from collections.abc import Sequence
+from pathlib import Path
 
 from robomath import Transform2D
 
 from . import options
 from .models import MODELS, parse_params
 from .nav.navigation import DEFAULT_PLANNER, Navigation
-from .plugins import load_class
+from .plugins import check_positive, load_class
+from .sensing import ESTIMATORS, SENSORS, resolve_estimator
 from .sim.collisions import Checker
 from .sim.simulation import Simulation
 from .verify import WorldError, inside, numbers
 from .world import DEFAULT_GOAL_TOLERANCE, RobotSpec, World
-from .world.load import _parse_obstacle, _parse_robot, _parse_task
+from .world.load import (
+    _parse_obstacle,
+    _parse_robot,
+    _parse_sensors,
+    _parse_task,
+)
+from .world.shapes import parse_shape
+from .world.spec import LOCAL_POSITIVE
 
 # The field of a robot that holds the settings of each part.
 SETTINGS_FIELD = {
@@ -288,17 +298,7 @@ def set_size(world: World, size: Sequence[float]) -> World:
         WorldError: if a robot, a goal or an obstacle would fall outside.
     """
     width, height = numbers(list(size), 2, "world", "size", True)
-    edited = dataclasses.replace(world, size=(width, height))
-    for obstacle in edited.obstacles:
-        if not inside(obstacle.shape.points(obstacle.pose), edited.bounds):
-            raise WorldError("world: an obstacle would fall outside a world that size")
-    for spec in edited.robots:
-        if not inside(spec.shape.points(spec.pose), edited.bounds):
-            raise WorldError(f"robot '{spec.name}' would fall outside that size")
-    for task in edited.tasks:
-        if not inside([tuple(task.goal.translation)], edited.bounds):
-            raise WorldError(f"the goal of '{task.robot}' would fall outside")
-    return edited
+    return _fits(dataclasses.replace(world, size=(width, height)))
 
 
 def set_seed(world: World, seed: int) -> World:
@@ -465,3 +465,299 @@ def set_control_period(world: World, name: str, period: float) -> World:
     spec = _robot(world, name)
     (value,) = numbers([period], 1, f"robot '{name}'", "control_period", True)
     return _replace_robot(world, dataclasses.replace(spec, control_period=value))
+
+
+def add_outline(world: World, kind: str, vertices: Sequence[Sequence[float]]) -> World:
+    """Add a polygon or a line that follows the given points, in world metres.
+
+    Args:
+        world: the world to start from.
+        kind: "polygon" (closed, at least three points, edges that do not cross)
+            or "linestring" (open, at least two).
+        vertices: the corners, in order.
+
+    Raises:
+        WorldError: if the kind or the points are wrong, or the shape would leave
+            the world or touch a robot.
+    """
+    if kind not in ("polygon", "linestring"):
+        raise WorldError(f"unknown outline '{kind}', expected polygon or linestring")
+    shape = {"name": kind, "vertices": [list(map(float, v)) for v in vertices]}
+    made = _parse_obstacle({"shape": shape}, len(world.obstacles) + 1, world.bounds)
+    return _with_obstacles(world, (*world.obstacles, made))
+
+
+def set_robot_shape(world: World, name: str, kind: str, size: Sequence[float]) -> World:
+    """Give a robot a disc or a box for a body.
+
+    Args:
+        world: the world to start from.
+        name: the robot.
+        kind: "circle" or "box".
+        size: (radius,) of a circle, or (length, width) of a box.
+
+    Raises:
+        WorldError: if the body would leave the world, cover a goal or touch
+            something.
+    """
+    spec = _robot(world, name)
+    label = f"robot '{name}'"
+    if kind == "circle":
+        table = {"name": "circle", "radius": size[0]}
+    elif kind == "box":
+        table = {"name": "box", "size": list(size)}
+    else:
+        raise WorldError(f"{label}: unknown body '{kind}', expected circle or box")
+    shape = parse_shape(table, label, robot=True)
+    if not inside(shape.points(spec.pose), world.bounds):
+        raise WorldError(f"{label}: the body would leave the world")
+    for task in world.tasks:
+        if task.robot == name and not inside(shape.points(task.goal), world.bounds):
+            raise WorldError(f"{label}: the body would not fit at its goal")
+    edited = _replace_robot(world, dataclasses.replace(spec, shape=shape))
+    _no_overlap(edited, name)
+    return edited
+
+
+def set_estimator(world: World, name: str, estimator: str) -> World:
+    """Choose where a robot's controller gets its pose from.
+
+    Raises:
+        WorldError: if the estimator is unknown or the robot's model cannot run it.
+    """
+    spec = _robot(world, name)
+    label = f"robot '{name}'"
+    if estimator not in ESTIMATORS:
+        known = ", ".join(ESTIMATORS)
+        raise WorldError(f"{label}: unknown estimator '{estimator}', expected {known}")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        usable = resolve_estimator(estimator, spec.model, MODELS[spec.model], label)
+    if usable != estimator:
+        raise WorldError(f"{label}: model '{spec.model}' cannot run '{estimator}'")
+    return _replace_robot(world, dataclasses.replace(spec, estimator=estimator))
+
+
+def set_control_pose(world: World, name: str, which: str) -> World:
+    """Choose the pose the controller sees: "estimate" or "truth"."""
+    spec = _robot(world, name)
+    if which not in ("estimate", "truth"):
+        raise WorldError(f"robot '{name}': 'control_pose' must be estimate or truth")
+    return _replace_robot(world, dataclasses.replace(spec, control_pose=which))
+
+
+def set_sensor(
+    world: World, robot: str | None, sensor: str, settings: dict | None
+) -> World:
+    """Set, change or remove a sensor of a robot, or a default of every robot.
+
+    Args:
+        world: the world to start from.
+        robot: the robot, or None for the settings every robot starts from.
+        sensor: the sensor name, such as "encoders" or "lidar". A robot may carry
+            several lidars under names of its own, whose settings say
+            `type = "lidar"`.
+        settings: its settings by name (a lidar's `mount` is three numbers), or
+            None to remove it.
+
+    Raises:
+        WorldError: if the sensor or a setting is unknown or out of range.
+    """
+    label = "world" if robot is None else f"robot '{robot}'"
+    spec = None if robot is None else _robot(world, robot)
+    kept = dict(world.sensors if spec is None else spec.sensors)
+    if settings is None:
+        kept.pop(sensor, None)
+    else:
+        kept[sensor] = dict(settings)
+        kind = settings.get("type", sensor)
+        if kind not in SENSORS:
+            raise WorldError(f"{label}: unknown sensor '{kind}'")
+    checked = _parse_sensors(kept, label, named=spec is not None)
+    if spec is None:
+        return dataclasses.replace(world, sensors=checked)
+    return _replace_robot(world, dataclasses.replace(spec, sensors=checked))
+
+
+def _task(world: World, index: int):
+    """The task at a 0-based place, or a plain error."""
+    if not 0 <= index < len(world.tasks):
+        raise WorldError(f"no goal number {index + 1}")
+    return world.tasks[index]
+
+
+# Passed for `stop` to leave it as it is; None means the default rule.
+KEEP = "keep"
+
+
+def _task_text(task, goal=None, tolerance=None, stop=KEEP, wait=None) -> dict:
+    """A task as the world file would write it, with some parts changed."""
+    item = {
+        "robot": task.robot,
+        "goal": [float(v) for v in (goal if goal is not None else task.goal.xyt)],
+        "goal_tolerance": list(tolerance or task.goal_tolerance),
+    }
+    wait = task.wait if wait is None else wait
+    if wait != 0:  # the file leaves a zero wait out
+        item["wait"] = wait
+    stop = task.stop if stop == KEEP else stop
+    if stop is not None:
+        item["stop"] = stop
+    return item
+
+
+def add_goal(world: World, name: str, goal: Sequence[float]) -> World:
+    """Add a goal after the ones a robot has; several make waypoints."""
+    _robot(world, name)
+    task = _parse_task(
+        {"robot": name, "goal": [float(v) for v in goal]},
+        len(world.tasks) + 1,
+        world.bounds,
+        {r.name: r for r in world.robots},
+    )
+    return dataclasses.replace(world, tasks=(*world.tasks, task))
+
+
+def move_goal(world: World, index: int, goal: Sequence[float]) -> World:
+    """Move the goal at a 0-based place."""
+    return _retask(world, index, goal=goal)
+
+
+def set_goal_options(
+    world: World,
+    index: int,
+    *,
+    tolerance: Sequence[float] | None = None,
+    stop: bool | None | str = KEEP,
+    wait: float | None = None,
+) -> World:
+    """Set the tolerance, whether the robot must stop, and the wait of a goal.
+
+    A part left out stays as it was. `stop` None is the default rule: stop at the
+    last goal and at any goal with a wait. A `wait` of 0 is no wait.
+    """
+    return _retask(world, index, tolerance=tolerance, stop=stop, wait=wait)
+
+
+def _retask(world: World, index: int, **changes) -> World:
+    """Rebuild the task at a place with changes, checked as a file would be."""
+    old = _task(world, index)
+    task = _parse_task(
+        _task_text(old, **changes),
+        index + 1,
+        world.bounds,
+        {r.name: r for r in world.robots},
+    )
+    items = list(world.tasks)
+    items[index] = task
+    return dataclasses.replace(world, tasks=tuple(items))
+
+
+def remove_goal(world: World, index: int) -> World:
+    """Remove the goal at a 0-based place."""
+    _task(world, index)
+    return dataclasses.replace(
+        world, tasks=tuple(t for i, t in enumerate(world.tasks) if i != index)
+    )
+
+
+def goals_of(world: World, name: str) -> list[int]:
+    """The places in `world.tasks` of a robot's goals, in order."""
+    return [i for i, t in enumerate(world.tasks) if t.robot == name]
+
+
+def set_costmap(world: World, which: str, values: dict) -> World:
+    """Change settings of the global or the local costmap.
+
+    Args:
+        world: the world to start from.
+        which: "global" or "local".
+        values: settings by name, such as `{"resolution": 0.1}`; the rest stay.
+            Numbers are metres or seconds and must be above 0, `enabled` is
+            true or false, `plugins` is a list, and `source` is "generate" or
+            the path of a `map.yaml`.
+
+    Raises:
+        WorldError: if a setting is unknown or has a bad value.
+    """
+    if which not in ("global", "local"):
+        raise WorldError(f"'{which}' is not a costmap; use global or local")
+    old = world.costmap if which == "global" else world.local_costmap
+    known = {f.name for f in dataclasses.fields(old)}
+    label = f"costmap.{which}"
+    for key, value in values.items():
+        if key not in known:
+            raise WorldError(f"{label}: no setting '{key}'; it has {', '.join(known)}")
+        _check_costmap_value(label, key, value, getattr(old, key))
+    values = {k: tuple(v) if k == "plugins" else v for k, v in values.items()}
+    try:
+        new = dataclasses.replace(old, **values)
+        check_positive(new, *_COSTMAP_NUMBERS[which])
+    except ValueError as error:
+        raise WorldError(f"{label}: {error}") from error
+    if which == "global":
+        return dataclasses.replace(world, costmap=new)
+    return dataclasses.replace(world, local_costmap=new)
+
+
+_COSTMAP_NUMBERS = {
+    "global": ("resolution", "inflation_radius", "cost_scaling_factor"),
+    "local": LOCAL_POSITIVE,
+}
+
+
+def _check_costmap_value(label: str, key: str, value, current) -> None:
+    """Refuse a costmap value of the wrong kind, or a missing map or bad layers."""
+    if isinstance(current, bool):
+        good = isinstance(value, bool)
+    elif isinstance(current, float):
+        good = isinstance(value, int | float) and not isinstance(value, bool)
+        good = good and math.isfinite(value)
+    elif isinstance(current, tuple):
+        good = isinstance(value, list | tuple) and all(
+            isinstance(v, str) for v in value
+        )
+    else:
+        good = isinstance(value, str)
+    if not good:
+        raise WorldError(f"{label}: '{key}' has the wrong kind of value, {value!r}")
+    if key == "source" and value != "generate" and not Path(value).is_file():
+        raise WorldError(f"{label}: no map file '{value}'")
+    if key == "unknown" and value not in ("free", "blocked"):
+        raise WorldError(f"{label}: 'unknown' must be free or blocked")
+    if key == "plugins":
+        order = (
+            ("static", "inflation")
+            if label.endswith("global")
+            else (
+                "obstacle",
+                "inflation",
+            )
+        )
+        if list(value) != [p for p in order if p in value]:
+            raise WorldError(f"{label}: 'plugins' must list {' and '.join(order)}")
+
+
+def set_origin(world: World, origin: Sequence[float]) -> World:
+    """Move the lower-left corner of the world, keeping its size.
+
+    Raises:
+        WorldError: if a robot, goal or obstacle would be outside.
+    """
+    x, y = numbers(list(origin), 2, "world", "origin")
+    edited = dataclasses.replace(world, origin=(x, y))
+    return _fits(edited)
+
+
+def _fits(world: World) -> World:
+    """The world, if everything lies inside it; else a plain error."""
+    for obstacle in world.obstacles:
+        if not inside(obstacle.shape.points(obstacle.pose), world.bounds):
+            raise WorldError("world: an obstacle would fall outside")
+    for spec in world.robots:
+        if not inside(spec.shape.points(spec.pose), world.bounds):
+            raise WorldError(f"robot '{spec.name}' would fall outside")
+    for task in world.tasks:
+        if not inside([tuple(task.goal.translation)], world.bounds):
+            raise WorldError(f"the goal of '{task.robot}' would fall outside")
+    return world

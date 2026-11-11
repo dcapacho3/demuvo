@@ -36,7 +36,16 @@ ALLOWED = {
     "gui": {"costmap", "edit", "options", "runner", "verify", "world"},
     "options": {"models", "nav", "verify"},
     "runner": {"costmap", "evaluation", "nav", "sim", "verify", "world"},
-    "edit": {"models", "nav", "options", "plugins", "sim", "verify", "world"},
+    "edit": {
+        "models",
+        "nav",
+        "options",
+        "plugins",
+        "sensing",
+        "sim",
+        "verify",
+        "world",
+    },
     "run": {"evaluation", "gui", "nav", "runner", "sim", "world"},
 }
 

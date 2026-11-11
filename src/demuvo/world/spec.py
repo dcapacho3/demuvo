@@ -127,6 +127,16 @@ class CostmapSpec:
 
 
 LOCAL_LAYERS = ("obstacle", "inflation")
+# The local costmap settings that are lengths or times, so must be above 0.
+LOCAL_POSITIVE = (
+    "window",
+    "resolution",
+    "period",
+    "obstacle_max_range",
+    "raytrace_max_range",
+    "inflation_radius",
+    "cost_scaling_factor",
+)
 
 
 @dataclass(frozen=True)
@@ -158,16 +168,7 @@ class LocalCostmapSpec:
 
     def __post_init__(self) -> None:
         """Check the settings."""
-        check_positive(
-            self,
-            "window",
-            "resolution",
-            "period",
-            "obstacle_max_range",
-            "raytrace_max_range",
-            "inflation_radius",
-            "cost_scaling_factor",
-        )
+        check_positive(self, *LOCAL_POSITIVE)
         if list(self.plugins) != [p for p in LOCAL_LAYERS if p in self.plugins]:
             raise ValueError(
                 f"plugins must list 'obstacle' and 'inflation', in that order, "
