@@ -266,7 +266,7 @@ def test_the_menus_list_the_commands_and_run_them(app):
     edit_items = program.menu_items("Edit")
     assert [i.text for i in edit_items if not i.separator] == [
         "Add robot", "Delete selected", "Set goal", "Draw box", "Draw circle",
-        "Select", "Reset run",
+        "Draw polygon", "Draw line", "Select", "Reset run",
     ]  # fmt: skip
     edit_items[0].action()
     assert len(program.session.world.robots) == 2
@@ -540,3 +540,30 @@ def test_a_benchmark_world_cannot_be_replaced_but_can_be_saved(tmp_path):
     type_text(window, str(tmp_path / "copy.toml"))
     press_key(window, "enter")
     assert (tmp_path / "copy.toml").exists()
+
+
+def test_p_and_l_pick_the_outline_tools_and_enter_and_escape_end_a_drawing(app):
+    """Click corners, press Enter: a line is made; Esc or a tool change drops one."""
+    window, program = app
+    press_key(window, "p")
+    assert program.session.tool == "polygon" and program.buttons["polygon"].checked
+    press_key(window, "l")
+    assert program.session.tool == "line" and not program.buttons["polygon"].checked
+    for x, y in ((1.0, 1.0), (3.0, 1.0)):
+        px, py = at(program, x, y)
+        window.mouse_move(px, py)
+        window.mouse_press(Event(px, py))
+        window.mouse_release(Event(px, py))
+    assert len(program.pane.outline) == 2
+    press_key(window, "enter")
+    assert program.session.world.obstacles[0].shape.name == "linestring"
+    assert "linestring 1" in [row.text for row in program.tree.rows]
+    px, py = at(program, 5.0, 5.0)
+    window.mouse_press(Event(px, py))
+    window.mouse_release(Event(px, py))
+    press_key(window, "escape")
+    assert not program.pane.outline
+    window.mouse_press(Event(px, py))
+    window.mouse_release(Event(px, py))
+    program.set_tool("select")
+    assert not program.pane.outline

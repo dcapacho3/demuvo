@@ -31,6 +31,8 @@ TOOL_MESSAGES = {
     "goal": GOAL_MESSAGE,
     "box": "Drag on the floor from one corner to the other to draw a box.",
     "circle": "Drag on the floor from the centre outwards to draw a circle.",
+    "polygon": "Click the corners, then the first one or Enter to close. Esc cancels.",
+    "line": "Click the points of the line. Press Enter to finish; Esc cancels.",
 }
 BADGES = {
     "bench": ("BENCHMARK · fixed world", "bench"),
@@ -155,6 +157,22 @@ class Sandbox:
                 True,
                 "tool",
             ),
+            (
+                "polygon",
+                "polygon",
+                lambda on: self.set_tool("polygon"),
+                "Draw a polygon (P)",
+                True,
+                "tool",
+            ),
+            (
+                "line",
+                "line",
+                lambda on: self.set_tool("line"),
+                "Draw a line (L)",
+                True,
+                "tool",
+            ),
             ("add", "robot_add", self._add_robot, "Add robot (Ctrl+N)", False, None),
             ("delete", "trash", self._delete_selected, "Delete (Del)", False, None),
             (
@@ -240,6 +258,20 @@ class Sandbox:
                     action=lambda: self.set_tool("circle"),
                 ),
                 MenuItem(
+                    "Draw polygon",
+                    shortcut="P",
+                    checked=tool == "polygon",
+                    enabled=ok,
+                    action=lambda: self.set_tool("polygon"),
+                ),
+                MenuItem(
+                    "Draw line",
+                    shortcut="L",
+                    checked=tool == "line",
+                    enabled=ok,
+                    action=lambda: self.set_tool("line"),
+                ),
+                MenuItem(
                     "Select",
                     shortcut="V",
                     checked=tool == "select",
@@ -293,6 +325,10 @@ class Sandbox:
             (KEY["g"], False): lambda: self.set_tool("goal"),
             (KEY["b"], False): lambda: self.set_tool("box"),
             (KEY["c"], False): lambda: self.set_tool("circle"),
+            (KEY["p"], False): lambda: self.set_tool("polygon"),
+            (KEY["l"], False): lambda: self.set_tool("line"),
+            (KEY["enter"], False): self.pane.finish_outline,
+            (KEY["escape"], False): self.pane.cancel_outline,
             (KEY["r"], False): self.reset_run,
             (KEY["s"], False): self.step_once,
         }
@@ -353,7 +389,7 @@ class Sandbox:
         """Enable what the mode allows, show the badge, and tell the inspector."""
         session = self.session
         ok = session.editable
-        for key in ("add", "delete", "goal", "box", "circle"):
+        for key in ("add", "delete", "goal", "box", "circle", "polygon", "line"):
             self.buttons[key].enabled = ok
         if not ok and session.tool != "select":
             self.set_tool("select")
@@ -383,6 +419,7 @@ class Sandbox:
     def set_tool(self, tool: str) -> None:
         """Choose a tool, and say what it does."""
         self.session.set_tool(tool)
+        self.pane.cancel_outline()
         for key in TOOL_MESSAGES:
             self.buttons[key].checked = tool == key
         self.shell.layout.chrome.status.show(TOOL_MESSAGES[tool], 6)

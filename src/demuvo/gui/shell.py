@@ -556,6 +556,7 @@ class Input:
             if shell.focus is not None:
                 self.set_focus(None)
                 shell.keyboard_focus = False
+            shell.program.command(key, False)
         elif event.ctrl and key == KEY["q"]:
             shell.quit_requested = True
         else:

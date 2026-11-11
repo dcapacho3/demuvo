@@ -74,6 +74,15 @@ class WorldEdits:
             session.scene.selected = None
         return message
 
+    def add_outline(self, kind: str, vertices) -> str | None:
+        """Add a polygon or a line through points, and select it."""
+        session = self.session
+        place = len(session.world.obstacles)
+        message = self._edit(lambda w: edit.add_outline(w, kind, vertices), place)
+        if message is None:
+            session.scene.selected = None
+        return message
+
     def move_obstacle(self, index: int, pose: tuple[float, float, float]) -> str | None:
         """Move an obstacle; one that would leave the world or touch a robot stays."""
         return self._edit(lambda w: edit.move_obstacle(w, index, pose), index)

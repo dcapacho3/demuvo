@@ -47,6 +47,15 @@ class Actions:
         self.log.append(("obstacle moved", index, round(x, 2), round(y, 2)))
         self.session.edits.move_obstacle(index, (x, y, 0.0))
 
+    def outline_drawn(self, kind, vertices):
+        """Note an outline and add it."""
+        self.log.append(("outline", kind, len(vertices)))
+        self.session.edits.add_outline(kind, vertices)
+
+    def sketch_changed(self):
+        """Note a redraw."""
+        self.log.append(("sketch",))
+
     def obstacle_drawn(self, kind, pose, size):
         """Note a drawing and add it."""
         self.log.append(("drawn", kind, tuple(round(v, 2) for v in size)))
@@ -254,3 +263,67 @@ def test_the_pointer_entering_or_leaving_the_scene_does_not_redraw_it():
     assert pane.hover and len(host.invalidated) == before
     pane.on_hover(False)
     assert not pane.hover and len(host.invalidated) == before
+
+
+def click_at(pane, x, y):
+    """A press and release at a world place."""
+    event = Event(*at(pane, x, y))
+    pane.on_press(event)
+    pane.on_release(event)
+
+
+def test_the_polygon_tool_collects_corners_and_closes_on_the_first_one():
+    """Three corners, then a click on the first makes the polygon."""
+    pane, session, actions = build()
+    session.set_tool("polygon")
+    for x, y in ((1.0, 1.0), (3.0, 1.0), (2.0, 2.5)):
+        click_at(pane, x, y)
+    pane.on_move(Event(*at(pane, 2.0, 4.0)))
+    canvas = Canvas(900, 600, (1, 1, 1, 1))
+    pane.draw(canvas)
+    assert len(pane.outline) == 3 and pane.cursor == pytest.approx((2.0, 4.0), abs=0.02)
+    click_at(pane, 1.0, 1.0)
+    assert ("outline", "polygon", 3) in actions.log
+    assert session.world.obstacles[0].shape.name == "polygon"
+    assert not pane.outline and pane.cursor is None
+
+
+def test_the_line_tool_finishes_on_enter_and_a_short_outline_makes_nothing():
+    """Two points make a line; one point or two corners of a polygon do not."""
+    pane, session, _ = build()
+    session.set_tool("line")
+    click_at(pane, 1.0, 1.0)
+    pane.finish_outline()
+    assert not session.world.obstacles
+    click_at(pane, 1.0, 1.0)
+    click_at(pane, 4.0, 2.0)
+    pane.finish_outline()
+    assert session.world.obstacles[0].shape.name == "linestring"
+    session.set_tool("polygon")
+    click_at(pane, 1.0, 1.0)
+    click_at(pane, 2.0, 1.0)
+    click_at(pane, 1.0, 1.0)
+    assert len(pane.outline) == 3
+    pane.finish_outline()
+    assert len(session.world.obstacles) == 1
+
+
+def test_cancelling_an_outline_forgets_its_corners_and_tells_the_window():
+    """Esc clears the corners; with none there is nothing to redraw."""
+    pane, session, actions = build()
+    session.set_tool("line")
+    click_at(pane, 1.0, 1.0)
+    before = actions.log.count(("sketch",))
+    pane.cancel_outline()
+    assert not pane.outline and actions.log.count(("sketch",)) == before + 1
+    pane.cancel_outline()
+    assert actions.log.count(("sketch",)) == before + 1
+
+
+def test_an_outline_tool_does_nothing_while_a_run_is_in_progress():
+    """The tool needs an editable world."""
+    pane, session, _ = build()
+    session.set_tool("polygon")
+    session.step_once()
+    click_at(pane, 1.0, 1.0)
+    assert not pane.outline

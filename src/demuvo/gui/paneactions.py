@@ -53,3 +53,11 @@ class PaneActions:
     def obstacle_drawn(self, kind: str, pose, size) -> None:
         """An obstacle was drawn with the box or circle tool."""
         self.program.edited(self.session.edits.add_obstacle(kind, pose, size))
+
+    def outline_drawn(self, kind: str, vertices) -> None:
+        """A polygon or line was drawn with its tool."""
+        self.program.edited(self.session.edits.add_outline(kind, vertices))
+
+    def sketch_changed(self) -> None:
+        """The outline being drawn changed, so the scene is drawn again."""
+        self.program.scene_changed()
