@@ -89,6 +89,7 @@ class SceneDraw:
         layers: which layers show.
         palette: the costmap palette, one of `look.PALETTES`.
         selected: the name of the selected robot, or None.
+        selected_obstacle: the 0-based place of the selected obstacle, or None.
         trails: the recent places of each robot, by name.
         colors: the colour of each robot, by name.
         feet: the footprint of each robot, by name.
@@ -100,6 +101,7 @@ class SceneDraw:
         self.layers = Layers()
         self.palette = look.PALETTES[0]
         self.selected: str | None = None
+        self.selected_obstacle: int | None = None
         self._dragged: dict[str, np.ndarray] = {}
         self.sprites = SpriteCache()
         self._cutout = _Cutout()
@@ -107,10 +109,14 @@ class SceneDraw:
         self._poses: dict[str, np.ndarray] = {}
         self.set_run(run)
 
+    @property
+    def world(self):
+        """The world of the run."""
+        return self.run.world
+
     def set_run(self, run) -> None:
         """Draw another run, or the same one after its world was replaced."""
         self.run = run
-        self.world = run.world
         self.view = View(self.world.bounds)
         self._poses = {}
         self.trails: dict[str, deque] = {
@@ -405,6 +411,45 @@ class SceneDraw:
         """The robot under a pixel, or None."""
         return robot_at(self, sx, sy)
 
+    def heading_to(self, name: str, x: float, y: float) -> float:
+        """The heading from a robot towards a world point."""
+        rx, ry = self.pose(name)[:2]
+        return math.atan2(y - ry, x - rx)
+
+    def obstacle_at(self, sx: float, sy: float) -> int | None:
+        """The place of the topmost obstacle under a pixel, or None."""
+        x, y = self.view.to_world(sx, sy)
+        for index in range(len(self.world.obstacles) - 1, -1, -1):
+            obstacle = self.world.obstacles[index]
+            shape = obstacle.shape
+            if isinstance(shape, Circle):
+                cx, cy = obstacle.pose.translation
+                hit = math.hypot(x - cx, y - cy) <= shape.radius
+            elif isinstance(shape, LineString):
+                hit = False
+            else:
+                hit = _in_polygon(x, y, shape.points(obstacle.pose))
+            if hit:
+                return index
+        return None
+
+    def _draw_selected_obstacle(self, canvas: Canvas) -> None:
+        """Outline the selected obstacle; it is drawn apart from the cached layers."""
+        index = self.selected_obstacle
+        if index is None or index >= len(self.world.obstacles):
+            return
+        obstacle = self.world.obstacles[index]
+        color = rgba(look.TEAL, 1.0)
+        if isinstance(obstacle.shape, Circle):
+            x, y = self.view.to_screen(*obstacle.pose.translation)
+            radius = obstacle.shape.radius * self.view.scale + 3
+            canvas.circle((float(x), float(y)), radius, stroke=color, width=2)
+            return
+        corners = np.array(obstacle.shape.points(obstacle.pose), dtype=float)
+        sx, sy = self.view.to_screen(corners[:, 0], corners[:, 1])
+        ring = np.column_stack([sx, sy])
+        polyline(canvas, np.vstack([ring, ring[:1]]), 3, color, dash=(6, 4))
+
     def draw(self, canvas: Canvas) -> None:
         """Draw the whole scene inside the canvas's clip, which may be a part of it.
 
@@ -424,6 +469,7 @@ class SceneDraw:
         b0, b1, b2, b3 = board
         canvas.set_clip(max(left, b0), max(top, b1), min(right, b2), min(bottom, b3))
         self.draw_overlays(canvas)
+        self._draw_selected_obstacle(canvas)
         canvas.set_clip(left, top, right, bottom)
         if self.layers.alpha("robots") > 0.001:
             draw_robots(self, canvas, self.layers.alpha("robots"))
@@ -465,6 +511,15 @@ class SceneDraw:
             self._draw_trails(canvas, alpha("trails"))
         if alpha("rays") > 0.001:
             self._draw_rays(canvas, alpha("rays"))
+
+
+def _in_polygon(x: float, y: float, points) -> bool:
+    """True if a point is inside a polygon, by counting edges to its right."""
+    inside = False
+    for (x0, y0), (x1, y1) in zip(points, [*points[1:], points[0]]):
+        if (y0 > y) != (y1 > y) and x < x0 + (y - y0) * (x1 - x0) / (y1 - y0):
+            inside = not inside
+    return inside
 
 
 def goal_drawing(color: str, ring: float, heading: float, length: float):

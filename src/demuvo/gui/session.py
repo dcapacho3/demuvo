@@ -11,14 +11,13 @@ None if it worked, and a window shows the message.
 
 from __future__ import annotations
 
-import math
-
 from .. import edit, options
 from ..runner import Run
 from ..verify import WorldError
 from ..world import World
 from .remote import RemoteRun
 from .scenedraw import SceneDraw
+from .worldedits import REFUSED, WorldEdits
 
 MODES = ("sandbox", "benchmark")
 # A robot dragged to the edge stops this far from it, in metres.
@@ -32,7 +31,6 @@ PART_TABLES = {
     "smoother": options.smoothers,
     "controller": options.controllers,
 }
-REFUSED = "That change cannot be made: {}"
 
 
 class Session:
@@ -47,7 +45,8 @@ class Session:
         mode: "sandbox" or "benchmark".
         run: the run, which the scene reads.
         scene: the drawing of the run.
-        tool: "select" or "goal", the tool the pointer has.
+        tool: "select", "goal", "box" or "circle", the tool the pointer has.
+        edits: the edits of obstacles and of the world, and saving and opening.
         playing: True while the run advances by itself.
         speed: how many seconds of simulated time pass for each real second.
 
@@ -74,6 +73,7 @@ class Session:
         self._seen = 0.0
         self._owed = 0.0
         self.tool = "select"
+        self.edits = WorldEdits(self)
         self.playing = False
         self.speed = 1.0
 
@@ -121,22 +121,32 @@ class Session:
         else:
             self.scene.set_run(self.run)
         self._seen = 0.0
+        self._owed = 0.0
         self.scene.selected = keep
         self.scene.fit(self.scene.view.rect)
         return None
 
     def select(self, name: str | None) -> bool:
         """Select a robot, or none; True if the selection changed."""
-        if name == self.scene.selected:
+        if name == self.scene.selected and self.scene.selected_obstacle is None:
             return False
         self.scene.selected = name
+        self.scene.selected_obstacle = None
+        return True
+
+    def select_obstacle(self, index: int | None) -> bool:
+        """Select an obstacle by its 0-based place, or none; True if it changed."""
+        if index == self.scene.selected_obstacle and self.scene.selected is None:
+            return False
+        self.scene.selected_obstacle = index
+        self.scene.selected = None
         return True
 
     def set_tool(self, tool: str) -> None:
-        """Choose the "select" or the "goal" tool."""
+        """Choose the "select", "goal", "box" or "circle" tool."""
         self.tool = tool
 
-    def _guard(self) -> str | None:
+    def guard(self) -> str | None:
         """The reason nothing can be edited now, or None."""
         if self.editable:
             return None
@@ -148,7 +158,7 @@ class Session:
 
     def add_robot(self) -> str | None:
         """Add a robot at a free place, and select it."""
-        if (why := self._guard()) is not None:
+        if (why := self.guard()) is not None:
             return why
         taken = {r.name for r in self.world.robots}
         name = next(f"r{k}" for k in range(1, 10_000) if f"r{k}" not in taken)
@@ -161,7 +171,7 @@ class Session:
     def delete_robot(self) -> str | None:
         """Delete the selected robot."""
         name = self.scene.selected
-        if (why := self._guard()) is not None or name is None:
+        if (why := self.guard()) is not None or name is None:
             return why
         try:
             world = edit.remove_robot(self.world, name)
@@ -182,7 +192,7 @@ class Session:
 
     def set_goal(self, name: str, goal: tuple[float, float, float]) -> str | None:
         """Give a robot a goal."""
-        if (why := self._guard()) is not None:
+        if (why := self.guard()) is not None:
             return why
         try:
             world = edit.set_goal(self.world, name, goal)
@@ -192,7 +202,7 @@ class Session:
 
     def choose(self, name: str, field: str, text: str) -> str | None:
         """Change the model, planner, smoother or controller by its friendly name."""
-        if (why := self._guard()) is not None:
+        if (why := self.guard()) is not None:
             return why
         try:
             if field == "model":
@@ -207,7 +217,7 @@ class Session:
 
     def set_settings(self, name: str, part: str, values: dict) -> str | None:
         """Set the settings of one part of a robot."""
-        if (why := self._guard()) is not None:
+        if (why := self.guard()) is not None:
             return why
         try:
             world = edit.set_settings(self.world, name, part, values)
@@ -217,7 +227,7 @@ class Session:
 
     def set_period(self, name: str, seconds: float) -> str | None:
         """Set the seconds between runs of a robot's controller."""
-        if (why := self._guard()) is not None:
+        if (why := self.guard()) is not None:
             return why
         try:
             world = edit.set_control_period(self.world, name, seconds)
@@ -263,8 +273,3 @@ class Session:
     def close(self) -> None:
         """Stop the simulation process, if there is one."""
         self.run.close()
-
-    def heading_to(self, name: str, x: float, y: float) -> float:
-        """The heading from a robot towards a world point."""
-        rx, ry = self.scene.pose(name)[:2]
-        return math.atan2(y - ry, x - rx)

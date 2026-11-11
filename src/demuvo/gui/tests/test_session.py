@@ -230,8 +230,8 @@ def test_a_step_is_about_a_control_period_and_reset_goes_back_to_zero(sandbox):
 
 def test_the_heading_to_a_point_is_the_angle_from_the_robot(sandbox):
     """r1 is in the middle at (5, 3); a point straight above is 90 degrees."""
-    assert sandbox.heading_to("r1", 5.0, 5.0) == pytest.approx(1.5707963)
-    assert sandbox.heading_to("r1", 9.0, 3.0) == pytest.approx(0.0)
+    assert sandbox.scene.heading_to("r1", 5.0, 5.0) == pytest.approx(1.5707963)
+    assert sandbox.scene.heading_to("r1", 9.0, 3.0) == pytest.approx(0.0)
 
 
 @pytest.fixture(name="remote_session")
@@ -280,3 +280,84 @@ def test_playing_a_remote_session_takes_news_and_records_each_time_once(
     remote_session.advance(0.05)
     remote_session.advance(0.05)
     assert len(remote_session.scene.trails["r1"]) in (points, points + 1)
+
+
+def test_an_obstacle_is_added_selected_moved_resized_and_deleted(sandbox):
+    """Each obstacle edit changes the world and keeps the obstacle selected."""
+    assert sandbox.edits.add_obstacle("box", (2.0, 2.0, 0.0), (1.0, 0.5)) is None
+    assert sandbox.scene.selected_obstacle == 0 and sandbox.scene.selected is None
+    assert sandbox.edits.move_obstacle(0, (3.0, 2.0, 0.0)) is None
+    assert sandbox.edits.resize_obstacle(0, (2.0, 1.0)) is None
+    assert sandbox.world.obstacles[0].shape.size == (2.0, 1.0)
+    assert sandbox.scene.selected_obstacle == 0
+    assert sandbox.edits.delete_obstacle() is None
+    assert not sandbox.world.obstacles and sandbox.scene.selected_obstacle is None
+
+
+def test_a_bad_obstacle_edit_says_why_and_changes_nothing(sandbox):
+    """An obstacle on the robot is refused in plain words."""
+    message = sandbox.edits.add_obstacle("box", (5.0, 3.0, 0.0), (1.0, 1.0))
+    assert message.startswith("That change cannot be made:") and "overlap" in message
+    assert not sandbox.world.obstacles
+    assert sandbox.edits.delete_obstacle() is None
+
+
+def test_obstacles_are_locked_while_a_run_is_in_progress(sandbox):
+    """Edits wait for Reset, as for robots."""
+    sandbox.step_once()
+    assert sandbox.edits.add_obstacle("circle", (2.0, 2.0, 0.0), (0.3,)) == (
+        "Press Reset (R) to edit again."
+    )
+    assert sandbox.edits.set_size((12.0, 7.0)) == "Press Reset (R) to edit again."
+
+
+def test_selecting_a_robot_or_an_obstacle_drops_the_other(sandbox):
+    """Only one thing is selected at a time."""
+    sandbox.edits.add_obstacle("box", (2.0, 2.0, 0.0), (1.0, 0.5))
+    assert sandbox.select("r1") and sandbox.scene.selected_obstacle is None
+    assert not sandbox.select("r1")
+    assert sandbox.select_obstacle(0) and sandbox.scene.selected is None
+    assert not sandbox.select_obstacle(0)
+    assert sandbox.select(None) and sandbox.scene.selected_obstacle is None
+
+
+def test_the_world_size_changes_and_the_scene_refits(sandbox):
+    """A larger world keeps its robot; a smaller one that cuts it off is refused."""
+    assert sandbox.edits.set_size((20.0, 8.0)) is None
+    assert sandbox.world.size == (20.0, 8.0)
+    assert "robot 'r1'" in sandbox.edits.set_size((1.0, 1.0))
+
+
+def test_a_world_is_saved_and_opened_again(sandbox, tmp_path):
+    """Save writes a file that Open reads back, and both remember the path."""
+    sandbox.edits.add_obstacle("circle", (2.0, 2.0, 0.0), (0.3,))
+    path = str(tmp_path / "mine.toml")
+    assert sandbox.edits.save(path) is None and sandbox.edits.path == path
+    other = Session()
+    assert other.edits.open(path) is None and other.edits.path == path
+    assert other.world.obstacles[0].shape.radius == 0.3
+    assert other.scene.selected is None
+
+
+def test_saving_and_opening_report_a_problem_in_plain_words(sandbox, tmp_path):
+    """A folder that is not there, or a file that is wrong, is a message."""
+    assert sandbox.edits.save(str(tmp_path / "no" / "w.toml")).startswith(
+        "Could not save"
+    )
+    assert sandbox.edits.open(str(tmp_path / "missing.toml")).startswith(
+        "Could not open"
+    )
+    bad = tmp_path / "bad.toml"
+    bad.write_text("version = 2\n")
+    assert "version" in sandbox.edits.open(str(bad))
+    assert (
+        Session(DEMO, "benchmark").edits.open(str(bad)) == "A benchmark world is fixed."
+    )
+
+
+def test_opening_a_world_ends_a_run_in_progress(sandbox):
+    """Open stops play and starts the new world at time zero."""
+    sandbox.toggle_play()
+    sandbox.advance(0.1)
+    assert sandbox.edits.open(str(DEMO)) is None
+    assert not sandbox.playing and sandbox.run.time == 0

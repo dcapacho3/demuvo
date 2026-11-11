@@ -310,3 +310,29 @@ def test_the_layer_table_lists_the_layers_bottom_first():
     names = list(scenedraw.LAYERS)
     assert names[0] == "floor" and names[-1] == "robots"
     assert scenedraw.LAYERS["rays"][1] is False and scenedraw.LAYERS["floor"][1] is True
+
+
+def test_the_obstacle_under_a_pixel_is_found_by_its_real_shape(scene):
+    """Box, circle and polygon hit inside; a notch, a line and the floor do not."""
+    assert scene.obstacle_at(*at(scene, 3.2, 3.2)) == 0
+    assert scene.obstacle_at(*at(scene, 5.3, 1.5)) == 1
+    assert scene.obstacle_at(*at(scene, 5.6, 1.5)) is None
+    assert scene.obstacle_at(*at(scene, 6.8, 4.1)) == 2
+    assert scene.obstacle_at(*at(scene, 6.5, 4.9)) is None
+    assert scene.obstacle_at(*at(scene, 1.75, 5.25)) is None
+    assert scene.obstacle_at(*at(scene, 0.5, 0.5)) is None
+
+
+def test_the_selected_obstacle_gets_an_outline(scene):
+    """A box, a circle and a polygon each show ink round them; none changes nothing."""
+    plain = paint(scene)
+    for index in (0, 1, 3):
+        scene.selected_obstacle = index
+        canvas = paint(scene)
+        scene._draw_selected_obstacle(canvas)
+        assert not np.array_equal(canvas.px, plain.px)
+    for index in (None, 99):
+        scene.selected_obstacle = index
+        canvas = paint(scene)
+        scene._draw_selected_obstacle(canvas)
+        assert np.array_equal(canvas.px, plain.px)

@@ -65,7 +65,7 @@ class ScenePane(Widget):
             and session.editable
         ):
             x, y = scene.view.to_world(event.x, event.y)
-            heading = session.heading_to(scene.selected, x, y)
+            heading = scene.heading_to(scene.selected, x, y)
             self.actions.goal_set(scene.selected, x, y, heading)
             return
         self.actions.select(name)
