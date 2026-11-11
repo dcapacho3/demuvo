@@ -37,6 +37,21 @@ class Actions:
         """Note a drag."""
         self.log.append(("dragged",))
 
+    def select_obstacle(self, index):
+        """Note an obstacle selection and make it."""
+        self.log.append(("obstacle selected", index))
+        self.session.select_obstacle(index)
+
+    def obstacle_moved(self, index, x, y):
+        """Note a move and apply it."""
+        self.log.append(("obstacle moved", index, round(x, 2), round(y, 2)))
+        self.session.edits.move_obstacle(index, (x, y, 0.0))
+
+    def obstacle_drawn(self, kind, pose, size):
+        """Note a drawing and add it."""
+        self.log.append(("drawn", kind, tuple(round(v, 2) for v in size)))
+        self.session.edits.add_obstacle(kind, pose, size)
+
 
 def build(session=None):
     """A pane over a blank sandbox, placed in a 700 by 500 area."""
@@ -156,3 +171,75 @@ def test_a_run_in_progress_blocks_the_goal_tool_and_the_drag():
     assert not any(item[0] == "goal" for item in actions.log)
     pane.on_press(Event(*at(pane, x, y)))
     assert pane.dragging is None
+
+
+def test_a_click_on_an_obstacle_selects_it_and_a_drag_moves_it_by_the_offset():
+    """The obstacle keeps the offset from the grab point and stays selected."""
+    pane, session, actions = build()
+    session.edits.add_obstacle("box", (2.0, 2.0, 0.0), (1.0, 1.0))
+    pane.on_press(Event(*at(pane, 2.2, 2.0)))
+    assert session.scene.selected_obstacle == 0 and pane.moving == 0
+    pane.on_move(Event(*at(pane, 4.2, 2.0)))
+    assert actions.log[-1] == ("obstacle moved", 0, 4.0, 2.0)
+    assert session.world.obstacles[0].pose.xyt[0] == pytest.approx(4.0, abs=0.02)
+    pane.on_release(Event(*at(pane, 4.2, 2.0)))
+    assert pane.moving is None
+
+
+def test_an_obstacle_is_selected_but_not_moved_while_a_run_is_in_progress():
+    """A locked world can still be looked at."""
+    pane, session, _ = build()
+    session.edits.add_obstacle("box", (2.0, 2.0, 0.0), (1.0, 1.0))
+    session.step_once()
+    pane.on_press(Event(*at(pane, 2.0, 2.0)))
+    assert session.scene.selected_obstacle == 0 and pane.moving is None
+
+
+def test_the_box_tool_draws_from_corner_to_corner():
+    """Drag on the floor: the box is the rectangle between the two points."""
+    pane, session, actions = build()
+    session.set_tool("box")
+    pane.on_press(Event(*at(pane, 1.0, 1.0)))
+    pane.on_move(Event(*at(pane, 3.0, 2.0)))
+    canvas = Canvas(900, 600, (1, 1, 1, 1))
+    pane.draw(canvas)
+    pane.on_release(Event(*at(pane, 3.0, 2.0)))
+    assert actions.log[-1] == ("dragged",)
+    assert ("drawn", "box", (2.0, 1.0)) in actions.log
+    assert session.world.obstacles[0].pose.xyt[:2] == pytest.approx(
+        [2.0, 1.5], abs=0.02
+    )
+    assert pane.sketch is None
+
+
+def test_the_circle_tool_draws_from_the_centre_outwards():
+    """Drag from the centre; the distance is the radius."""
+    pane, session, actions = build()
+    session.set_tool("circle")
+    pane.on_press(Event(*at(pane, 2.0, 2.0)))
+    pane.on_move(Event(*at(pane, 2.5, 2.0)))
+    canvas = Canvas(900, 600, (1, 1, 1, 1))
+    pane.draw(canvas)
+    pane.on_release(Event(*at(pane, 2.5, 2.0)))
+    assert ("drawn", "circle", (0.5,)) in actions.log
+    assert session.world.obstacles[0].shape.radius == pytest.approx(0.5, abs=0.02)
+
+
+def test_a_click_with_a_drawing_tool_makes_nothing():
+    """Smaller than a click is not an obstacle."""
+    pane, session, actions = build()
+    for tool in ("box", "circle"):
+        session.set_tool(tool)
+        pane.on_press(Event(*at(pane, 1.0, 1.0)))
+        pane.on_release(Event(*at(pane, 1.0, 1.0)))
+    assert not session.world.obstacles
+    assert not [entry for entry in actions.log if entry[0] == "drawn"]
+
+
+def test_a_drawing_tool_does_nothing_while_a_run_is_in_progress():
+    """The tool needs an editable world."""
+    pane, session, _ = build()
+    session.set_tool("box")
+    session.step_once()
+    pane.on_press(Event(*at(pane, 1.0, 1.0)))
+    assert pane.sketch is None

@@ -1,16 +1,23 @@
 """The scene pane - the world in the window, and what the mouse does to it.
 
-Click a robot to select it; drag it to move it while editing; with the goal tool,
-click the floor to give the selected robot a goal. The playback pill floats over
+Click a robot or an obstacle to select it; drag it to move it while editing; with
+the goal tool, click the floor to give the selected robot a goal; with the box or
+circle tool, drag on the floor to draw an obstacle. The playback pill floats over
 the bottom of the pane.
 """
 
 from __future__ import annotations
 
+import math
+
+from .look import TEAL
 from .panels import Pill
-from .raster import Canvas
+from .raster import Canvas, rgba
 from .session import Session
 from .widgets import Event, Widget
+
+# The smallest obstacle a drag makes, in metres; less is taken for a click.
+MIN_SIZE = 0.1
 
 
 class ScenePane(Widget):
@@ -20,8 +27,9 @@ class ScenePane(Widget):
         session: the session whose scene it shows.
         pill: the playback pill.
         actions: an object that is told what the mouse did; it has
-            `select(name)`, `goal_set(name, x, y, heading)`,
-            `dragged()` and `dropped(name, x, y, angle)`.
+            `select(name)`, `select_obstacle(index)`, `goal_set(name, x, y,
+            heading)`, `dragged()`, `dropped(name, x, y, angle)`,
+            `obstacle_moved(index, x, y)` and `obstacle_drawn(kind, pose, size)`.
     """
 
     def __init__(self, session: Session, pill: Pill, actions) -> None:
@@ -31,6 +39,8 @@ class ScenePane(Widget):
         self.add(pill)
         self.dragging: str | None = None
         self.grab = (0.0, 0.0)
+        self.moving: int | None = None
+        self.sketch: tuple[float, float, float, float] | None = None
 
     def rect(self) -> tuple[float, float, float, float]:
         """The pane's rectangle."""
@@ -44,7 +54,24 @@ class ScenePane(Widget):
     def draw(self, canvas: Canvas) -> None:
         """Draw the scene and the pill over it."""
         self.session.scene.draw(canvas)
+        self._draw_sketch(canvas)
         self.pill.draw(canvas)
+
+    def _draw_sketch(self, canvas: Canvas) -> None:
+        """Outline the obstacle being drawn."""
+        if self.sketch is None:
+            return
+        view = self.session.scene.view
+        (x0, y0), (x1, y1) = (
+            (float(v) for v in view.to_screen(*self.sketch[:2])),
+            (float(v) for v in view.to_screen(*self.sketch[2:])),
+        )
+        color = rgba(TEAL)
+        if self.session.tool == "circle":
+            canvas.circle((x0, y0), math.hypot(x1 - x0, y1 - y0), stroke=color, width=2)
+        else:
+            box = (min(x0, x1), min(y0, y1), abs(x1 - x0), abs(y1 - y0))
+            canvas.rect_outline(box, color, width=2, radius=0)
 
     def hit(self, px: float, py: float) -> Widget | None:
         """The pill if the point is on it, else the pane."""
@@ -58,6 +85,10 @@ class ScenePane(Widget):
         session = self.session
         scene = session.scene
         name = scene.robot_at(event.x, event.y)
+        if session.tool in ("box", "circle") and session.editable:
+            x, y = scene.view.to_world(event.x, event.y)
+            self.sketch = (x, y, x, y)
+            return
         if (
             session.tool == "goal"
             and scene.selected
@@ -68,6 +99,15 @@ class ScenePane(Widget):
             heading = scene.heading_to(scene.selected, x, y)
             self.actions.goal_set(scene.selected, x, y, heading)
             return
+        place = None if name else scene.obstacle_at(event.x, event.y)
+        if place is not None:
+            self.actions.select_obstacle(place)
+            if session.editable:
+                self.moving = place
+                x, y = scene.view.to_world(event.x, event.y)
+                px, py = session.world.obstacles[place].pose.translation
+                self.grab = (float(px) - x, float(py) - y)
+            return
         self.actions.select(name)
         if name and session.editable:
             self.dragging = name
@@ -77,8 +117,15 @@ class ScenePane(Widget):
             scene.drag(name, px, py, float(angle))
 
     def on_move(self, event: Event) -> None:
-        """Carry the dragged robot with the pointer."""
-        if self.dragging:
+        """Carry the dragged robot or obstacle, or stretch the sketch."""
+        if self.sketch is not None:
+            x, y = self.session.scene.view.to_world(event.x, event.y)
+            self.sketch = (*self.sketch[:2], x, y)
+            self.actions.dragged()
+        elif self.moving is not None:
+            x, y = self.session.scene.view.to_world(event.x, event.y)
+            self.actions.obstacle_moved(self.moving, x + self.grab[0], y + self.grab[1])
+        elif self.dragging:
             scene = self.session.scene
             x, y = scene.view.to_world(event.x, event.y)
             angle = float(scene.pose(self.dragging)[2])
@@ -86,7 +133,12 @@ class ScenePane(Widget):
             self.actions.dragged()
 
     def on_release(self, event: Event) -> None:
-        """Drop the dragged robot where it is."""
+        """Drop the dragged robot, or finish the obstacle being drawn."""
+        self.moving = None
+        if self.sketch is not None:
+            x0, y0, x1, y1 = self.sketch
+            self.sketch = None
+            self._finish_sketch(x0, y0, x1, y1)
         if self.dragging:
             scene = self.session.scene
             name, self.dragging = self.dragging, None
@@ -94,3 +146,16 @@ class ScenePane(Widget):
             scene.drop()
             self.actions.dropped(name, x, y, angle)
         self.down = False
+
+    def _finish_sketch(self, x0: float, y0: float, x1: float, y1: float) -> None:
+        """Make the obstacle that was drawn, unless it is smaller than a click."""
+        if self.session.tool == "circle":
+            radius = math.hypot(x1 - x0, y1 - y0)
+            if radius >= MIN_SIZE:
+                self.actions.obstacle_drawn("circle", (x0, y0, 0.0), (radius,))
+        else:
+            size = (abs(x1 - x0), abs(y1 - y0))
+            if min(size) >= MIN_SIZE:
+                pose = ((x0 + x1) / 2, (y0 + y1) / 2, 0.0)
+                self.actions.obstacle_drawn("box", pose, size)
+        self.actions.dragged()

@@ -14,6 +14,7 @@ from . import look
 from .inputs import Combo, MenuItem, Row, TreeList
 from .inspector import Inspector
 from .keys import KEY
+from .paneactions import PaneActions
 from .panels import Badge, FormRow, Pill
 from .scenedraw import LAYERS
 from .scenepane import ScenePane
@@ -23,6 +24,13 @@ from .widgets import Checkbox, IconButton, Section, Slider
 
 DEFAULT_MESSAGE = "Drag a robot to move it. Ctrl+1 and Ctrl+2 show or hide the panels."
 GOAL_MESSAGE = "Click on the floor to set the goal of the selected robot."
+# The tools, and what the status bar says when one is chosen.
+TOOL_MESSAGES = {
+    "select": DEFAULT_MESSAGE,
+    "goal": GOAL_MESSAGE,
+    "box": "Drag on the floor from one corner to the other to draw a box.",
+    "circle": "Drag on the floor from the centre outwards to draw a circle.",
+}
 BADGES = {
     "bench": ("BENCHMARK · fixed world", "bench"),
     "edit": ("SANDBOX · editing", "edit"),
@@ -31,6 +39,8 @@ BADGES = {
 # Layers whose opacity the slider sets.
 FADING = ("costmap", "local")
 BUTTON = 32
+# The key of an obstacle row in the scene list, followed by its 0-based place.
+OBSTACLE_KEY = "obstacle:"
 
 
 class Sandbox:
@@ -73,7 +83,7 @@ class Sandbox:
         self._toolbar(chrome.toolbar)
         chrome.left.add(self.scene_heading, self.tree)
         pill = Pill(self.toggle_play, self.step_once, self.reset_run, self._speed)
-        self.pane = ScenePane(self.session, pill, self)
+        self.pane = ScenePane(self.session, pill, PaneActions(self))
         shell.layout.pane = self.pane
         for name, (label, _) in LAYERS.items():
             self.layer_boxes[name] = Checkbox(
@@ -124,8 +134,24 @@ class Sandbox:
                 True,
                 "tool",
             ),
+            (
+                "box",
+                "box",
+                lambda on: self.set_tool("box"),
+                "Draw a box (B)",
+                True,
+                "tool",
+            ),
+            (
+                "circle",
+                "circle",
+                lambda on: self.set_tool("circle"),
+                "Draw a circle (C)",
+                True,
+                "tool",
+            ),
             ("add", "robot_add", self._add_robot, "Add robot (Ctrl+N)", False, None),
-            ("delete", "trash", self._delete_robot, "Delete robot (Del)", False, None),
+            ("delete", "trash", self._delete_selected, "Delete (Del)", False, None),
             (
                 "right",
                 "panel_right",
@@ -142,14 +168,14 @@ class Sandbox:
             button.checked = key in ("left", "select", "right")
             self.buttons[key] = button
         toolbar.add(*self.buttons.values(), self.badge)
-        self.groups["tool"] = [self.buttons["select"], self.buttons["goal"]]
+        self.groups["tool"] = [self.buttons[key] for key in TOOL_MESSAGES]
 
     def layout_toolbar(self, width: float) -> None:
         """Place the tool bar's buttons and badge for a window width."""
         top = MENU_H + 6
         self.buttons["left"].set_rect(8, top, BUTTON, BUTTON)
         x = 8 + 36 + 6
-        for key in ("select", "goal", "add", "delete"):
+        for key in (*TOOL_MESSAGES, "add", "delete"):
             self.buttons[key].set_rect(x, top, BUTTON, BUTTON)
             x += 34
         self.buttons["right"].set_rect(width - 40, top, BUTTON, BUTTON)
@@ -173,10 +199,10 @@ class Sandbox:
                     "Add robot", shortcut="Ctrl+N", enabled=ok, action=self._add_robot
                 ),
                 MenuItem(
-                    "Delete robot",
+                    "Delete selected",
                     shortcut="Del",
                     enabled=ok,
-                    action=self._delete_robot,
+                    action=self._delete_selected,
                 ),
                 MenuItem(
                     "Set goal",
@@ -184,6 +210,20 @@ class Sandbox:
                     checked=tool == "goal",
                     enabled=ok,
                     action=lambda: self.set_tool("goal"),
+                ),
+                MenuItem(
+                    "Draw box",
+                    shortcut="B",
+                    checked=tool == "box",
+                    enabled=ok,
+                    action=lambda: self.set_tool("box"),
+                ),
+                MenuItem(
+                    "Draw circle",
+                    shortcut="C",
+                    checked=tool == "circle",
+                    enabled=ok,
+                    action=lambda: self.set_tool("circle"),
                 ),
                 MenuItem(
                     "Select",
@@ -231,10 +271,12 @@ class Sandbox:
             (KEY["2"], True): lambda: self._toggle_panel("right"),
             (KEY["n"], True): self._add_robot,
             (KEY["0"], True): self.shell.layout.apply,
-            (KEY["delete"], False): self._delete_robot,
+            (KEY["delete"], False): self._delete_selected,
             (KEY["space"], False): self.toggle_play,
             (KEY["v"], False): lambda: self.set_tool("select"),
             (KEY["g"], False): lambda: self.set_tool("goal"),
+            (KEY["b"], False): lambda: self.set_tool("box"),
+            (KEY["c"], False): lambda: self.set_tool("circle"),
             (KEY["r"], False): self.reset_run,
             (KEY["s"], False): self.step_once,
         }
@@ -266,12 +308,7 @@ class Sandbox:
         """Show a message in the status bar."""
         self.shell.layout.chrome.status.show(text)
 
-    def dragged(self) -> None:
-        """A robot is being dragged: show its pose in the form and redraw."""
-        self.inspector.sync_pose()
-        self._scene_changed()
-
-    def _scene_changed(self) -> None:
+    def scene_changed(self) -> None:
         """Redraw the whole scene."""
         x, y, width, height = self.pane.rect()
         self.shell.screen.damage.add((int(x), int(y), int(x + width), int(y + height)))
@@ -284,9 +321,13 @@ class Sandbox:
         rows += [(r.name, r.name, session.scene.colors[r.name], 1) for r in robots]
         rows += [("", "Obstacles", None, 0)]
         for k, obstacle in enumerate(session.world.obstacles, start=1):
-            rows.append(("", f"{type(obstacle.shape).__name__.lower()} {k}", None, 1))
+            label = f"{obstacle.shape.name} {k}"
+            rows.append((f"{OBSTACLE_KEY}{k - 1}", label, look.NAVY2, 1))
         self.tree.set_rows([Row(*row) for row in rows])
-        self.tree.selected = session.scene.selected
+        place = session.scene.selected_obstacle
+        self.tree.selected = (
+            session.scene.selected if place is None else f"{OBSTACLE_KEY}{place}"
+        )
         status = self.shell.layout.chrome.status
         status.count = f"{len(robots)} robot" + ("" if len(robots) == 1 else "s")
         self.shell.layout.apply()
@@ -295,9 +336,9 @@ class Sandbox:
         """Enable what the mode allows, show the badge, and tell the inspector."""
         session = self.session
         ok = session.editable
-        for key in ("add", "delete", "goal"):
+        for key in ("add", "delete", "goal", "box", "circle"):
             self.buttons[key].enabled = ok
-        if not ok and session.tool == "goal":
+        if not ok and session.tool != "select":
             self.set_tool("select")
         self.badge.text, self.badge.kind = BADGES[session.state]
         self.inspector.lock()
@@ -309,7 +350,7 @@ class Sandbox:
         self.inspector.show(self.session.scene.selected)
         self._refresh_lock()
         self.pane.layout()
-        self._scene_changed()
+        self.scene_changed()
         self.shell.invalidate_all()
 
     # -- panels, tools, layers --
@@ -325,10 +366,9 @@ class Sandbox:
     def set_tool(self, tool: str) -> None:
         """Choose a tool, and say what it does."""
         self.session.set_tool(tool)
-        self.buttons["select"].checked = tool == "select"
-        self.buttons["goal"].checked = tool == "goal"
-        status = self.shell.layout.chrome.status
-        status.show(GOAL_MESSAGE if tool == "goal" else DEFAULT_MESSAGE, 6)
+        for key in TOOL_MESSAGES:
+            self.buttons[key].checked = tool == key
+        self.shell.layout.chrome.status.show(TOOL_MESSAGES[tool], 6)
         self.shell.invalidate_all()
 
     def set_layer(self, name: str, on: bool) -> None:
@@ -347,19 +387,19 @@ class Sandbox:
     def _fade(self, name: str, value: float) -> None:
         """Set how far a layer is faded in."""
         self.session.scene.layers.shown[name] = value
-        self._scene_changed()
+        self.scene_changed()
         self.shell.invalidate(self.shell.layout.chrome.right)
 
     def _set_opacity(self, value: float) -> None:
         """The opacity of the costmap layers."""
         for name in FADING:
             self.session.scene.layers.opacity[name] = value
-        self._scene_changed()
+        self.scene_changed()
 
     def _set_palette(self, name: str) -> None:
         """The costmap palette."""
         self.session.scene.palette = name
-        self._scene_changed()
+        self.scene_changed()
 
     def _speed(self, speed: float) -> None:
         """The playback speed."""
@@ -371,31 +411,30 @@ class Sandbox:
 
     # -- editing: what the pane tells --
     def select(self, name: str | None) -> None:
-        """Select a robot, or none; the list and the pane both call this."""
-        if self.session.select(name):
+        """Select a robot, an obstacle (key "obstacle:N") or none."""
+        if name is not None and name.startswith(OBSTACLE_KEY):
+            changed = self.session.select_obstacle(int(name[len(OBSTACLE_KEY) :]))
+        else:
+            changed = self.session.select(name)
+        if changed:
             self.refresh()
-
-    def goal_set(self, name: str, x: float, y: float, heading: float) -> None:
-        """A goal was picked with the goal tool."""
-        self._edited(self.session.set_goal(name, (x, y, heading)))
-
-    def dropped(self, name: str, x: float, y: float, angle: float) -> None:
-        """A dragged robot was dropped."""
-        self._edited(self.session.move_robot(name, (x, y, angle)))
 
     def _add_robot(self) -> None:
         """Add a robot."""
-        self._edited(self.session.add_robot())
+        self.edited(self.session.add_robot())
 
-    def _delete_robot(self) -> None:
-        """Delete the selected robot."""
-        self._edited(self.session.delete_robot())
+    def _delete_selected(self) -> None:
+        """Delete the selected obstacle, or else the selected robot."""
+        if self.session.scene.selected_obstacle is not None:
+            self.edited(self.session.edits.delete_obstacle())
+        else:
+            self.edited(self.session.delete_robot())
 
-    def _edited(self, error: str | None) -> None:
+    def edited(self, error: str | None) -> None:
         """Show why an edit was refused, or refresh after one that worked."""
         if error is not None:
             self.message(error)
-            self._scene_changed()
+            self.scene_changed()
             return
         self.refresh()
 
@@ -427,7 +466,7 @@ class Sandbox:
         changed = pill.set_time(session.run.time)
         if self.badge.kind == "edit" and session.run.time > 0:
             self._refresh_lock()
-            self._scene_changed()
+            self.scene_changed()
         else:
             self.shell.screen.damage.add(session.scene.dirty_rect())
         if changed:

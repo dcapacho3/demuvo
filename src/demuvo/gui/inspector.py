@@ -214,7 +214,13 @@ class Inspector:
     def sync_pose(self) -> None:
         """Show the dragged robot's pose in the pose fields."""
         name = self.name
-        if name and "x" in self.fields:
+        place = self.session.scene.selected_obstacle
+        if place is not None and "ox" in self.fields:
+            x, y, angle = self.session.world.obstacles[place].pose.xyt
+            for key, value in (("ox", x), ("oy", y), ("oth", math.degrees(angle))):
+                self.fields[key].value = float(value)
+            self.column.invalidate()
+        elif name and "x" in self.fields:
             pose = self.session.scene.pose(name)
             for key, value in (
                 ("x", pose[0]),

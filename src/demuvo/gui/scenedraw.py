@@ -100,6 +100,7 @@ class SceneDraw:
         """Start drawing a run."""
         self.layers = Layers()
         self.palette = look.PALETTES[0]
+        self.view: View | None = None
         self.selected: str | None = None
         self.selected_obstacle: int | None = None
         self._dragged: dict[str, np.ndarray] = {}
@@ -117,7 +118,9 @@ class SceneDraw:
     def set_run(self, run) -> None:
         """Draw another run, or the same one after its world was replaced."""
         self.run = run
-        self.view = View(self.world.bounds)
+        # keep the window rectangle, so an edit does not shrink the board to a corner
+        rect = self.view.rect if self.view is not None else View.rect
+        self.view = View(self.world.bounds, rect=rect).fit(rect)
         self._poses = {}
         self.trails: dict[str, deque] = {
             r.name: deque([tuple(r.pose.xyt[:2])], maxlen=TRAIL)

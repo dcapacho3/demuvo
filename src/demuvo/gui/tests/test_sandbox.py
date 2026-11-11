@@ -256,7 +256,8 @@ def test_the_menus_list_the_commands_and_run_them(app):
     assert [i.text for i in program.menu_items("File")] == ["Quit"]
     edit_items = program.menu_items("Edit")
     assert [i.text for i in edit_items if not i.separator] == [
-        "Add robot", "Delete robot", "Set goal", "Select", "Reset run",
+        "Add robot", "Delete selected", "Set goal", "Draw box", "Draw circle",
+        "Select", "Reset run",
     ]  # fmt: skip
     edit_items[0].action()
     assert len(program.session.world.robots) == 2
@@ -280,7 +281,7 @@ def test_the_menu_state_follows_the_mode_and_the_tool(app):
     assert lines["Set goal"].checked and not lines["Select"].checked
     program.step_once()
     lines = {i.text: i for i in program.menu_items("Edit") if not i.separator}
-    assert not lines["Add robot"].enabled and not lines["Delete robot"].enabled
+    assert not lines["Add robot"].enabled and not lines["Delete selected"].enabled
 
 
 def test_the_shortcuts_do_their_work_and_an_unknown_key_is_not_used(app):
@@ -356,3 +357,92 @@ def test_the_window_draws_a_frame_that_differs_after_an_edit(app):
     before = window.render().copy()
     click(window, program.buttons["add"])
     assert not np.array_equal(window.render(), before)
+
+
+def test_b_and_c_pick_the_drawing_tools_and_say_what_they_do(app):
+    """The buttons follow the keys; the status bar explains each tool."""
+    window, program = app
+    status = window.layout.chrome.status
+    press_key(window, "b")
+    assert program.session.tool == "box" and program.buttons["box"].checked
+    assert "corner" in status.message
+    press_key(window, "c")
+    assert program.session.tool == "circle" and not program.buttons["box"].checked
+    assert "centre" in status.message
+
+
+def test_a_drawn_obstacle_is_listed_selected_and_shown_in_the_inspector(app):
+    """Draw a box: the list has a row, it is selected and its form is up."""
+    window, program = app
+    program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 0.5))
+    rows = [row.text for row in program.tree.rows]
+    assert "box 1" in rows and program.tree.selected == "obstacle:0"
+    assert set(program.inspector.fields) == {"ox", "oy", "oth", "size0", "size1"}
+    program.pane.actions.obstacle_drawn("box", (5.0, 3.0, 0.0), (1.0, 1.0))
+    assert "overlap" in window.layout.chrome.status.message
+    assert len(program.session.world.obstacles) == 1
+
+
+def test_clicking_an_obstacle_row_selects_that_obstacle(app):
+    """The scene list and the pane select the same way."""
+    _, program = app
+    program.pane.actions.obstacle_drawn("circle", (2.0, 2.0, 0.0), (0.4,))
+    program.select("r1")
+    assert program.session.scene.selected_obstacle is None
+    program.select("obstacle:0")
+    assert program.session.scene.selected_obstacle == 0
+    program.pane.actions.select_obstacle(0)
+    assert program.tree.selected == "obstacle:0"
+
+
+def test_dragging_an_obstacle_shows_its_place_and_a_bad_place_is_refused(app):
+    """The pose fields follow the drag; into the robot it stays where it was."""
+    window, program = app
+    program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 1.0))
+    program.pane.actions.obstacle_moved(0, 3.0, 2.0)
+    assert program.inspector.fields["ox"].value == pytest.approx(3.0)
+    program.pane.actions.obstacle_moved(0, 5.0, 3.0)
+    assert "overlap" in window.layout.chrome.status.message
+    assert program.session.world.obstacles[0].pose.xyt[0] == pytest.approx(3.0)
+
+
+def test_delete_removes_the_selected_obstacle_before_any_robot(app):
+    """With an obstacle selected the key removes it and the robot stays."""
+    window, program = app
+    program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 1.0))
+    press_key(window, "delete")
+    assert not program.session.world.obstacles
+    assert [r.name for r in program.session.world.robots] == ["r1"]
+
+
+def test_the_drawing_tools_go_off_when_a_run_starts(app):
+    """A run locks editing, so the tool goes back to select."""
+    _, program = app
+    program.set_tool("box")
+    program.step_once()
+    assert program.session.tool == "select"
+    assert not program.buttons["box"].enabled
+
+
+def test_a_click_on_a_robot_in_the_scene_selects_it_through_the_pane(app):
+    """The pane's click reaches the sandbox, which shows the robot's form."""
+    window, program = app
+    x, y = at(program, 5.0, 3.0)
+    window.mouse_move(x, y)
+    window.mouse_press(Event(x, y))
+    window.mouse_release(Event(x, y))
+    assert program.session.scene.selected == "r1"
+    assert "planner" in program.inspector.fields
+
+
+def test_a_click_on_an_obstacle_in_the_scene_selects_it_and_shows_its_form(app):
+    """The pane's click selects the obstacle and the inspector follows."""
+    window, program = app
+    program.session.edits.add_obstacle("box", (2.0, 2.0, 0.0), (1.0, 1.0))
+    program.session.select(None)
+    x, y = at(program, 2.0, 2.0)
+    window.mouse_move(x, y)
+    window.mouse_press(Event(x, y))
+    window.mouse_release(Event(x, y))
+    assert program.session.scene.selected_obstacle == 0
+    assert "ox" in program.inspector.fields
