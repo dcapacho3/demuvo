@@ -35,6 +35,8 @@ LAYERS = {
     "rays": ("lidar rays", False),
     "robots": ("robots", True),
 }
+# A click this close, in pixels, to an edge counts as on the shape.
+CLICK_PIXELS = 6.0
 # Points kept in the trail of a robot.
 TRAIL = 400
 # A changed path redraws the cut-out at most this often, in seconds.
@@ -446,10 +448,12 @@ class SceneDraw:
             if isinstance(shape, Circle):
                 cx, cy = obstacle.pose.translation
                 hit = math.hypot(x - cx, y - cy) <= shape.radius
-            elif isinstance(shape, LineString):
-                hit = False
             else:
-                hit = _in_polygon(x, y, shape.points(obstacle.pose))
+                points = shape.points(obstacle.pose)
+                reach = CLICK_PIXELS / self.view.scale
+                hit = _near_edge(x, y, points, reach, closed=shape.closed)
+                if shape.closed:
+                    hit = hit or _in_polygon(x, y, points)
             if hit:
                 return index
         return None
@@ -532,6 +536,18 @@ class SceneDraw:
             self._draw_trails(canvas, alpha("trails"))
         if alpha("rays") > 0.001:
             self._draw_rays(canvas, alpha("rays"))
+
+
+def _near_edge(x: float, y: float, points, reach: float, *, closed: bool) -> bool:
+    """True if a point is within `reach` of an edge, so a thin line can be clicked."""
+    ends = zip(points, [*points[1:], points[0]] if closed else points[1:])
+    for (ax, ay), (bx, by) in ends:
+        dx, dy = bx - ax, by - ay
+        along = ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy or 1.0)
+        along = min(max(along, 0.0), 1.0)
+        if math.hypot(x - (ax + along * dx), y - (ay + along * dy)) <= reach:
+            return True
+    return False
 
 
 def _in_polygon(x: float, y: float, points) -> bool:

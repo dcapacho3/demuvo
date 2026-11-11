@@ -11,14 +11,14 @@ from __future__ import annotations
 
 import math
 
-from .. import options
+from .. import edit, options
 from . import look
 from .inputs import Combo, NumberSpec, Spin
 from .panels import FormRow, Note, TitleRow
 from .robotform import RobotForm
 from .session import Session
 from .widgets import Checkbox, Column, Label, Section, Widget
-from .worldform import WorldForm
+from .worldform import OUTLINES, WorldForm
 
 HINT = "Select a robot or an obstacle to see and edit it."
 # Largest value a setting field accepts.
@@ -217,7 +217,11 @@ class Inspector:
         name = self.name
         place = self.session.scene.selected_obstacle
         if place is not None and "ox" in self.fields:
-            x, y, angle = self.session.world.obstacles[place].pose.xyt
+            world = self.session.world
+            if world.obstacles[place].shape.name in OUTLINES:
+                x, y, angle = edit.outline_center(world, place)
+            else:
+                x, y, angle = world.obstacles[place].pose.xyt
             values = (("ox", x), ("oy", y), ("oth", math.degrees(angle)))
         elif name and "x" in self.fields:
             pose = self.session.scene.pose(name)

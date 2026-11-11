@@ -250,16 +250,38 @@ def test_an_obstacle_form_moves_and_resizes_the_selected_obstacle():
     assert session.world.obstacles[0].shape.radius == 0.5
 
 
-def test_a_shape_without_a_size_form_says_where_it_is_set():
-    """A line can be moved and deleted here, and shaped in the file."""
-    session = Session(EXAMPLES / "demo.toml")
-    column = Column()
-    column.set_rect(0, 0, 312, 600)
-    column.adopt(FakeHost())
-    inspector = Inspector(column, session, lambda m: None, lambda: None)
-    session.select_obstacle(2)
+def test_a_polygon_has_no_size_form_but_turns_about_its_middle():
+    """The note says where corners are set; the pose fields are the middle."""
+    world = edit.add_outline(edit.new_world(), "polygon", [(1, 1), (3, 1), (2, 3)])
+    inspector, session, _, _ = build(Session(world), name=None)
+    session.select_obstacle(0)
     inspector.show(None)
-    assert NO_SIZE in texts(column) and set(inspector.fields) == {"ox", "oy", "oth"}
+    assert NO_SIZE in texts(inspector.column)
+    assert set(inspector.fields) == {"ox", "oy", "oth"}
+    assert inspector.fields["ox"].value == pytest.approx(2.0)
+    inspector.fields["oth"].set(90.0)
+    assert edit.outline_center(session.world, 0)[:2] == pytest.approx((2.0, 1.6666667))
+    assert session.world.obstacles[0].pose.xyt[2] == pytest.approx(math.pi / 2)
+    inspector.fields["ox"].set(5.0)
+    assert edit.outline_center(session.world, 0)[0] == pytest.approx(5.0)
+    session.scene.selected_obstacle = 0
+    inspector.sync_pose()
+    assert inspector.fields["ox"].value == pytest.approx(5.0)
+
+
+def test_a_line_has_a_length_and_a_rotation_about_its_middle():
+    """Length scales about the middle; rotation turns about it."""
+    world = edit.add_outline(edit.new_world(), "linestring", [(2, 2), (4, 2)])
+    inspector, session, _, _ = build(Session(world), name=None)
+    session.select_obstacle(0)
+    inspector.show(None)
+    assert set(inspector.fields) == {"ox", "oy", "oth", "size0"}
+    assert inspector.fields["size0"].value == pytest.approx(2.0)
+    inspector.fields["size0"].set(4.0)
+    inspector.fields["oth"].set(90.0)
+    shape = session.world.obstacles[0]
+    ends = shape.shape.points(shape.pose)
+    assert [v for p in ends for v in p] == pytest.approx([3.0, 0.0, 3.0, 4.0], abs=1e-9)
 
 
 def test_a_robot_body_changes_kind_and_size_through_the_form():

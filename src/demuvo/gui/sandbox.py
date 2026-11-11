@@ -229,7 +229,21 @@ class Sandbox:
             ]
         if title == "Edit":
             tool = self.session.tool
+            history = self.session.history
             return [
+                MenuItem(
+                    "Undo",
+                    shortcut="Ctrl+Z",
+                    enabled=ok and history.can_undo,
+                    action=self._undo,
+                ),
+                MenuItem(
+                    "Redo",
+                    shortcut="Ctrl+Y",
+                    enabled=ok and history.can_redo,
+                    action=self._redo,
+                ),
+                MenuItem(separator=True),
                 MenuItem(
                     "Add robot", shortcut="Ctrl+N", enabled=ok, action=self._add_robot
                 ),
@@ -319,6 +333,8 @@ class Sandbox:
             (KEY["1"], True): lambda: self._toggle_panel("left"),
             (KEY["2"], True): lambda: self._toggle_panel("right"),
             (KEY["n"], True): self._add_robot,
+            (KEY["z"], True): self._undo,
+            (KEY["y"], True): self._redo,
             (KEY["o"], True): self._open_prompt,
             (KEY["s"], True): self._save,
             (KEY["0"], True): self.shell.layout.apply,
@@ -570,6 +586,14 @@ class Sandbox:
             changed = self.session.select(name)
         if changed:
             self.refresh()
+
+    def _undo(self) -> None:
+        """Take back the last edit."""
+        self.edited(self.session.history.undo())
+
+    def _redo(self) -> None:
+        """Make the last undone edit again."""
+        self.edited(self.session.history.redo())
 
     def _add_robot(self) -> None:
         """Add a robot."""

@@ -313,13 +313,14 @@ def test_the_layer_table_lists_the_layers_bottom_first():
 
 
 def test_the_obstacle_under_a_pixel_is_found_by_its_real_shape(scene):
-    """Box, circle and polygon hit inside; a notch, a line and the floor do not."""
+    """Shapes hit inside, a line near its edge; a notch and the floor do not."""
     assert scene.obstacle_at(*at(scene, 3.2, 3.2)) == 0
     assert scene.obstacle_at(*at(scene, 5.3, 1.5)) == 1
     assert scene.obstacle_at(*at(scene, 5.6, 1.5)) is None
     assert scene.obstacle_at(*at(scene, 6.8, 4.1)) == 2
     assert scene.obstacle_at(*at(scene, 6.5, 4.9)) is None
-    assert scene.obstacle_at(*at(scene, 1.75, 5.25)) is None
+    assert scene.obstacle_at(*at(scene, 1.75, 5.25)) == 4
+    assert scene.obstacle_at(*at(scene, 1.75, 5.9)) is None
     assert scene.obstacle_at(*at(scene, 0.5, 0.5)) is None
 
 

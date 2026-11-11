@@ -1,6 +1,7 @@
 """Tests for editing a world."""
 
 import dataclasses
+import math
 from pathlib import Path
 
 import pytest
@@ -529,3 +530,45 @@ def test_a_world_built_with_every_edit_survives_save_and_load(world, tmp_path):
         (t.goal_tolerance, t.stop, t.wait) for t in w.tasks
     ]
     assert back.costmap == w.costmap and back.local_costmap == w.local_costmap
+
+
+def test_a_polygon_or_line_turns_about_its_middle_and_a_line_changes_length(world):
+    """The middle stays where it is put; rotation does not move it; length scales."""
+    w = edit.add_outline(world, "linestring", [(2, 2), (4, 2)])
+    w = edit.add_outline(w, "polygon", [(6, 1), (8, 1), (8, 3), (6, 3)])
+    assert edit.outline_center(w, 0) == pytest.approx((3.0, 2.0, 0.0))
+    assert edit.outline_center(w, 1) == pytest.approx((7.0, 2.0, 0.0))
+    turned = edit.set_outline_pose(w, 0, (3.0, 2.0), math.pi / 2)
+    ends = turned.obstacles[0].shape.points(turned.obstacles[0].pose)
+    assert ends == pytest.approx([(3.0, 1.0), (3.0, 3.0)])
+    assert edit.outline_center(turned, 0) == pytest.approx((3.0, 2.0, math.pi / 2))
+    moved = edit.set_outline_pose(turned, 0, (4.0, 4.0), math.pi / 2)
+    assert edit.outline_center(moved, 0) == pytest.approx((4.0, 4.0, math.pi / 2))
+    longer = edit.set_line_length(moved, 0, 4.0)
+    ends = longer.obstacles[0].shape.points(longer.obstacles[0].pose)
+    assert ends == pytest.approx([(4.0, 2.0), (4.0, 6.0)])
+    square = edit.set_outline_pose(w, 1, (7.0, 2.0), math.pi / 4)
+    assert edit.outline_center(square, 1) == pytest.approx((7.0, 2.0, math.pi / 4))
+
+
+def test_outline_edits_refuse_other_shapes_and_bad_places(world):
+    """Box and circle have no middle to turn about; a line of three has no length."""
+    w = edit.add_obstacle(world, "box", (2.0, 2.0, 0.0), (1.0, 1.0))
+    w = edit.add_outline(w, "linestring", [(5, 1), (6, 1), (7, 2)])
+    w = edit.add_outline(w, "linestring", [(1, 5), (3, 5)])
+    with pytest.raises(WorldError, match="only a polygon or a line"):
+        edit.outline_center(w, 0)
+    with pytest.raises(WorldError, match="only a polygon or a line"):
+        edit.set_outline_pose(w, 0, (1, 1), 0.0)
+    with pytest.raises(WorldError, match="two points"):
+        edit.set_line_length(w, 1, 2.0)
+    with pytest.raises(WorldError, match="only a polygon or a line"):
+        edit.set_line_length(w, 0, 2.0)
+    with pytest.raises(WorldError, match="inside the world"):
+        edit.set_outline_pose(w, 2, (20.0, 5.0), 0.0)
+    with pytest.raises(WorldError, match="length"):
+        edit.set_line_length(w, 2, 0.0)
+    with pytest.raises(WorldError, match="inside the world"):
+        edit.set_line_length(w, 2, 30.0)
+    with pytest.raises(WorldError, match="no obstacle number 9"):
+        edit.set_line_length(w, 8, 1.0)

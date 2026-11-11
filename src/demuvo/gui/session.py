@@ -15,6 +15,7 @@ from .. import edit, options
 from ..runner import Run
 from ..verify import WorldError
 from ..world import World
+from .history import History
 from .remote import RemoteRun
 from .scenedraw import SceneDraw
 from .worldedits import REFUSED, WorldEdits
@@ -47,6 +48,7 @@ class Session:
         scene: the drawing of the run.
         tool: "select", "goal", "box" or "circle", the tool the pointer has.
         edits: the edits of obstacles and of the world, and saving and opening.
+        history: the undo and redo lists.
         playing: True while the run advances by itself.
         speed: how many seconds of simulated time pass for each real second.
 
@@ -74,6 +76,7 @@ class Session:
         self._owed = 0.0
         self.tool = "select"
         self.edits = WorldEdits(self)
+        self.history = History(self)
         self.playing = False
         self.speed = 1.0
 
@@ -95,7 +98,12 @@ class Session:
         return self.run.world
 
     def apply(
-        self, world: World, *, rebuild: bool = False, select: str | None = None
+        self,
+        world: World,
+        *,
+        rebuild: bool = False,
+        select: str | None = None,
+        remember: bool = True,
     ) -> str | None:
         """Make a world the one that runs, unless it cannot run.
 
@@ -104,6 +112,7 @@ class Session:
             rebuild: True if the robots changed, which needs a new run and scene.
             select: the robot to select afterwards; "" for none; None keeps the
                 selection.
+            remember: True to put the world it replaces on the undo list.
 
         Returns:
             None if it worked, else why not; nothing then changes.
@@ -113,7 +122,10 @@ class Session:
         except ValueError as error:
             return REFUSED.format(error)
         keep = self.scene.selected if select is None else (select or None)
+        previous = self.run.world
         self.run.set_world(world)
+        if remember:
+            self.history.remember(previous)
         if rebuild:
             old = self.scene
             self.scene = SceneDraw(self.run)

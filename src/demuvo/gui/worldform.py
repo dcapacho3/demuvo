@@ -22,7 +22,10 @@ from .widgets import Label, Section
 # The largest world, in metres, and the shortest and longest step, in seconds.
 MAX_SIZE = 200.0
 STEP_RANGE = (0.0005, 1.0)
-NO_SIZE = "This shape is drawn in the world file; here it can be moved or deleted."
+OUTLINES = ("polygon", "linestring")
+NO_SIZE = (
+    "The corners of this shape are in the world file; here it can move, turn and go."
+)
 
 
 class WorldForm(FormBase):
@@ -78,30 +81,47 @@ class WorldForm(FormBase):
         self.done(self.session.edits.change_world(lambda w: edit.set_origin(w, corner)))
 
     def obstacle(self, index: int) -> None:
-        """The pose and size of an obstacle."""
-        session = self.session
-        item = session.world.obstacles[index]
+        """The pose and size of an obstacle; an outline turns about its middle."""
+        item = self.session.world.obstacles[index]
         title = TitleRow()
         title.name, title.color = f"{item.shape.name} {index + 1}", look.NAVY2
         self.column.add(title, Section("Pose"))
-        x0, y0, x1, y1 = session.world.bounds
-        x, y, angle = (float(v) for v in item.pose.xyt)
+        self._pose_rows(index, item)
+        self.column.add(Section("Size"))
+        self._size_rows(item.shape)
+
+    def _pose_rows(self, index: int, item) -> None:
+        """The three pose fields; for an outline they are its middle and rotation."""
+        world = self.session.world
+        outline = item.shape.name in OUTLINES
+        x0, y0, x1, y1 = world.bounds
+        if outline:
+            x, y, angle = edit.outline_center(world, index)
+        else:
+            x, y, angle = (float(v) for v in item.pose.xyt)
+        names = (
+            ("center x", "center y", "rotation") if outline else ("x", "y", "heading")
+        )
         specs = (
-            ("ox", "x", x, NumberSpec(x0, x1, 0.05, 2, " m")),
-            ("oy", "y", y, NumberSpec(y0, y1, 0.05, 2, " m")),
-            ("oth", "heading", math.degrees(angle), NumberSpec(-180, 180, 5, 2, " °")),
+            ("ox", names[0], x, NumberSpec(x0, x1, 0.05, 2, " m")),
+            ("oy", names[1], y, NumberSpec(y0, y1, 0.05, 2, " m")),
+            ("oth", names[2], math.degrees(angle), NumberSpec(-180, 180, 5, 2, " °")),
         )
         for key, label, value, spec in specs:
             self._row(key, label, value, spec, self._pose_edited)
-        self.column.add(Section("Size"))
-        shape = item.shape
+
+    def _size_rows(self, shape) -> None:
+        """The size fields of a shape that has them, else a note."""
+        spec = NumberSpec(0.05, MAX_SIZE, 0.05, 2, " m")
         if isinstance(shape, Circle):
-            spec = NumberSpec(0.05, MAX_SIZE, 0.05, 2, " m")
             self._row("size0", "radius", shape.radius, spec, self._size_of_obstacle)
         elif isinstance(shape, Box):
-            spec = NumberSpec(0.05, MAX_SIZE, 0.05, 2, " m")
             self._row("size0", "length", shape.size[0], spec, self._size_of_obstacle)
             self._row("size1", "width", shape.size[1], spec, self._size_of_obstacle)
+        elif shape.name == "linestring" and len(shape.vertices) == 2:
+            (ax, ay), (bx, by) = shape.vertices
+            length = math.hypot(bx - ax, by - ay)
+            self._row("size0", "length", length, spec, self._size_of_obstacle)
         else:
             self.column.add(Label(NO_SIZE, 12, look.MUTED, wrap=True))
 
@@ -124,11 +144,25 @@ class WorldForm(FormBase):
         f = self.fields
         pose = (f["ox"].value, f["oy"].value, math.radians(f["oth"].value))
         index = self.session.scene.selected_obstacle
-        self.done(self.session.edits.move_obstacle(index, pose))
+        edits = self.session.edits
+        if self.session.world.obstacles[index].shape.name in OUTLINES:
+            self.done(
+                edits.change_world(
+                    lambda w: edit.set_outline_pose(w, index, pose[:2], pose[2])
+                )
+            )
+        else:
+            self.done(edits.move_obstacle(index, pose))
 
     def _size_of_obstacle(self) -> None:
         """An obstacle size field changed."""
         f = self.fields
         size = tuple(f[k].value for k in ("size0", "size1") if k in f)
         index = self.session.scene.selected_obstacle
-        self.done(self.session.edits.resize_obstacle(index, size))
+        edits = self.session.edits
+        if self.session.world.obstacles[index].shape.name == "linestring":
+            self.done(
+                edits.change_world(lambda w: edit.set_line_length(w, index, size[0]))
+            )
+        else:
+            self.done(edits.resize_obstacle(index, size))

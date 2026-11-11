@@ -291,6 +291,105 @@ def remove_obstacle(world: World, index: int) -> World:
     return dataclasses.replace(world, obstacles=kept)
 
 
+def outline_center(world: World, index: int) -> tuple[float, float, float]:
+    """The middle of a polygon or line, and its rotation, as (x, y, angle).
+
+    The middle is the mean of the corners, which is where it turns.
+    """
+    obstacle = _outline(world, index)
+    mx, my = _mean(obstacle.shape.vertices)
+    x, y = _place(obstacle.pose, mx, my)
+    return x, y, float(obstacle.pose.xyt[2])
+
+
+def _outline(world: World, index: int):
+    """The polygon or line at a 0-based place, or a plain error."""
+    obstacle = _obstacle(world, index)
+    if obstacle.shape.name not in ("polygon", "linestring"):
+        raise WorldError(f"obstacle {index + 1}: only a polygon or a line has a middle")
+    return obstacle
+
+
+def _mean(vertices) -> tuple[float, float]:
+    """The mean of some points."""
+    return (
+        sum(v[0] for v in vertices) / len(vertices),
+        sum(v[1] for v in vertices) / len(vertices),
+    )
+
+
+def _place(pose, x: float, y: float) -> tuple[float, float]:
+    """A point of a shape's own frame, in the world."""
+    px, py, angle = (float(v) for v in pose.xyt)
+    return (
+        px + math.cos(angle) * x - math.sin(angle) * y,
+        py + math.sin(angle) * x + math.cos(angle) * y,
+    )
+
+
+def set_outline_pose(
+    world: World, index: int, center: Sequence[float], angle: float
+) -> World:
+    """Put a polygon or line's middle at a place and turn it about that middle.
+
+    Args:
+        world: the world to start from.
+        index: the 0-based place of the obstacle.
+        center: (x, y) the middle goes to.
+        angle: its rotation in radians, from how it was drawn.
+
+    Raises:
+        WorldError: if it is not a polygon or line, or would leave the world or
+            touch a robot.
+    """
+    obstacle = _outline(world, index)
+    cx, cy = numbers(list(center), 2, f"obstacle {index + 1}", "center")
+    (angle,) = numbers([angle], 1, f"obstacle {index + 1}", "angle")
+    mx, my = _mean(obstacle.shape.vertices)
+    turned = Transform2D.from_xyt((0.0, 0.0, angle))
+    ox, oy = _place(turned, mx, my)
+    pose = Transform2D.from_xyt((cx - ox, cy - oy, angle))
+    if not inside(obstacle.shape.points(pose), world.bounds):
+        raise WorldError(f"obstacle {index + 1}: must lie inside the world")
+    items = list(world.obstacles)
+    items[index] = dataclasses.replace(obstacle, pose=pose)
+    return _with_obstacles(world, tuple(items))
+
+
+def set_line_length(world: World, index: int, length: float) -> World:
+    """Make a line of two points longer or shorter about its middle.
+
+    Raises:
+        WorldError: if it is not a line of two points, the length is not above 0,
+            or the line would leave the world or touch a robot.
+    """
+    obstacle = _outline(world, index)
+    label = f"obstacle {index + 1}"
+    vertices = obstacle.shape.vertices
+    if obstacle.shape.name != "linestring" or len(vertices) != 2:
+        raise WorldError(f"{label}: only a line of two points has a length")
+    (length,) = numbers([length], 1, label, "length", True)
+    (ax, ay), (bx, by) = vertices
+    mx, my = (ax + bx) / 2, (ay + by) / 2
+    now = math.hypot(bx - ax, by - ay)
+    scale = length / now if now else 1.0
+    stretched = [
+        [mx + (ax - mx) * scale, my + (ay - my) * scale],
+        [mx + (bx - mx) * scale, my + (by - my) * scale],
+    ]
+    made = _parse_obstacle(
+        {
+            "shape": {"name": "linestring", "vertices": stretched},
+            "pose": [float(v) for v in obstacle.pose.xyt],
+        },
+        index + 1,
+        world.bounds,
+    )
+    items = list(world.obstacles)
+    items[index] = made
+    return _with_obstacles(world, tuple(items))
+
+
 def set_size(world: World, size: Sequence[float]) -> World:
     """Give the world a new width and height, keeping its origin.
 

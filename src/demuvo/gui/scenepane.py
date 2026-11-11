@@ -142,6 +142,7 @@ class ScenePane(Widget):
             self.actions.select_obstacle(place)
             if session.editable:
                 self.moving = place
+                session.history.begin()
                 x, y = scene.view.to_world(event.x, event.y)
                 px, py = session.world.obstacles[place].pose.translation
                 self.grab = (float(px) - x, float(py) - y)
@@ -149,6 +150,7 @@ class ScenePane(Widget):
         self.actions.select(name)
         if name and session.editable:
             self.dragging = name
+            session.history.begin()
             x, y = scene.view.to_world(event.x, event.y)
             px, py, angle = scene.pose(name)
             self.grab = (px - x, py - y)
@@ -186,6 +188,7 @@ class ScenePane(Widget):
             x, y, angle = (float(v) for v in scene.pose(name))
             scene.drop()
             self.actions.dropped(name, x, y, angle)
+        self.session.history.end()
         self.down = False
 
     def _finish_sketch(self, x0: float, y0: float, x1: float, y1: float) -> None:

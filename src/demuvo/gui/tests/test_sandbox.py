@@ -265,10 +265,10 @@ def test_the_menus_list_the_commands_and_run_them(app):
     ]  # fmt: skip
     edit_items = program.menu_items("Edit")
     assert [i.text for i in edit_items if not i.separator] == [
-        "Add robot", "Delete selected", "Set goal", "Draw box", "Draw circle",
-        "Draw polygon", "Draw line", "Select", "Reset run",
+        "Undo", "Redo", "Add robot", "Delete selected", "Set goal", "Draw box",
+        "Draw circle", "Draw polygon", "Draw line", "Select", "Reset run",
     ]  # fmt: skip
-    edit_items[0].action()
+    next(i for i in edit_items if i.text == "Add robot").action()
     assert len(program.session.world.robots) == 2
     view = program.menu_items("View")
     assert [i.text for i in view[:2]] == ["Scene panel", "Inspector"]
@@ -618,3 +618,23 @@ def test_shift_click_with_the_goal_tool_adds_a_waypoint_through_the_window(app):
         window.mouse_release(Event(x, py))
     assert edit.goals_of(program.session.world, "r1") == [0, 1]
     assert "g1x" in program.inspector.fields
+
+
+def test_ctrl_z_and_ctrl_y_undo_and_redo_and_the_menu_follows(app):
+    """The keys and the Edit menu agree; Undo is grey until there is something."""
+    window, program = app
+    lines = {i.text: i for i in program.menu_items("Edit") if not i.separator}
+    assert not lines["Undo"].enabled and not lines["Redo"].enabled
+    program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 0.5))
+    lines = {i.text: i for i in program.menu_items("Edit") if not i.separator}
+    assert lines["Undo"].enabled
+    press_key(window, "z", ctrl=True)
+    assert not program.session.world.obstacles
+    assert {i.text: i for i in program.menu_items("Edit") if not i.separator}[
+        "Redo"
+    ].enabled
+    press_key(window, "y", ctrl=True)
+    assert len(program.session.world.obstacles) == 1
+    press_key(window, "z", ctrl=True)
+    press_key(window, "z", ctrl=True)
+    assert "Nothing to undo" in window.layout.chrome.status.message

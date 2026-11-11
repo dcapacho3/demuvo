@@ -372,3 +372,64 @@ def test_a_new_world_is_blank_and_has_no_file(sandbox):
     assert not sandbox.world.obstacles and not sandbox.playing
     assert sandbox.edits.path is None and sandbox.scene.selected_obstacle is None
     assert Session(DEMO, "benchmark").edits.new() == "A benchmark world is fixed."
+
+
+def test_undo_and_redo_walk_back_and_forward_through_the_edits(sandbox):
+    """Each edit is one step; a new edit forgets what could be redone."""
+    assert not sandbox.history.can_undo and sandbox.history.undo() == "Nothing to undo."
+    sandbox.edits.add_obstacle("box", (2.0, 2.0, 0.0), (1.0, 0.5))
+    sandbox.edits.add_obstacle("circle", (7.0, 4.0, 0.0), (0.3,))
+    sandbox.add_robot()
+    assert len(sandbox.world.robots) == 2 and sandbox.history.can_undo
+    assert sandbox.history.undo() is None
+    assert len(sandbox.world.robots) == 1 and len(sandbox.world.obstacles) == 2
+    assert sandbox.history.undo() is None and sandbox.history.undo() is None
+    assert not sandbox.world.obstacles and sandbox.history.can_redo
+    assert sandbox.history.redo() is None and len(sandbox.world.obstacles) == 1
+    sandbox.edits.add_obstacle("circle", (7.0, 4.0, 0.0), (0.5,))
+    assert not sandbox.history.can_redo
+    assert sandbox.history.redo() == "Nothing to redo."
+
+
+def test_undo_to_the_saved_world_is_not_a_change_and_a_drag_is_one_step(sandbox):
+    """The saved world object comes back; many moves in a group undo together."""
+    saved = sandbox.world
+    sandbox.edits.save("/dev/null")
+    sandbox.edits.add_obstacle("box", (2.0, 2.0, 0.0), (1.0, 0.5))
+    assert sandbox.edits.modified
+    sandbox.history.undo()
+    assert sandbox.world is saved and not sandbox.edits.modified
+    sandbox.history.redo()
+    sandbox.history.begin()
+    for x in (3.0, 3.5, 4.0):
+        sandbox.edits.move_obstacle(0, (x, 2.0, 0.0))
+    sandbox.history.end()
+    sandbox.history.undo()
+    assert sandbox.world.obstacles[0].pose.xyt[0] == 2.0
+
+
+def test_undo_is_locked_during_a_run_and_open_forgets_the_history(sandbox):
+    """No undo while running; a newly opened world starts with no history."""
+    sandbox.edits.add_obstacle("box", (2.0, 2.0, 0.0), (1.0, 0.5))
+    sandbox.step_once()
+    assert sandbox.history.undo() == "Press Reset (R) to edit again."
+    sandbox.reset()
+    assert sandbox.edits.open(str(DEMO)) is None
+    assert not sandbox.history.can_undo and not sandbox.history.can_redo
+
+
+def test_the_history_keeps_only_its_limit_of_worlds(sandbox, monkeypatch):
+    """Older worlds are dropped, so memory stays bounded."""
+    monkeypatch.setattr("demuvo.gui.history.LIMIT", 3)
+    for k in range(5):
+        sandbox.edits.set_seed(10 + k)
+    for _ in range(3):
+        assert sandbox.history.undo() is None
+    assert sandbox.history.undo() == "Nothing to undo."
+
+
+def test_an_undo_that_cannot_run_is_reported_and_changes_nothing(sandbox, monkeypatch):
+    """If the older world is refused, the lists stay as they were."""
+    sandbox.edits.set_seed(5)
+    monkeypatch.setattr(sandbox, "apply", lambda *a, **k: "no")
+    assert sandbox.history.undo() == "no" and sandbox.history.can_undo

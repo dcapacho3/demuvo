@@ -152,8 +152,9 @@ class WorldEdits:
         """Make another world the one that runs, ending any run in progress."""
         session = self.session
         session.playing = False
-        message = session.apply(world, rebuild=True, select="")
+        message = session.apply(world, rebuild=True, select="", remember=False)
         if message is None:
+            session.history.clear()
             session.scene.selected_obstacle = None
             self.path, self.saved = path, session.world
         return message
