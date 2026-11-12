@@ -268,7 +268,6 @@ class Label(Widget):
         size: type size in pixels.
         color: "#rrggbb".
         bold: True for the bold face.
-        align: "left", "right" or "center", on one line.
         wrap: True to break the text into lines that fit the width.
     """
 
@@ -279,13 +278,12 @@ class Label(Widget):
         color: str = look.NAVY,
         *,
         bold: bool = False,
-        align: str = "left",
         wrap: bool = False,
     ) -> None:
         """Make a label; it takes no clicks."""
         super().__init__()
         self.text, self.size, self.color = text, size, color
-        self.bold, self.align, self.wrap = bold, align, wrap
+        self.bold, self.wrap = bold, wrap
         self.interactive = False
 
     def _face(self) -> font.Font:
@@ -321,10 +319,8 @@ class Label(Widget):
                 baseline = self.y + self.size * 1.1 + i * self.size * 1.45
                 canvas.text(face, line, (self.x, baseline), size=self.size, color=color)
             return
-        gap = self.width - face.width(self.text, self.size)
-        x = self.x + {"left": 0.0, "right": gap}.get(self.align, gap / 2)
         baseline = text_baseline(self.y, self.height, self.size)
-        canvas.text(face, self.text, (x, baseline), size=self.size, color=color)
+        canvas.text(face, self.text, (self.x, baseline), size=self.size, color=color)
 
 
 class Section(Label):

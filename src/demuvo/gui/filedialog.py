@@ -13,13 +13,11 @@ from pathlib import Path
 
 from . import font, look
 from .icons import draw_icon
-from .inputs import Popup, TextField
+from .inputs import DOUBLE_CLICK_SECONDS, Popup, TextField
 from .raster import Canvas, rgba
 from .widgets import Event, TextButton, text_baseline
 
 ROW = 30
-# Two clicks within this many seconds are a double click.
-DOUBLE_CLICK_SECONDS = 0.45
 
 
 def list_folder(folder: Path, suffix: str) -> tuple[list[str], list[str]]:

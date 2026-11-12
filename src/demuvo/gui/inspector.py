@@ -90,8 +90,10 @@ class Inspector:
         title.name, title.color = name, self.session.scene.colors.get(name, look.TEAL)
         col.add(title, Section("Pose"))
         pose = self.session.scene.pose(name)
-        self._triple(("x", "y", "th"), pose[0], pose[1], pose[2], self._pose_edited)
         forms = RobotForm(col, self.session, self.fields, self._done)
+        forms.pose_triple(
+            ("x", "y", "th"), ("x", "y", "heading"), pose, self._pose_edited
+        )
         forms.goals(name, pose)
         forms.body(spec)
         col.add(Section("Robot"))
@@ -103,19 +105,6 @@ class Inspector:
             col.add(FormRow(field, box))
         self._settings(spec)
         forms.sensing(spec)
-
-    def _triple(self, keys, x, y, angle, callback) -> None:
-        """Three fields - x, y and a heading in degrees - added as rows."""
-        x0, y0, x1, y1 = self.session.world.bounds
-        specs = (
-            (x, NumberSpec(x0, x1, 0.05, 2, " m")),
-            (y, NumberSpec(y0, y1, 0.05, 2, " m")),
-            (math.degrees(angle), NumberSpec(-180, 180, 5, 2, " °")),
-        )
-        for key, label, (value, spec) in zip(keys, ("x", "y", "heading"), specs):
-            field = Spin(value, spec, on_change=lambda _v, cb=callback: cb())
-            self.fields[key] = field
-            self.column.add(FormRow(label, field))
 
     def _choices(self, spec):
         """The four choices of a robot: field, items to pick from, the current one."""

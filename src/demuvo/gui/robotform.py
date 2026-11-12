@@ -195,19 +195,12 @@ class RobotForm(FormBase):
 
     def _goal_triple(self, name: str, k: int, place, goal) -> None:
         """Three fields - x, y and a heading in degrees - for one goal."""
-        x0, y0, x1, y1 = self.session.world.bounds
-        specs = (
-            NumberSpec(x0, x1, 0.05, 2, " m"),
-            NumberSpec(y0, y1, 0.05, 2, " m"),
-            NumberSpec(-180, 180, 5, 2, " °"),
+        self.pose_triple(
+            self._keys(k),
+            ("x", "y", "heading"),
+            goal,
+            lambda: self._goal_edited(name, k, place),
         )
-        values = (goal[0], goal[1], math.degrees(goal[2]))
-        for key, label, value, spec in zip(
-            self._keys(k), ("x", "y", "heading"), values, specs
-        ):
-            self.number(
-                key, label, value, spec, lambda: self._goal_edited(name, k, place)
-            )
 
     def _goal_block(self, name: str, k: int, place: int) -> None:
         """One goal: its place, tolerance, stop rule and wait, and a remove button."""

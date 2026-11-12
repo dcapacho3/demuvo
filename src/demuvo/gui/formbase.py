@@ -6,6 +6,8 @@ inspector can lock it and a test can find it.
 
 from __future__ import annotations
 
+import math
+
 from .inputs import Combo, NumberSpec, Spin, TextField
 from .panels import FormRow
 from .widgets import Checkbox, TextButton, Widget
@@ -45,6 +47,17 @@ class FormBase:
         field = Spin(value, spec, on_change=lambda _v: change())
         self.fields[key] = field
         self.column.add(FormRow(label, field))
+
+    def pose_triple(self, keys, labels, pose, change) -> None:
+        """Three number rows for a pose - x and y in metres, the angle in degrees."""
+        x0, y0, x1, y1 = self.session.world.bounds
+        rows = (
+            (pose[0], NumberSpec(x0, x1, 0.05, 2, " m")),
+            (pose[1], NumberSpec(y0, y1, 0.05, 2, " m")),
+            (math.degrees(pose[2]), NumberSpec(-180, 180, 5, 2, " °")),
+        )
+        for key, label, (value, spec) in zip(keys, labels, rows):
+            self.number(key, label, value, spec, change)
 
     def choice(self, key: str, label: str, items: list[str], current: str, change):
         """A labelled drop-down; `change` is called with the chosen text."""

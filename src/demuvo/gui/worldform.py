@@ -31,10 +31,6 @@ NO_SIZE = (
 class WorldForm(FormBase):
     """Builds the world form and the obstacle form into a column."""
 
-    def _row(self, key: str, label: str, value: float, spec: NumberSpec, change):
-        """One labelled number field, kept under a key."""
-        self.number(key, label, value, spec, change)
-
     def world(self) -> None:
         """The size, seed and step of the world."""
         world = self.session.world
@@ -44,14 +40,14 @@ class WorldForm(FormBase):
             ("height", "height", world.size[1]),
         ):
             spec = NumberSpec(1.0, MAX_SIZE, 0.5, 2, " m")
-            self._row(key, label, value, spec, self._size_edited)
+            self.number(key, label, value, spec, self._size_edited)
         spec = NumberSpec(0, 2**31 - 1, 1, 0, "", True)
-        self._row("seed", "seed", world.seed, spec, self._seed_edited)
+        self.number("seed", "seed", world.seed, spec, self._seed_edited)
         spec = NumberSpec(*STEP_RANGE, 0.001, 4, " s")
-        self._row("dt", "step", world.dt, spec, self._step_edited)
+        self.number("dt", "step", world.dt, spec, self._step_edited)
         corner = NumberSpec(-1000.0, 1000.0, 0.5, 2, " m")
-        self._row("ox0", "corner x", world.origin[0], corner, self._origin_edited)
-        self._row("oy0", "corner y", world.origin[1], corner, self._origin_edited)
+        self.number("ox0", "corner x", world.origin[0], corner, self._origin_edited)
+        self.number("oy0", "corner y", world.origin[1], corner, self._origin_edited)
         self._sensors()
         costmaps = CostmapForm(self.column, self.session, self.fields, self.done)
         costmaps.costmap("global")
@@ -97,7 +93,6 @@ class WorldForm(FormBase):
         """The three pose fields; for an outline they are its middle and rotation."""
         world = self.session.world
         outline = item.shape.name in OUTLINES
-        x0, y0, x1, y1 = world.bounds
         if outline:
             x, y, angle = edit.outline_center(world, index)
         else:
@@ -105,26 +100,20 @@ class WorldForm(FormBase):
         names = (
             ("center x", "center y", "rotation") if outline else ("x", "y", "heading")
         )
-        specs = (
-            ("ox", names[0], x, NumberSpec(x0, x1, 0.05, 2, " m")),
-            ("oy", names[1], y, NumberSpec(y0, y1, 0.05, 2, " m")),
-            ("oth", names[2], math.degrees(angle), NumberSpec(-180, 180, 5, 2, " °")),
-        )
-        for key, label, value, spec in specs:
-            self._row(key, label, value, spec, self._pose_edited)
+        self.pose_triple(("ox", "oy", "oth"), names, (x, y, angle), self._pose_edited)
 
     def _size_rows(self, shape) -> None:
         """The size fields of a shape that has them, else a note."""
         spec = NumberSpec(0.05, MAX_SIZE, 0.05, 2, " m")
         if isinstance(shape, Circle):
-            self._row("size0", "radius", shape.radius, spec, self._size_of_obstacle)
+            self.number("size0", "radius", shape.radius, spec, self._size_of_obstacle)
         elif isinstance(shape, Box):
-            self._row("size0", "length", shape.size[0], spec, self._size_of_obstacle)
-            self._row("size1", "width", shape.size[1], spec, self._size_of_obstacle)
+            self.number("size0", "length", shape.size[0], spec, self._size_of_obstacle)
+            self.number("size1", "width", shape.size[1], spec, self._size_of_obstacle)
         elif shape.name == "linestring" and len(shape.vertices) == 2:
             (ax, ay), (bx, by) = shape.vertices
             length = math.hypot(bx - ax, by - ay)
-            self._row("size0", "length", length, spec, self._size_of_obstacle)
+            self.number("size0", "length", length, spec, self._size_of_obstacle)
         else:
             self.column.add(Label(NO_SIZE, 12, look.MUTED, wrap=True))
 

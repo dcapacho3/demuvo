@@ -17,6 +17,7 @@ import numpy as np
 
 from .glfw import PRESS, REPEAT, Glfw, open_library
 from .imgio import read_png
+from .keys import CTRL, SHIFT
 from .widgets import Event
 
 GL_TEXTURE_2D = 0x0DE1
@@ -32,8 +33,6 @@ ICON_SIZES = (32, 64, 128, 180)
 ASSETS = Path(__file__).parent / "assets"
 # Seconds to wait for an event: briefly while something moves, long when idle.
 BUSY_WAIT, IDLE_WAIT = 0.004, 0.25
-# The modifier bits GLFW reports.
-SHIFT_BIT, CTRL_BIT = 1, 2
 
 
 class Application(Protocol):
@@ -203,8 +202,8 @@ class Window:
             x * scale,
             y * scale,
             button=button,
-            shift=bool(mods & SHIFT_BIT),
-            ctrl=bool(mods & CTRL_BIT),
+            shift=bool(mods & SHIFT),
+            ctrl=bool(mods & CTRL),
         )
         if action == PRESS:
             self.app.mouse_press(event)

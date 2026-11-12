@@ -176,8 +176,6 @@ class Spin(LineEdit):
         on_change: called with the new value.
     """
 
-    takes_focus_on_press = True
-
     def __init__(self, value: float, spec: NumberSpec, on_change=None) -> None:
         """Make a number field."""
         super().__init__()

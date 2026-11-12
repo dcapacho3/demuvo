@@ -26,7 +26,7 @@ import numpy as np
 
 from . import font, look
 from .inputs import Popup
-from .keys import KEY
+from .keys import CTRL, KEY, SHIFT
 from .raster import Canvas, rgba
 from .widgets import Column, Event, IconButton, Panel, Widget, text_baseline
 
@@ -649,7 +649,7 @@ class Input:
     def key(self, key: int, mods: int) -> None:
         """A key went down or repeated; Tab moves the focus."""
         shell = self.shell
-        event = Event(key=key, shift=bool(mods & 1), ctrl=bool(mods & 2))
+        event = Event(key=key, shift=bool(mods & SHIFT), ctrl=bool(mods & CTRL))
         if self.popup is None and key == KEY["tab"]:
             self.move_focus(-1 if event.shift else 1)
         elif shell.focus is not None and shell.focus.on_key(event):

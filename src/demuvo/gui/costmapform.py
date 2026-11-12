@@ -15,7 +15,7 @@ DISTANCE = NumberSpec(0.01, 1000.0, 0.05, 2, " m")
 SECONDS = NumberSpec(0.01, 100.0, 0.05, 2, " s")
 FACTOR = NumberSpec(0.01, 1000.0, 0.5, 2)
 # The layers of each costmap, in the order they are applied.
-LAYERS = {"global": ("static", "inflation"), "local": ("obstacle", "inflation")}
+PLUGINS = {"global": ("static", "inflation"), "local": ("obstacle", "inflation")}
 # Settings each costmap has as a number, by name, label and how to show it.
 NUMBERS = {
     "global": (
@@ -58,7 +58,7 @@ class CostmapForm(FormBase):
                 shape,
                 lambda k=key: self._set(which, {k: self.fields[f"{prefix}.{k}"].value}),
             )
-        for layer in LAYERS[which]:
+        for layer in PLUGINS[which]:
             self.switch(
                 f"{prefix}.{layer}",
                 f"{layer} layer",
@@ -83,7 +83,9 @@ class CostmapForm(FormBase):
     def _layers(self, which: str, prefix: str) -> None:
         """A layer switch changed; the layers on are read back in order."""
         plugins = [
-            layer for layer in LAYERS[which] if self.fields[f"{prefix}.{layer}"].checked
+            layer
+            for layer in PLUGINS[which]
+            if self.fields[f"{prefix}.{layer}"].checked
         ]
         self._set(which, {"plugins": plugins})
 

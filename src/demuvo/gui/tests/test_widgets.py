@@ -151,17 +151,14 @@ def test_a_label_wraps_to_the_width_and_gives_the_height_it_needs():
     assert label.lines() == label.lines(fits)
 
 
-def test_a_label_draws_left_right_and_centred_and_fades_when_disabled():
-    """The ink lands in the part of the box that the alignment names."""
-    boxes = {}
-    for align in ("left", "right", "center"):
-        label = Label("Hi", 14, align=align)
-        label.set_rect(0, 0, 100, 30)
-        canvas = Canvas(100, 30)
-        label.draw(canvas)
-        boxes[align] = [x for x in range(100) if canvas.px[:, x, 0].min() < 0.9]
-    assert max(boxes["left"]) < 30 and min(boxes["right"]) > 70
-    assert 30 < min(boxes["center"]) and max(boxes["center"]) < 70
+def test_a_label_draws_at_its_left_edge_and_fades_when_disabled():
+    """The ink starts at the left of the box."""
+    label = Label("Hi", 14)
+    label.set_rect(0, 0, 100, 30)
+    canvas = Canvas(100, 30)
+    label.draw(canvas)
+    inked = [x for x in range(100) if canvas.px[:, x, 0].min() < 0.9]
+    assert inked and max(inked) < 30
     dim = Label("Hi", 14)
     dim.set_rect(0, 0, 100, 30)
     dim.enabled = False
