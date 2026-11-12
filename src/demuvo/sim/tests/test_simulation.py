@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from demuvo import Simulation, Twist, load_world
+from demuvo import Simulation, Twist, edit, load_world
 
 DEMO = Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml"
 
@@ -125,6 +125,18 @@ def test_velocity_is_the_motion_of_the_last_step(world):
     assert sim.velocity["r1"] == pytest.approx([0.5, 0.0, 0.2])
     sim.step({})
     assert sim.velocity["r1"] == pytest.approx([0.0, 0.0, 0.0], abs=1e-12)
+
+
+def test_velocity_is_correct_past_the_scalar_limit():
+    """Five robots take the batch route and each gets its own body velocity."""
+    world = edit.new_world(size=(14.0, 8.0))
+    for x in (2.0, 4.0, 6.0, 8.0):
+        world = edit.add_robot(world, f"r{len(world.robots) + 1}", (x, 2.0, 0.0))
+    sim = Simulation(world, dt=0.1)
+    assert len(sim.robots) == 5
+    sim.step({name: Twist(vx=0.5) for name in sim.models})
+    for name in sim.models:
+        assert sim.velocity[name] == pytest.approx([0.5, 0.0, 0.0])
 
 
 def test_driven_is_the_exact_length_of_the_path(world):

@@ -21,6 +21,10 @@ from .scene import static_scene, with_robots
 MAX_PASSES = 4
 # Extra distance, in metres, so a pushed robot ends clear and not exactly on the edge.
 CLEARANCE = 1e-7
+# Up to this many robots, a loop of single poses gives the same velocity as the
+# batch call with less work: the batch builds two matrix stacks every step. Above
+# it the batch wins. The two routes give the same bits on one machine.
+SCALAR_VELOCITY_MAX = 4
 
 
 class Simulation:
@@ -171,7 +175,12 @@ class Simulation:
         return self._scene[1]
 
     def _velocities(self, moved: dict[str, Transform2D]) -> dict[str, np.ndarray]:
-        """The body velocity (vx, vy, wz) of each robot over this step, in one call."""
+        """The body velocity (vx, vy, wz) of each robot over this step."""
+        if len(moved) <= SCALAR_VELOCITY_MAX:
+            return {
+                name: pose.rminus(self.poses[name]) / self.dt
+                for name, pose in moved.items()
+            }
         before = np.array([self.poses[name].matrix for name in moved])
         after = np.array([pose.matrix for pose in moved.values()])
         return dict(zip(moved, rminus_se2(after, before) / self.dt))
