@@ -194,6 +194,7 @@ class Pointer:
         hovered: the widget under the pointer.
         captured: the widget that was pressed, which gets the moves until release.
         tip: (text, x, y) of the tooltip showing, or None.
+        tip_box: the pixels the tooltip may cover, to redraw when it goes.
         since: when the pointer last changed widget.
     """
 
@@ -202,6 +203,7 @@ class Pointer:
     hovered: Widget | None = None
     captured: Widget | None = None
     tip: tuple[str, float, float] | None = None
+    tip_box: tuple[int, int, int, int] | None = None
     since: float = 0.0
 
 
@@ -559,10 +561,16 @@ class Input:
         pointer.hovered = target
         if target is not None:
             target.on_hover(True)
-        pointer.tip = None
+        self._clear_tip()
         pointer.since = time.perf_counter()
-        screen = self.shell.screen
-        screen.damage.add((0, 0, screen.width, MENU_H + TOOL_H))
+
+    def _clear_tip(self) -> None:
+        """Hide the tooltip and redraw only the place it was."""
+        pointer = self.pointer
+        if pointer.tip is not None and pointer.tip_box is not None:
+            self.shell.screen.damage.add(pointer.tip_box)
+        pointer.tip = None
+        pointer.tip_box = None
 
     def move(self, x: float, y: float) -> None:
         """The pointer moved to a pixel."""
@@ -591,8 +599,7 @@ class Input:
             status.coords = coords
             status.invalidate()
         if pointer.tip:
-            pointer.tip = None
-            damage.everything()
+            self._clear_tip()
 
     def press(self, event: Event) -> None:
         """A mouse button went down."""
@@ -619,7 +626,7 @@ class Input:
         if not (target and target.takes_focus_on_press):
             self.set_focus(None)
         self.pointer.captured = target
-        self.pointer.tip = None
+        self._clear_tip()
         if target is not None:
             target.on_press(event)
 
@@ -767,14 +774,13 @@ class Input:
                 hovered.x + hovered.width / 2,
                 hovered.y + hovered.height + 8,
             )
-            self.shell.screen.damage.add(
-                (
-                    int(hovered.x) - 150,
-                    int(hovered.y),
-                    int(hovered.x + hovered.width) + 150,
-                    int(hovered.y + hovered.height) + 44,
-                )
+            pointer.tip_box = (
+                int(hovered.x) - 150,
+                int(hovered.y),
+                int(hovered.x + hovered.width) + 150,
+                int(hovered.y + hovered.height) + 44,
             )
+            self.shell.screen.damage.add(pointer.tip_box)
 
 
 class Shell:
