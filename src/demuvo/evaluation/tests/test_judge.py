@@ -87,5 +87,6 @@ def test_sliding_sideways_is_not_standing_still():
     judge.update(sim)
     assert judge.done == {}
     sim.velocity["r1"][:] = [0.0, 0.0, 0.0]
+    sim.steps += 1  # the judge reads a step once; the loop moves time forward
     judge.update(sim)
-    assert judge.done == {("r1", 0): 0.0}
+    assert judge.done == {("r1", 0): pytest.approx(0.1)}

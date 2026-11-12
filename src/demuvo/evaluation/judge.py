@@ -66,6 +66,7 @@ class Judge:
         self.current = dict.fromkeys(tasks, 0)
         self.done: dict[tuple[str, int], float] = {}
         self._met: dict[str, float] = {}
+        self._judged: tuple[Simulation, int] | None = None
 
     def task(self, name: str) -> Task | None:
         """The task the robot is on, or None if it has none."""
@@ -77,9 +78,15 @@ class Judge:
         self.current[name] = 0
         self._met.pop(name, None)
         self.done = {key: t for key, t in self.done.items() if key[0] != name}
+        self._judged = None
 
     def update(self, sim: Simulation) -> None:
         """Judge every robot at the current step; move on past tasks that are done."""
+        if self._judged is not None and (
+            self._judged[0] is sim and self._judged[1] == sim.steps
+        ):
+            return
+        self._judged = (sim, sim.steps)
         for name, tasks in self.tasks.items():
             i = self.current[name]
             # `_finished` is asked of the last task too, so it notes its time.

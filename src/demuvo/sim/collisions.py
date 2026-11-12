@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass
+from functools import lru_cache
 
 import numpy as np
 from robomath import Transform2D
@@ -59,6 +60,16 @@ class Collision:
     time: float
     a: str
     b: str
+
+
+@lru_cache(maxsize=16)
+def _upper_pairs(count: int) -> tuple[np.ndarray, np.ndarray]:
+    """The i < j index pairs of a count-by-count matrix, kept between steps.
+
+    `np.triu` builds a fresh mask every call, which a step loop pays every
+    step; these pairs are read only and shared.
+    """
+    return np.triu_indices(count, 1)
 
 
 def _union(parts: list[Part]) -> Box:
@@ -154,7 +165,9 @@ class Checker:
         if moved is not None:
             flags = np.array([n in moved for n in names])
             meets &= flags[:, None] | flags[None, :]
-        for i, j in zip(*np.nonzero(np.triu(meets, 1))):
+        rows, cols = _upper_pairs(len(names))
+        hits = meets[rows, cols]
+        for i, j in zip(rows[hits], cols[hits]):
             a, b = names[i], names[j]
             if self._meet(a, b) and (found := _deepest(parts[a], parts[b])):
                 contacts.append(Contact(a, b, found[0], found[1], True))
