@@ -36,6 +36,13 @@ def test_the_robot_slows_down_near_the_goal():
     assert command.vx == pytest.approx(0.4)
 
 
+def test_a_path_that_ends_under_the_robot_is_a_zero_command():
+    """On the path's last point but short of the goal: stand still, not a crash."""
+    path = np.array([[1.0, 1.0, 0.0]])
+    command = PurePursuit().command(look((1.0, 1.0, 0.0), (5.0, 1.0, 0.0), path=path))
+    assert (command.vx, command.wz) == (0.0, 0.0)
+
+
 def test_the_turn_follows_the_side_of_the_path():
     """A path that bends left turns left (wz > 0); to the right turns right."""
     left = PurePursuit().command(look((3.0, 3.0, 0.0), (6.0, 4.0, 0.0)))

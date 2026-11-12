@@ -484,13 +484,18 @@ def test_a_task_may_ask_to_stop_and_to_wait(tmp_path):
     )
     task = load(tmp_path, text).tasks[0]
     assert (task.stop, task.wait) == (False, 2.5)
+    zero = (
+        head + "[[task]]" + tail.replace('robot = "r1"', 'robot = "r1"\nwait = 0.0', 1)
+    )
+    assert load(tmp_path, zero).tasks[0].wait == 0.0
 
 
 @pytest.mark.parametrize(
     ("line", "message"),
     [
         ("stop = 1", "'stop' must be true or false"),
-        ("wait = 0", "'wait' must be positive"),
+        ("wait = -1", "'wait' must not be negative"),
+        ('wait = "long"', "finite number"),
     ],
 )
 def test_a_bad_stop_or_wait_is_named(tmp_path, line, message):

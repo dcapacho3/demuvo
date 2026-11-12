@@ -9,6 +9,7 @@ edited world comes out.
 from __future__ import annotations
 
 import dataclasses
+import itertools
 import math
 import warnings
 from collections.abc import Sequence
@@ -169,9 +170,11 @@ def free_pose(world: World, radius: float = 0.2) -> tuple[float, float, float]:
         for j in range(int(y1 - y0))
     ]
     centres.sort(key=lambda c: math.dist(c, middle))
+    taken = {r.name for r in world.robots}
+    probe = next(f"probe {k}" for k in itertools.count() if f"probe {k}" not in taken)
     for x, y in centres:
         try:
-            add_robot(world, "new robot", (x, y, 0.0), radius=radius)
+            add_robot(world, probe, (x, y, 0.0), radius=radius)
         except WorldError:
             continue
         return x, y, 0.0
@@ -594,9 +597,11 @@ def set_settings(world: World, name: str, part: str, settings: dict) -> World:
     else:
         values = {k: _checked(v, kinds[k], name, part, k) for k, v in settings.items()}
         load_class(path, values, name, part, METHODS[part])
-    return _replace_robot(
-        world, dataclasses.replace(spec, **{SETTINGS_FIELD[part]: values})
-    )
+    fields = {SETTINGS_FIELD[part]: values}
+    if part == "planner" and spec.planner is None:
+        # Settings without a named planner would be dropped by save_world.
+        fields["planner"] = DEFAULT_PLANNER
+    return _replace_robot(world, dataclasses.replace(spec, **fields))
 
 
 def settings_of_robot(world: World, name: str, part: str) -> dict:
@@ -842,6 +847,10 @@ def set_costmap(world: World, which: str, values: dict) -> World:
             raise WorldError(f"{label}: no setting '{key}'; it has {', '.join(known)}")
         _check_costmap_value(label, key, value, getattr(old, key))
     values = {k: tuple(v) if k == "plugins" else v for k, v in values.items()}
+    if isinstance(values.get("source"), str) and values["source"] != "generate":
+        # The loader stores the path joined with the file's folder; an edited
+        # world has no file, so the path is pinned here.
+        values["source"] = str(Path(values["source"]).expanduser().absolute())
     try:
         new = dataclasses.replace(old, **values)
         check_positive(new, *_COSTMAP_NUMBERS[which])
@@ -909,7 +918,9 @@ def _fits(world: World) -> World:
     for spec in world.robots:
         if not inside(spec.shape.points(spec.pose), world.bounds):
             raise WorldError(f"robot '{spec.name}' would fall outside")
+    robots = {r.name: r for r in world.robots}
     for task in world.tasks:
-        if not inside([tuple(task.goal.translation)], world.bounds):
+        # The robot's whole body must fit at the goal, as the loader demands.
+        if not inside(robots[task.robot].shape.points(task.goal), world.bounds):
             raise WorldError(f"the goal of '{task.robot}' would fall outside")
     return world

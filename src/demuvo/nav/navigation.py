@@ -200,15 +200,16 @@ class Navigation:
         earlier = logging.root.manager.disable
         logging.disable(logging.CRITICAL)  # a preview does not give the run's warnings
         try:
-            for part in parts:
-                part.configure(sim.estimates[name].map)
+            try:
+                for part in parts:
+                    part.configure(sim.estimates[name].map)
+            except ValueError:  # a planner that needs a costmap the world turns off
+                return None
             truth = self._specs[name].control_pose == "truth"
             pose = sim.poses[name] if truth else sim.estimates[name].pose
             path = planner.plan(pose, tasks[0].goal)
             if len(path) and len(parts) > 1:
                 path = parts[1].smooth(path)
-        except ValueError:  # a planner that needs a costmap the world turns off
-            return None
         finally:
             logging.disable(earlier)
         return path

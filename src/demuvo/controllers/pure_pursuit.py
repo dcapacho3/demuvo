@@ -80,6 +80,10 @@ class PurePursuit:
         if abs(bearing) > self.turn_in_place_angle:
             return Twist(wz=self._turn(bearing))
         vx = min(self.speed, self.approach_gain * distance)
+        if x == 0.0 and y == 0.0:
+            # On the path's last point but short of the goal - no direction to
+            # steer, so stand still instead of dividing by zero.
+            return Twist()
         return Twist(vx=vx, wz=2.0 * vx * y / (x * x + y * y))
 
     def _target(self, path: np.ndarray) -> np.ndarray:

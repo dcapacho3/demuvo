@@ -242,7 +242,11 @@ def _parse_task(item: dict, index: int, bounds, robots: dict[str, RobotSpec]) ->
     stop = item.get("stop")
     if stop is not None and not isinstance(stop, bool):
         raise WorldError(f"{label}: 'stop' must be true or false")
-    wait = number(item, "wait", label) if "wait" in item else 0.0
+    wait = 0.0
+    if "wait" in item:
+        (wait,) = numbers([item["wait"]], 1, label, "wait")
+        if wait < 0:
+            raise WorldError(f"{label}: 'wait' must not be negative")
     return Task(name, goal, tolerance, stop, wait)
 
 

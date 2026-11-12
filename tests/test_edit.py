@@ -80,6 +80,12 @@ def test_free_pose_is_a_place_where_a_robot_fits(world):
     assert len(edit.add_robot(world, "r2", pose).robots) == 2
 
 
+def test_free_pose_works_beside_a_robot_named_like_its_probe(world):
+    """No robot name blocks the search for a free place."""
+    world = edit.add_robot(world, "probe 0", edit.free_pose(world))
+    assert edit.free_pose(world)
+
+
 def test_free_pose_says_so_when_the_world_is_full():
     """A one-metre world holds the starter robot and nothing else."""
     with pytest.raises(WorldError, match="no free place"):
@@ -215,6 +221,8 @@ def test_the_planner_settings_are_those_of_the_default_when_none_is_named(world)
     world = edit.set_part(world, "r1", "planner", None)
     world = edit.set_settings(world, "r1", "planner", {"spacing": 0.2})
     assert edit.settings_of_robot(world, "r1", "planner") == {"spacing": 0.2}
+    # The planner is pinned, so the settings survive a save and a load.
+    assert world.robots[0].planner == "demuvo.planners:StraightLine"
 
 
 @pytest.mark.parametrize(
@@ -330,6 +338,10 @@ def test_the_world_size_changes_if_everything_still_fits(world):
     goal = edit.set_goal(world, "r1", (9.0, 3.0, 0.0))
     with pytest.raises(WorldError, match="goal of 'r1'"):
         edit.set_size(goal, (8.0, 6.0))
+    edge = edit.set_goal(world, "r1", (8.9, 3.0, 0.0))
+    with pytest.raises(WorldError, match="goal of 'r1'"):
+        # The goal's centre fits, but the robot's body at it would not.
+        edit.set_size(edge, (9.0, 6.0))
 
 
 def test_the_seed_and_the_step_are_set_and_checked(world):
@@ -441,7 +453,7 @@ def test_goals_are_added_moved_set_and_removed_in_order(world):
             call()
 
 
-def test_costmap_settings_are_checked_by_kind_and_range(world, tmp_path):
+def test_costmap_settings_are_checked_by_kind_and_range(world, tmp_path, monkeypatch):
     """Numbers, switches, layers and a map file; a bad one is refused by name."""
     big = edit.set_costmap(world, "global", {"resolution": 0.1, "enabled": False})
     assert big.costmap.resolution == 0.1 and not big.costmap.enabled
@@ -474,6 +486,10 @@ def test_costmap_settings_are_checked_by_kind_and_range(world, tmp_path):
     assert edit.set_costmap(
         world, "global", {"source": str(path)}
     ).costmap.source == str(path)
+    # A relative path is pinned to a folder, as a loaded world's would be.
+    monkeypatch.chdir(tmp_path)
+    relative = edit.set_costmap(world, "global", {"source": "map.yaml"})
+    assert relative.costmap.source == str(path)
 
 
 def test_the_origin_moves_if_everything_still_fits(world):
