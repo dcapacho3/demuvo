@@ -25,8 +25,9 @@ class DiffDrive:
     The step is exact for a constant command, the robot follows a circular arc
     of radius v / w, or a straight line when w is zero.
 
-    Its wheels turn as the command says, with no slip. `encoders` gives the
-    wheel angles for a command and `from_encoders` goes back
+    Its wheels turn as the command says, with no slip. `encoders` gives each
+    wheel's angle increment over one step, and `from_encoders` gives back the
+    twist that increment came from.
 
     Attributes:
         max_v: largest forward speed in m/s, in either direction.

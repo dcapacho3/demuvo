@@ -29,9 +29,8 @@ class Encoders:
     """The wheel encoders of a model.
 
     Each step the model says how far its wheels turned for the command it
-    followed. The sensor then adds the errors of a real
-    encoder thus being a random scale error on each wheel's increment,
-    and the rounding to whole ticks.
+    followed. The sensor adds the two errors of a real encoder - a random
+    scale error on each wheel's increment, and the rounding to whole ticks.
     The rounding keeps the part of a tick it dropped and adds it to
     the next step, so the count stays within one tick of the true total.
 

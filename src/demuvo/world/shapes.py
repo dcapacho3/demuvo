@@ -33,7 +33,7 @@ from ..verify import (
     table,
     text,
 )
-from .decompose import convex_pieces
+from .decompose import _area2, _cross, convex_pieces
 
 Point = tuple[float, float]
 
@@ -87,11 +87,6 @@ def _vertices(value, minimum: int, label: str) -> tuple[Point, ...]:
     return points
 
 
-def _cross(o: Point, a: Point, b: Point) -> float:
-    """Twice the signed area of the triangle o, a, b."""
-    return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
-
-
 def _on(a: Point, b: Point, p: Point) -> bool:
     """True if p, which is on the line through a and b, is between them."""
     return min(a[0], b[0]) <= p[0] <= max(a[0], b[0]) and (
@@ -120,12 +115,7 @@ def _check_simple(vertices: tuple[Point, ...], label: str) -> None:
     n = len(vertices)
     if vertices[0] == vertices[-1]:
         raise WorldError(f"{label}: the first and last vertex are equal")
-    twice_area = sum(
-        vertices[i][0] * vertices[(i + 1) % n][1]
-        - vertices[(i + 1) % n][0] * vertices[i][1]
-        for i in range(n)
-    )
-    if twice_area == 0:
+    if _area2(list(vertices)) == 0:
         raise WorldError(f"{label}: the polygon has no area")
     for i in range(n):
         prev, here, after = vertices[i - 1], vertices[i], vertices[(i + 1) % n]
