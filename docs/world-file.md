@@ -32,6 +32,7 @@ name = "r1"
 model = "diff_drive"
 shape = { name = "circle", radius = 0.2 }     # or a box or a polygon
 pose = [1.0, 1.0, 0.0]    # where it starts: x, y, angle
+# params = { max_v = 0.8, max_w = 2.0 }       # optional: model values to replace
 planner = "demuvo.planners:StraightLine"      # optional; this is the default
 controller = "demuvo.controllers:PurePursuit" # optional; module:Class
 controller_params = { speed = 0.5, lookahead = 0.6 }   # optional
@@ -52,12 +53,16 @@ robot start and goal must lie inside the world. A robot's body is a `circle`, a 
 a `polygon`. Obstacle names are for people: two obstacles cannot share one.
 
 The robot model available now is `diff_drive`, a differential drive moved by a ROS-style
-`Twist`; more models are on the roadmap. A robot that would enter an obstacle, the border or another robot is pushed back
-out and slides along it, and the run counts a collision.
+`Twist`; more models are on the roadmap. Its `params` are `max_v` and `max_w` (the speed
+and turn-rate limits, 1.0 m/s and 1.0 rad/s), and `wheel_radius` and `track` (0.05 m and
+0.3 m), which the encoders read. A robot that would enter an obstacle, the border or
+another robot is pushed back out and slides along it, and the run counts a collision.
 
 Wheel encoders have a `noise` and `ticks_per_rev`. The `dead_reckoning` estimator adds
 the wheel increments to a pose, so its error grows as the robot drives. A robot uses it
-with `estimator = "dead_reckoning"`.
+with `estimator = "dead_reckoning"`. The third sensor, `perfect_pose`, reads the true
+pose and has no settings; the default `ground_truth` estimator adds it itself, so a
+world file never needs to name it.
 
 ## Tasks and planners
 

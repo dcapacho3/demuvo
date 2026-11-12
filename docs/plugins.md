@@ -11,7 +11,8 @@ examples/plugins; r2 uses A* and pure pursuit.](plugins.gif)
 PYTHONPATH=examples/plugins demuvo examples/worlds/plugins.toml
 ```
 
-`PYTHONPATH` puts the folder with your files where Python looks for modules. The window
+`PYTHONPATH` puts the folder with your files where Python looks for modules; `--check`
+needs it too, since checking a file loads the classes it names. The window
 opens the race; press Space. With the numbers from this world, r1 reaches its goal at
 18.86 s after 9.00 m and r2 at 16.01 s after 8.62 m, with no collision.
 
@@ -49,8 +50,9 @@ the same shape.
 **A controller** has `command(obs)` and returns a `Twist`. It runs every `control_period`
 seconds, and its last command stays in force between runs. It sees only the observation:
 `obs.pose`, `obs.path`, `obs.goal`, `obs.goal_tolerance`, `obs.dt`, `obs.scans` (the
-latest scan of each lidar) and `obs.costmap` (the local costmap). It does not see the
-simulation.
+latest scan of each lidar), `obs.costmap` (the local costmap) and `obs.path_changes`
+(a count that grows when the path is replaced, so a controller that keeps state knows
+to start over). It does not see the simulation.
 
 A planner that finds no way returns an empty path. The robot then stays still, and the log
 says so.
