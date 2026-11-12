@@ -7,7 +7,7 @@ import pytest
 
 from demuvo.gui import look
 from demuvo.gui import shell as module
-from demuvo.gui.inputs import MenuItem, NumberSpec, Popup, Spin
+from demuvo.gui.inputs import MenuItem, NameBox, NumberSpec, Popup, Spin
 from demuvo.gui.keys import CTRL, KEY, SHIFT
 from demuvo.gui.raster import Canvas
 from demuvo.gui.shell import Animator, Damage, Shell
@@ -402,6 +402,28 @@ def test_a_click_on_a_menu_line_runs_it_and_closes_the_menu(toy):
     toy.mouse_press(Event(x, y))
     toy.mouse_release(Event(x, y))
     assert toy.program.commands == ["File"] and toy.input.popup is None
+
+
+def test_a_menu_line_does_not_run_when_the_release_is_off_the_menu(toy):
+    """Press a line, drag off the menu, release: nothing runs, the menu stays."""
+    _, left, width = toy.layout.chrome.menubar.places[0]
+    toy.mouse_press(Event(left + width / 2, 10))
+    popup = toy.input.popup
+    x, y = popup.x + 20, popup.y + 6 + 16
+    toy.mouse_press(Event(x, y))
+    toy.mouse_release(Event(popup.x + popup.width + 40, y))
+    assert toy.program.commands == [] and toy.input.popup is popup
+
+
+def test_a_second_click_in_a_popup_field_places_the_caret(toy):
+    """The first click selects everything; the next puts the caret there."""
+    box = NameBox("corridor", lambda text: None, (300, 300, 160, 32))
+    toy.input.open_popup(box)
+    assert box.field.selected
+    at = Event(box.field.x + 30, box.field.y + 10)
+    toy.mouse_press(at)
+    toy.mouse_release(at)
+    assert box.field.editing and not box.field.selected
 
 
 def test_a_click_on_the_bar_outside_the_titles_opens_nothing(toy):

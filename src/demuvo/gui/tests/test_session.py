@@ -93,6 +93,7 @@ def test_nothing_can_be_edited_once_a_run_has_begun_or_in_a_benchmark(sandbox):
     sandbox.step_once()
     for call in (
         sandbox.add_robot,
+        lambda: sandbox.move_robot("r1", (2, 1, 0)),
         lambda: sandbox.set_goal("r1", (8, 1, 0)),
         lambda: sandbox.choose("r1", "planner", "A*"),
         lambda: sandbox.set_settings("r1", "controller", {"lookahead": 0.9}),

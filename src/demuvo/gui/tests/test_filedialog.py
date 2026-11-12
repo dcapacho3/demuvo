@@ -175,6 +175,16 @@ def test_clicks_reach_the_boxes_and_buttons_and_the_pointer_lights_a_row(tree):
     assert dialog.view.selected is None
 
 
+def test_the_wheel_over_a_control_leaves_the_list_alone(tmp_path):
+    """The wheel over the name box or a button is not a scroll of the list."""
+    for k in range(30):
+        (tmp_path / f"w{k:02d}.toml").write_text("x")
+    dialog, _, _ = make(tmp_path)
+    box = dialog.name_field
+    assert dialog.on_scroll(Event(box.x + 5, box.y + 5, dy=-1)) is False
+    assert dialog.view.scroll == 0
+
+
 def test_the_wheel_scrolls_a_long_list_and_stops_at_the_ends(tmp_path):
     """Thirty files do not fit; the wheel moves the first row shown."""
     for k in range(30):

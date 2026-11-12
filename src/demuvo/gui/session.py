@@ -206,6 +206,8 @@ class Session:
 
     def move_robot(self, name: str, pose: tuple[float, float, float]) -> str | None:
         """Move a robot to a pose, held inside the world's edge."""
+        if (why := self.guard()) is not None:
+            return why
         x0, y0, x1, y1 = self.world.bounds
         x = min(max(pose[0], x0 + EDGE), x1 - EDGE)
         y = min(max(pose[1], y0 + EDGE), y1 - EDGE)

@@ -80,6 +80,8 @@ class FileDialog(Popup):
         place: (x, y, width, height) of the card.
     """
 
+    takes_focus_on_press = True
+
     def __init__(
         self,
         ask: Browse,
@@ -112,6 +114,7 @@ class FileDialog(Popup):
             self.view.folders, self.view.files = list_folder(folder, self.ask.suffix)
         except OSError as error:
             self.note = f"Cannot read that folder: {error.strerror or error}"
+            self.invalidate()
             return
         self.folder = folder
         self.view.scroll, self.view.selected = 0, None
@@ -315,7 +318,10 @@ class FileDialog(Popup):
                 button.on_hover(inside)
 
     def on_scroll(self, event: Event) -> bool:
-        """Scroll the list with the wheel."""
+        """Scroll the list with the wheel, when the pointer is over it."""
+        controls = (self.path_field, self.name_field, *self.buttons.values())
+        if any(child.contains(event.x, event.y) for child in controls):
+            return False
         most = max(len(self._entries()) - self._visible_rows(), 0)
         self.view.scroll = min(
             max(self.view.scroll + (-1 if event.dy > 0 else 1), 0), most

@@ -493,6 +493,8 @@ class Popup(Widget):
 
     def on_release(self, event: Event) -> None:
         """Close the popup and run the action of the line that was clicked."""
+        if not self.contains(event.x, event.y):
+            return
         row = self.row_at(event.y)
         if row >= 0 and self.items[row].enabled:
             action = self.items[row].action
@@ -509,6 +511,8 @@ class NameBox(Popup):
         on_submit: called with the new text, after the box closes.
         rect: (x, y, width, height) of the box.
     """
+
+    takes_focus_on_press = True
 
     def __init__(self, text: str, on_submit, rect: tuple[float, float, float, float]):
         """Make the box."""
