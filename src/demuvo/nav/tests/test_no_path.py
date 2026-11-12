@@ -35,3 +35,23 @@ def test_a_goal_inside_an_obstacle_leaves_the_robot_still_and_the_run_going(
         "robot 'r1': no path for task 1, from (1.00, 1.00) to (4.00, 4.50); "
         "it stays still"
     )
+
+
+def test_a_path_that_ends_short_of_the_goal_names_the_robot_and_task(tmp_path, caplog):
+    """The planner moves a blocked goal to a free cell; the navigation says who."""
+    text = DEMO.read_text()
+    text = text.replace(
+        'planner = "demuvo.planners:StraightLine"',
+        'planner = "demuvo.planners:AStar"\nplanner_params = { tolerance = 1.0 }',
+    )
+    text = text.replace("goal = [9.0, 5.0, 0.0]", "goal = [4.0, 4.5, 0.0]")
+    path = tmp_path / "w.toml"
+    path.write_text(text)
+    world = load_world(path)
+    sim = Simulation(world, dt=0.05)
+    commands = Navigation(world)
+    with caplog.at_level(logging.WARNING):
+        commands(sim)
+    assert any(
+        m.startswith("robot 'r1': the path for task 1 ends") for m in caplog.messages
+    )

@@ -250,8 +250,10 @@ class Navigation:
                     path = planner.plan(pose, task.goal)
                     if len(path) == 0:
                         _warn_no_path(name, self.judge.current[name], pose, task.goal)
-                    elif smoother:
-                        path = smoother.smooth(path)
+                    else:
+                        _warn_short_path(name, self.judge.current[name], path, task)
+                        if smoother:
+                            path = smoother.smooth(path)
                     self.paths[name] = path
                 self._path_changes[name] += 1
             path = self.paths[name]
@@ -292,3 +294,18 @@ def _warn_no_path(name: str, index: int, start: Transform2D, goal: Transform2D) 
         *start.xyt[:2],
         *goal.xyt[:2],
     )
+
+
+def _warn_short_path(name: str, index: int, path: np.ndarray, task: Task) -> None:
+    """Say that a robot's path ends too far from its goal to count as reached."""
+    gap = math.dist(path[-1][:2], task.goal.xyt[:2])
+    reach = task.goal_tolerance[0]
+    if gap > reach:
+        LOGGER.warning(
+            "robot '%s': the path for task %d ends %.2f m from the goal, "
+            "more than its tolerance of %.2f m",
+            name,
+            index + 1,
+            gap,
+            reach,
+        )
