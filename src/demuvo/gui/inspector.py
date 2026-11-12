@@ -13,7 +13,7 @@ import math
 
 from .. import edit, options
 from . import look
-from .inputs import Combo, NumberSpec, Spin
+from .inputs import NumberSpec, Spin
 from .panels import FormRow, Note, TitleRow
 from .robotform import RobotForm
 from .session import Session
@@ -98,12 +98,14 @@ class Inspector:
         forms.body(spec)
         col.add(Section("Robot"))
         for field, items, current in self._choices(spec):
-            box = Combo(
-                items, current, on_change=lambda text, f=field: self._chosen(f, text)
+            forms.choice(
+                field,
+                field,
+                items,
+                current,
+                lambda text, f=field: self._chosen(f, text),
             )
-            self.fields[field] = box
-            col.add(FormRow(field, box))
-        self._settings(spec)
+        self._settings(spec, forms)
         forms.sensing(spec)
 
     def _choices(self, spec):
@@ -130,7 +132,7 @@ class Inspector:
             ),
         )
 
-    def _settings(self, spec) -> None:
+    def _settings(self, spec, forms) -> None:
         """A section of fields for each part with settings, then the control period."""
         col = self.column
         parts = (
@@ -151,12 +153,12 @@ class Inspector:
             if not known:
                 continue
             col.add(Section(f"{part} settings"))
-            fields = {}
+            self.settings[part] = {}
             for setting in known:
                 value = current.get(setting.name, setting.default)
-                fields[setting.name] = self._setting_field(part, setting, value)
-                col.add(FormRow(setting.name.replace("_", " "), fields[setting.name]))
-            self.settings[part] = fields
+                key = f"{part}.{setting.name}"
+                self._setting_field(forms, part, key, setting, value)
+                self.settings[part][setting.name] = self.fields.pop(key)
         col.add(Section("Control timing"))
         period = Spin(
             spec.control_period,
@@ -166,21 +168,22 @@ class Inspector:
         self.fields["period"] = period
         col.add(FormRow("control period", period))
 
-    def _setting_field(self, part: str, setting, value) -> Widget:
-        """A field for one setting: a switch, a whole number or a number."""
+    def _setting_field(self, forms, part: str, key: str, setting, value) -> None:
+        """A row for one setting: a switch, a whole number or a number."""
+        label = setting.name.replace("_", " ")
 
-        def changed(_value) -> None:
+        def changed(*_args) -> None:
             self._settings_edited(part)
 
         if setting.kind is bool:
-            return Checkbox("on", bool(value), on_change=changed)
-        if setting.kind is int:
+            forms.switch(key, label, bool(value), changed)
+        elif setting.kind is int:
             spec = NumberSpec(0, SETTING_MAX, 1, 0, "", True)
-            return Spin(int(value), spec, on_change=changed)
-        step = max(0.01, round(abs(float(setting.default)) / 10, 3))
-        return Spin(
-            float(value), NumberSpec(0.0, SETTING_MAX, step, 3), on_change=changed
-        )
+            forms.number(key, label, int(value), spec, changed)
+        else:
+            step = max(0.01, round(abs(float(setting.default)) / 10, 3))
+            spec = NumberSpec(0.0, SETTING_MAX, step, 3)
+            forms.number(key, label, float(value), spec, changed)
 
     def lock(self) -> None:
         """Enable the fields while editing is allowed, and say why when it is not."""
@@ -240,22 +243,17 @@ class Inspector:
 
     def _chosen(self, field: str, text: str) -> None:
         """A choice changed; the part's settings are shown afresh."""
-        if (
-            self.name
-            and self.session.editable
-            and self._done(self.session.choose(self.name, field, text))
-        ):
+        if self.name and self._done(self.session.choose(self.name, field, text)):
             self.show(self.name)
 
     def _settings_edited(self, part: str) -> None:
         """A setting of a part changed."""
-        if not (self.name and self.session.editable):
-            return
         values = {
             key: (w.checked if isinstance(w, Checkbox) else w.value)
             for key, w in self.settings[part].items()
         }
-        self._done(self.session.set_settings(self.name, part, values))
+        if self.name:
+            self._done(self.session.set_settings(self.name, part, values))
 
     def _period_edited(self, seconds: float) -> None:
         """The control period changed."""
