@@ -176,6 +176,35 @@ def test_the_wavefront_goes_round_a_wall_and_skips_blocked_seeds():
     assert np.isinf(dwb.wavefront(free, (np.array([1]), np.array([2])))).all()
 
 
+def test_a_path_of_one_point_samples_as_that_point():
+    """A degenerate path has no polyline to walk; its point comes back alone."""
+    path = np.array([[1.0, 2.0, 0.5]])
+    points = dwb.along_path(path, 0.025)
+    assert points.shape == (1, 2)
+    assert points[0] == pytest.approx([1.0, 2.0])
+    points[0] = 0.0  # a copy: the path is left untouched
+    assert path[0, 0] == 1.0
+
+
+def test_no_usable_path_point_leaves_infinite_path_to_the_goal():
+    """With every path point blocked or outside, the goal critics see inf."""
+    grid = window()
+    free = ~dwb.grow(grid.data >= dwb.INSCRIBED)
+    points = np.array([[3.0, 3.0], [3.1, 3.0]])
+    maps = dwb._Maps(
+        grid=grid,
+        free=free,
+        to_path=np.zeros(free.shape),
+        to_goal=np.zeros(free.shape),
+        points=points,
+        arc=np.array([0.0, 0.1]),
+        inside=np.array([True, True]),
+        blocked=np.array([True, True]),
+    )
+    left = dwb.left_along(points, maps, usable=np.zeros(2, bool))
+    assert np.isinf(left).all()
+
+
 def test_blocked_cells_grow_by_one_cell_all_round():
     """The footprint margin: a lone blocked cell becomes a block of nine."""
     blocked = np.zeros((5, 5), bool)
