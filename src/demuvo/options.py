@@ -38,6 +38,7 @@ _SMOOTHERS = {
 }
 _CONTROLLERS = {
     "Pure pursuit": "demuvo.controllers:PurePursuit",
+    "DWB": "demuvo.controllers:DWB",
     NO_CONTROLLER: None,
 }
 

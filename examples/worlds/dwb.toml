@@ -1,0 +1,34 @@
+version = 1
+
+# The planner draws a straight line through two obstacles, and the robot's only way to
+# know they are there is its lidar. It builds its local costmap from the scans, and the
+# DWB controller steers round what is in it, then comes back to the line.
+
+[world]
+size = [10.0, 6.0]        # metres
+seed = 3
+
+[[obstacle]]
+pose = [3.5, 3.0, 0.0]
+shape = { name = "box", size = [0.6, 1.0] }
+
+[[obstacle]]
+pose = [6.5, 2.85, 0.0]
+shape = { name = "circle", radius = 0.4 }
+
+[[robot]]
+name = "r1"
+model = "diff_drive"
+shape = { name = "circle", radius = 0.2 }
+pose = [1.0, 3.0, 0.0]
+planner = "demuvo.planners:StraightLine"     # straight through both obstacles
+controller = "demuvo.controllers:DWB"
+# Speeds it samples, and how far ahead each trajectory is rolled out. A rollout and
+# its point ahead, max_vel_x * sim_time + forward_point_distance, should stay inside
+# the local costmap's window, 1.5 m each way by default.
+controller_params = { max_vel_x = 0.5, max_vel_theta = 1.0, sim_time = 1.0 }
+sensors = { lidar = { beams = 180, max_range = 4.0, noise = 0.01 } }
+
+[[task]]
+robot = "r1"
+goal = [9.0, 3.0, 0.0]

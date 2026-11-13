@@ -1,6 +1,6 @@
 """A small, deterministic 2D world for robots."""
 
-from .controllers import Controller, Observation, PurePursuit
+from .controllers import DWB, Controller, Observation, PurePursuit
 from .costmap import Costmap
 from .models import MODELS, DiffDrive, Twist
 from .nav import Navigation
@@ -12,6 +12,7 @@ from .world import Obstacle, RobotSpec, Task, World, WorldError, load_world
 from .world.shapes import SHAPES, Box, Circle, LineString, Polygon
 
 __all__ = [
+    "DWB",
     "MODELS",
     "Navigation",
     "SHAPES",

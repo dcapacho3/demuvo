@@ -116,6 +116,47 @@ going round two boxes: 8-neighbour A* with a smoother, and 4-neighbour A* withou
 
 ![Two robots go round two boxes. The costmap of the first is drawn under it.](astar.gif)
 
+## Controllers
+
+The controller turns the path into a command at each run. `PurePursuit` steers toward a
+point of the path `lookahead` metres ahead and does not look at the lidar. `DWB`
+(`demuvo.controllers:DWB`), the Dynamic Window Approach as Nav2's DWB controller does it,
+is a local planner: it steers round what the robot's lidar sees, even what the planner's
+map does not show.
+
+```toml
+controller = "demuvo.controllers:DWB"
+controller_params = { max_vel_x = 0.5, max_vel_theta = 1.0, sim_time = 1.0 }
+sensors = { lidar = { beams = 180, max_range = 4.0 } }
+```
+
+At each run it takes the speeds and turn rates the robot can reach from its last command
+within `acc_lim_x` and `acc_lim_theta`, `vx_samples` by `vtheta_samples` of them, and
+rolls each pair forward for `sim_time` seconds, a point every `time_granularity`. It
+scores each trajectory on the robot's local costmap, the one built from its scans:
+
+- a trajectory that comes within a cell of a cost of 253 or more is thrown out, and the
+  others pay `obstacle_scale` times the mean cost they cross;
+- `path_dist_scale` per metre from the trajectory's end to the path, and
+  `goal_dist_scale` per metre of path left from there;
+- `path_align_scale` and `goal_align_scale`: the same, for a point
+  `forward_point_distance` ahead of the end, so the robot faces along the path. They
+  are left out near the goal.
+
+Distances to the path are counted through free cells, and cost more near obstacles by
+`cost_weight`, as in `AStar`. While the path ahead runs through something the lidar
+sees, the robot leaves it: it heads, through free cells, for the last free point of the
+path in the local costmap, then follows the path again. At the goal it turns to the
+goal's angle (`rotate_to_goal`, `rotate_speed`, `turn_gain`). `min_vel_x` below 0 lets
+it back up. A trajectory that leaves the local costmap is thrown out, so the window
+should hold `max_vel_x * sim_time + forward_point_distance` each way: 0.825 m with the
+defaults, inside the default 1.5 m. A robot with no lidar follows its path with no
+obstacle check. If no trajectory that moves is free, the robot stops until one is, and
+the log says so once. It has no recovery behaviours and does not ask for a new path.
+
+`examples/worlds/dwb.toml` gives a robot a straight-line path through a box and a
+circle. Only its lidar shows them, and DWB takes it round both.
+
 To use your own, write a class and name it in the file; see [your own
 algorithms](plugins.md).
 
@@ -189,7 +230,7 @@ name. A `Scan` has the `time`, the beam `angles`, the `ranges`, the `min_range` 
 the world for a robot at `pose`.
 
 A robot with a lidar also builds a local costmap, a window round itself that it fills
-from its scans. A controller gets it as `obs.costmap`. Each update clears the cells
+from its scans. A controller gets it as `obs.costmap`; `DWB` steers by it. Each update clears the cells
 along every beam up to its hit, or up to `raytrace_max_range` if it hit nothing, then
 marks each hit within `obstacle_max_range`. The window follows the robot, a mark stays
 in its cell until a beam clears it, and the hits are placed with the robot's estimated
