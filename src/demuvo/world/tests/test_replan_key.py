@@ -46,3 +46,10 @@ def test_a_wrong_value_is_refused_by_robot_and_key(tmp_path, line, message):
     """The message names the robot and the setting."""
     with pytest.raises(WorldError, match=message):
         replan_of(tmp_path, line)
+
+
+@pytest.mark.parametrize("field", ["timer", "blocked"])
+def test_a_spec_built_in_python_checks_its_switches_itself(field):
+    """A switch that is not true or false is refused by the spec, not only the file."""
+    with pytest.raises(ValueError, match=f"{field} must be true or false"):
+        ReplanSpec(**{field: 1})
