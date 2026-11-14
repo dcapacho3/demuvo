@@ -5,11 +5,14 @@ from __future__ import annotations
 import logging
 import math
 import warnings
+from contextlib import contextmanager
+from dataclasses import dataclass
 
 import numpy as np
 from robomath import Transform2D
 
 from ..controllers import Controller, Observation
+from ..costmap import Costmap, overlay
 from ..evaluation.judge import Judge
 from ..models import Twist
 from ..planners import Planner
@@ -17,9 +20,27 @@ from ..plugins import load_class
 from ..sim.simulation import Simulation
 from ..smoothers import Smoother
 from ..world import DEFAULT_GOAL_TOLERANCE, Task, World, WorldError
+from .replan import Replanner, Sight
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_PLANNER = "demuvo.planners:StraightLine"
+
+
+@dataclass
+class _Plan:
+    """What the navigation remembers about the path a robot holds.
+
+    Attributes:
+        task: the index of the task the path is for.
+        time: when the path was planned, or last tried.
+        outside: True for a path from `set_path`, which the planner leaves alone.
+        failed: True if the last plan found no path.
+    """
+
+    task: int
+    time: float
+    outside: bool = False
+    failed: bool = False
 
 
 class Navigation:
@@ -39,6 +60,18 @@ class Navigation:
     `set_path` gives a robot a path made elsewhere, such as a Nav2 plan, and the
     planner and smoother then stay out of it.
 
+    A robot with a `replan` spec also plans again while it drives, when the
+    `Replanner` gives a reason: the path ahead is blocked in its local costmap,
+    it is off the path, it stands still, or a timer ran out. Such a robot plans
+    on the global costmap with its local costmap laid over it, so the planner
+    goes round what the lidar sees, and its planner and smoother are configured
+    again with the new costmap before each plan. The plan is made at a
+    controller run, from the pose the controller sees, and replaces the path
+    before the controller runs, so the controller follows the new path from
+    that run on and `Observation.path_changes` grows by one. A plan that finds
+    no path leaves the path as it is, says so, and is tried again every period,
+    quietly, until one is found.
+
     A robot's controller runs once every `control_period` seconds, as the Nav2
     controller does, and its last command stays in force between runs. Run k
     falls on step ceil(k * period / dt), counted from whole numbers so the
@@ -51,6 +84,7 @@ class Navigation:
             of the world file.
         paths: the path of each robot that has one, by name, shape (N, 3).
         judge: which task each robot is on and which are done; see `Judge`.
+        replanner: decides when a robot plans again; see `Replanner`.
     """
 
     def __init__(self, world: World) -> None:
@@ -67,10 +101,11 @@ class Navigation:
         self.paths: dict[str, np.ndarray] = {}
         self._specs = {r.name: r for r in world.robots}
         self.judge = Judge(self.tasks)
-        self._planned: dict[str, int] = {}
+        self.replanner = Replanner({r.name: r.replan for r in world.robots})
+        self._plans: dict[str, _Plan] = {}
         self._path_changes = dict.fromkeys(self.tasks, 0)
         self._planners: dict[str, Planner] = {}
-        self._configured: set[str] = set()
+        self._maps: dict[str, Costmap | None] = {}  # what each planner was given
         self._smoothers: dict[str, Smoother] = {}
         self._controllers: dict[str, Controller] = {}
         self._periods = {r.name: r.control_period for r in world.robots}
@@ -145,11 +180,14 @@ class Navigation:
         self.tasks[name] = [] if goal is None else [Task(name, goal, goal_tolerance)]
         self.judge.reset(name)
         self.paths.pop(name, None)
+        self._plans.pop(name, None)
 
     def set_path(self, name: str, path) -> None:
         """Give a robot a path made elsewhere, as (x, y, angle) rows.
 
-        If the robot has no task, the last pose of the path is its goal.
+        If the robot has no task, the last pose of the path is its goal. The
+        robot does not plan again while it follows this path; its next task,
+        or `set_goal`, brings its planner back.
 
         Raises:
             ValueError: if there is no robot of that name, or the path is not
@@ -162,6 +200,7 @@ class Navigation:
         if not np.isfinite(array).all():
             raise ValueError("path must hold finite numbers")
         self.paths[name] = array
+        self._plans[name] = _Plan(self.judge.current[name], 0.0, outside=True)
         self._path_changes[name] += 1
 
     def _check(self, name: str) -> None:
@@ -197,9 +236,7 @@ class Navigation:
                     ("configure", "smooth"),
                 )
             )
-        earlier = logging.root.manager.disable
-        logging.disable(logging.CRITICAL)  # a preview does not give the run's warnings
-        try:
+        with _quiet():  # a preview does not give the run's warnings
             try:
                 for part in parts:
                     part.configure(sim.estimates[name].map)
@@ -210,8 +247,6 @@ class Navigation:
             path = planner.plan(pose, tasks[0].goal)
             if len(path) and len(parts) > 1:
                 path = parts[1].smooth(path)
-        finally:
-            logging.disable(earlier)
         return path
 
     def _due(self, name: str, dt: float) -> int:
@@ -233,29 +268,7 @@ class Navigation:
                 else sim.estimates[name].pose
             )
             task = self.judge.task(name)
-            if self._planned.get(name, 0) != self.judge.current[name]:
-                self.paths.pop(name, None)  # the robot moved on to its next task
-            if name not in self.paths:
-                self.paths[name] = np.empty((0, 3))
-                self._planned[name] = self.judge.current[name]
-                if task is not None:
-                    planner = self._planners[name]
-                    smoother = self._smoothers.get(name)
-                    if name not in self._configured:
-                        costmap = sim.estimates[name].map
-                        planner.configure(costmap)
-                        if smoother:
-                            smoother.configure(costmap)
-                        self._configured.add(name)
-                    path = planner.plan(pose, task.goal)
-                    if len(path) == 0:
-                        _warn_no_path(name, self.judge.current[name], pose, task.goal)
-                    else:
-                        _warn_short_path(name, self.judge.current[name], path, task)
-                        if smoother:
-                            path = smoother.smooth(path)
-                    self.paths[name] = path
-                self._path_changes[name] += 1
+            self._keep_path(name, sim, pose, task)
             path = self.paths[name]
             goal = task.goal if task else None
             if goal is None and len(path) > 0:
@@ -283,16 +296,136 @@ class Navigation:
             self._last_run[name] = sim.steps
         return commands
 
+    def _keep_path(
+        self, name: str, sim: Simulation, pose: Transform2D, task: Task | None
+    ) -> None:
+        """Give the robot a path for its task, and plan again when there is a reason."""
+        current = self.judge.current[name]
+        plan = self._plans.get(name)
+        if plan is not None and plan.task != current:
+            self.paths.pop(name, None)  # the robot moved on to its next task
+            plan = None
+        if plan is None:
+            plan = self._plans[name] = _Plan(current, sim.time)
+            self.paths[name] = np.empty((0, 3))
+            if task is None or not self._plan(name, sim, pose, task, plan, None):
+                self._path_changes[name] += 1  # the empty path is a new path too
+        elif task is not None and not plan.outside:
+            sight = Sight(
+                time=sim.time,
+                pose=pose,
+                path=self.paths[name],
+                task=task,
+                planned_at=plan.time,
+                failed=plan.failed,
+                velocity=sim.velocity[name],
+                costmap=sim.robots[name].local_costmap,
+            )
+            reason = self.replanner.reason(name, sight)
+            if reason is not None:
+                self._plan(name, sim, pose, task, plan, reason)
 
-def _warn_no_path(name: str, index: int, start: Transform2D, goal: Transform2D) -> None:
-    """Say that a robot's planner found no path, and that the robot stays still."""
+    def _plan(
+        self,
+        name: str,
+        sim: Simulation,
+        pose: Transform2D,
+        task: Task,
+        plan: _Plan,
+        reason: str | None,
+    ) -> bool:
+        """Plan from the pose to the task's goal and hand the path to the robot.
+
+        `reason` is None for the first plan of a task. A plan that finds nothing
+        leaves the path the robot has, and says so unless the one before failed
+        too. A path replaces the old one whole, and `path_changes` grows, so a
+        controller that keeps state about the path starts over.
+
+        Returns:
+            True if a path was handed over.
+        """
+        planner, smoother = self._planners[name], self._smoothers.get(name)
+        self._configure(name, self._planning_map(name, sim))
+        index = self.judge.current[name]
+        with _quiet(plan.failed):  # a retry says nothing new
+            path = planner.plan(pose, task.goal)
+        plan.time = sim.time
+        if len(path) == 0:
+            if reason is None:
+                _warn_no_path(name, index, pose, task.goal, self.replanner.specs[name])
+            elif not plan.failed:
+                LOGGER.warning(
+                    "robot '%s': no new path for task %d, though %s; it keeps the "
+                    "path it has and tries again",
+                    name,
+                    index + 1,
+                    reason,
+                )
+            plan.failed = True
+            return False
+        if reason is None or plan.failed:
+            _warn_short_path(name, index, path, task)
+        if smoother:
+            path = smoother.smooth(path)
+        if plan.failed:
+            LOGGER.warning("robot '%s': found a path for task %d", name, index + 1)
+        elif reason is not None:
+            LOGGER.info(
+                "robot '%s': planned task %d again: %s", name, index + 1, reason
+            )
+        plan.failed = False
+        self.paths[name] = path
+        self._path_changes[name] += 1
+        self.replanner.forget(name)
+        return True
+
+    def _planning_map(self, name: str, sim: Simulation) -> Costmap | None:
+        """The costmap the robot plans on.
+
+        The global costmap, with the local costmap laid over it for a robot that
+        replans, so what the lidar sees is in the plan.
+        """
+        base = sim.estimates[name].map
+        if self.replanner.specs[name] is None:
+            return base
+        return overlay(base, sim.robots[name].local_costmap)
+
+    def _configure(self, name: str, costmap: Costmap | None) -> None:
+        """Give the planner and smoother the costmap, unless they have it already."""
+        if name in self._maps and self._maps[name] is costmap:
+            return
+        self._planners[name].configure(costmap)
+        if name in self._smoothers:
+            self._smoothers[name].configure(costmap)
+        self._maps[name] = costmap
+
+
+@contextmanager
+def _quiet(enabled: bool = True):
+    """Silence the log inside the block, if `enabled`."""
+    if not enabled:
+        yield
+        return
+    earlier = logging.root.manager.disable
+    logging.disable(logging.CRITICAL)
+    try:
+        yield
+    finally:
+        logging.disable(earlier)
+
+
+def _warn_no_path(name: str, index: int, start: Transform2D, goal: Transform2D, replan):
+    """Say that a robot's planner found no path, and what the robot does now."""
+    then = "it stays still"
+    if replan is not None:
+        then = f"it stays still and tries again every {replan.period:g} s"
     LOGGER.warning(
-        "robot '%s': no path for task %d, from (%.2f, %.2f) to (%.2f, %.2f); "
-        "it stays still",
+        "robot '%s': no path for task %d, from (%.2f, %.2f) to (%.2f, %.2f); %s",
         name,
         index + 1,
         *start.xyt[:2],
         *goal.xyt[:2],
+        then,
     )
 
 

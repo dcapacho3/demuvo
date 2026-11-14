@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from robomath import Transform2D
 
-from ..plugins import check_positive
+from ..plugins import check_not_negative, check_positive
 from .shapes import Shape
 
 DEFAULT_GOAL_TOLERANCE = (0.1, 0.1)
@@ -28,6 +28,45 @@ class Obstacle:
     pose: Transform2D
     shape: Shape
     name: str = ""
+
+
+@dataclass(frozen=True)
+class ReplanSpec:
+    """When a robot plans again while it drives; see `Navigation`.
+
+    Every trigger is looked at when the robot's controller runs. A robot with
+    this spec also plans on what it sees: its local costmap, if it has one, is
+    laid over the global costmap before each plan.
+
+    Attributes:
+        period: the least seconds between two plans. A trigger that holds
+            sooner waits, and a robot whose planner found no path tries again
+            every `period`.
+        timer: plan again every `period` even when nothing else asks, as the
+            Nav2 behaviour tree does at 1 Hz.
+        blocked: plan again when the path ahead of the robot crosses a cell of
+            its local costmap where the robot's centre cannot be, cost 253 or
+            more: the lidar sees something on the path that the map did not show.
+        off_path: metres from the path beyond which it plans again, so a robot
+            that was steered round an obstacle gets a path from where it is;
+            0 for never.
+        stuck: seconds the robot stands still, short of its goal, after which
+            it plans again; 0 for never.
+    """
+
+    period: float = 1.0
+    timer: bool = False
+    blocked: bool = True
+    off_path: float = 0.5
+    stuck: float = 2.0
+
+    def __post_init__(self) -> None:
+        """Check the settings."""
+        check_positive(self, "period")
+        check_not_negative(self, "off_path", "stuck")
+        for name in ("timer", "blocked"):
+            if not isinstance(getattr(self, name), bool):
+                raise ValueError(f"{name} must be true or false")
 
 
 @dataclass(frozen=True)
@@ -60,6 +99,8 @@ class RobotSpec:
         smoother: "module:Class" of the smoother that improves the planner's
             path, or None for none.
         smoother_params: keyword arguments for the smoother class.
+        replan: when the robot plans again while it drives, or None to plan
+            once for each task.
     """
 
     name: str
@@ -77,6 +118,7 @@ class RobotSpec:
     control_pose: str = "estimate"
     smoother: str | None = None
     smoother_params: dict = field(default_factory=dict)
+    replan: ReplanSpec | None = None
 
 
 @dataclass(frozen=True)

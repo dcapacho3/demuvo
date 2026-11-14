@@ -15,6 +15,7 @@ from .grid import (
     Costmap,
 )
 from .local import LocalCostmap
+from .overlay import overlay
 
 __all__ = [
     "FREE",
@@ -26,4 +27,5 @@ __all__ = [
     "LocalCostmap",
     "build_costmaps",
     "inscribed_radius",
+    "overlay",
 ]

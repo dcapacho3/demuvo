@@ -31,6 +31,7 @@ from .spec import (
     CostmapSpec,
     LocalCostmapSpec,
     Obstacle,
+    ReplanSpec,
     RobotSpec,
     Task,
     World,
@@ -171,6 +172,7 @@ def _parse_robot(item: dict, index: int, bounds, names: set[str]) -> RobotSpec:
             "estimator",
             "sensors",
             "control_pose",
+            "replan",
         },
         label,
     )
@@ -222,7 +224,38 @@ def _parse_robot(item: dict, index: int, bounds, names: set[str]) -> RobotSpec:
         control_pose,
         _plugin(item, "smoother", label),
         _plugin_params(item, "smoother_params", "smoother", label),
+        _parse_replan(item.get("replan", False), label),
     )
+
+
+REPLAN_KEYS = {"period", "timer", "blocked", "off_path", "stuck"}
+
+
+def _parse_replan(value, label: str) -> ReplanSpec | None:
+    """The `replan` key of a robot: true for the defaults, false for none, or a table.
+
+    Raises:
+        WorldError: if it is anything else, or a setting is unknown, of the
+            wrong kind or out of range.
+    """
+    if isinstance(value, bool):
+        return ReplanSpec() if value else None
+    where = f"{label}.replan"
+    if not isinstance(value, dict):
+        raise WorldError(f"{label}: 'replan' must be true, false or a table")
+    check_keys(value, REPLAN_KEYS, where)
+    settings = {}
+    for key, given in value.items():
+        if key in ("timer", "blocked"):
+            if not isinstance(given, bool):
+                raise WorldError(f"{where}: '{key}' must be true or false")
+            settings[key] = given
+        else:
+            (settings[key],) = numbers([given], 1, where, key)
+    try:
+        return ReplanSpec(**settings)
+    except ValueError as error:
+        raise WorldError(f"{where}: {error}") from error
 
 
 def _parse_task(item: dict, index: int, bounds, robots: dict[str, RobotSpec]) -> Task:

@@ -629,3 +629,20 @@ def test_an_obstacle_name_is_set_cleared_kept_by_edits_and_saved(world, tmp_path
     save_world(named, path)
     back = load_world(path)
     assert [o.name for o in back.obstacles] == ["table", "", "wall"]
+
+
+def test_replanning_is_switched_on_set_and_switched_off(world):
+    """True gives the defaults, a table its own values, False or None none."""
+    from demuvo.world import ReplanSpec  # pylint: disable=import-outside-toplevel
+
+    assert world.robots[0].replan is None
+    on = edit.set_replan(world, "r1", True)
+    assert on.robots[0].replan == ReplanSpec()
+    own = edit.set_replan(on, "r1", {"period": 0.5, "timer": True})
+    assert own.robots[0].replan == ReplanSpec(period=0.5, timer=True)
+    assert edit.set_replan(own, "r1", False).robots[0].replan is None
+    assert edit.set_replan(own, "r1", None).robots[0].replan is None
+    with pytest.raises(WorldError, match="robot 'r1'.replan: unknown key 'rate'"):
+        edit.set_replan(world, "r1", {"rate": 1.0})
+    with pytest.raises(WorldError, match="robot 'r1'.replan: period must be"):
+        edit.set_replan(world, "r1", {"period": -1.0})

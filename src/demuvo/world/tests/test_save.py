@@ -57,6 +57,7 @@ control_period = 0.1
 estimator = "dead_reckoning"
 control_pose = "truth"
 sensors = { front = { type = "lidar", beams = 16, mount = [0.1, 0.0, 0.0] } }
+replan = { period = 0.5, timer = true, off_path = 0.3 }
 
 [[robot]]
 name = 'q"uote\\é'
@@ -67,6 +68,7 @@ controller = "demuvo.controllers:PurePursuit"
 controller_params = { "odd key" = 1, flag = true, label = "x" }
 estimator = "dead_reckoning"
 sensors = { encoders = { noise = 0.01 } }
+replan = true
 
 [[task]]
 robot = "a"
@@ -144,6 +146,9 @@ def test_a_world_with_every_key_saves_and_loads_again(tmp_path):
     again = round_trip(world, tmp_path)
     assert again.robots[1].name == 'q"uote\\é'
     assert again.robots[1].controller_params["odd key"] == 1
+    text = world_text(again, tmp_path)
+    assert "replan = { period = 0.5, timer = true, off_path = 0.3 }" in text
+    assert "replan = true" in text
 
 
 def test_a_local_costmap_with_both_layers_saves_and_loads_again(tmp_path):
@@ -162,6 +167,7 @@ def test_keys_left_at_their_default_are_not_written(tmp_path):
         "origin =",
         "control_period =",
         "estimator =",
+        "replan =",
         "stop =",
         "[costmap",
     ):

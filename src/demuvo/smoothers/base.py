@@ -12,8 +12,9 @@ from ..costmap import Costmap
 class Smoother(Protocol):
     """What every smoother class offers.
 
-    The navigation calls `configure` once, before the first path, with the robot's
-    global costmap (None if the world turns the costmap off), and `smooth` after
+    The navigation calls `configure` before the first path, with the robot's
+    global costmap (None if the world turns the costmap off), and again with a
+    new costmap whenever the one the robot plans on changes; `smooth` runs after
     each plan.
     """
 

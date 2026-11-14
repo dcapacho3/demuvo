@@ -23,6 +23,7 @@ from .spec import (
     DEFAULT_GOAL_TOLERANCE,
     CostmapSpec,
     LocalCostmapSpec,
+    ReplanSpec,
     RobotSpec,
     Task,
     World,
@@ -135,7 +136,20 @@ def _robot(spec: RobotSpec) -> list[str]:
         out["control_pose"] = spec.control_pose
     if spec.sensors:
         out["sensors"] = spec.sensors
+    if spec.replan is not None:
+        out["replan"] = _replan(spec.replan)
     return ["[[robot]]", *_lines(out), ""]
+
+
+def _replan(spec: ReplanSpec) -> bool | dict:
+    """The `replan` value: true at the defaults, else what differs from them."""
+    default = ReplanSpec()
+    out = {
+        f.name: getattr(spec, f.name)
+        for f in fields(spec)
+        if getattr(spec, f.name) != getattr(default, f.name)
+    }
+    return out or True
 
 
 def _task(task: Task) -> list[str]:

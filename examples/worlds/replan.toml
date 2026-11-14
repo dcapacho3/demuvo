@@ -1,0 +1,42 @@
+version = 1
+
+# The map the planner searches shows no obstacle: the global costmap has no static
+# layer. Only the lidar finds the box and the circle, and the robot plans again when
+# its path ahead runs through what the lidar sees, so A* takes it round them.
+# Without `replan` the robot would follow its first path into the box.
+
+[world]
+size = [10.0, 6.0]        # metres
+seed = 3
+
+[[obstacle]]
+pose = [4.0, 3.0, 0.0]
+shape = { name = "box", size = [0.6, 2.4] }
+
+[[obstacle]]
+pose = [6.5, 2.0, 0.0]
+shape = { name = "circle", radius = 0.5 }
+
+[[robot]]
+name = "r1"
+model = "diff_drive"
+shape = { name = "circle", radius = 0.2 }
+pose = [1.0, 3.0, 0.0]
+planner = "demuvo.planners:AStar"
+smoother = "demuvo.smoothers.line_of_sight:LineOfSight"
+controller = "demuvo.controllers:PurePursuit"
+controller_params = { speed = 0.5, lookahead = 0.6 }
+sensors = { lidar = { beams = 180, max_range = 4.0, noise = 0.01 } }
+# When to plan again while driving. `replan = true` takes these defaults: never two
+# plans less than `period` seconds apart; again when the path ahead crosses a cell the
+# local costmap blocks, when the robot is `off_path` metres from its path, or when it
+# has stood still for `stuck` seconds short of the goal. `timer = true` would plan
+# again every period as well.
+replan = { period = 1.0, blocked = true, off_path = 0.5, stuck = 2.0 }
+
+[costmap.global]
+plugins = ["inflation"]   # no static layer, so the map holds no obstacle
+
+[[task]]
+robot = "r1"
+goal = [9.0, 3.0, 0.0]

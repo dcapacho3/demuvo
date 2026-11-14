@@ -13,9 +13,12 @@ from ..costmap import Costmap
 class Planner(Protocol):
     """What every planner class offers.
 
-    The navigation calls `configure` once, before the first plan, with the
-    robot's global costmap (None if the world turns the costmap off). The costmap
-    object stays the same afterwards, so a planner keeps it.
+    The navigation calls `configure` before the first plan, with the robot's
+    global costmap (None if the world turns the costmap off), and again, with a
+    new costmap, before a plan on a changed map: a robot that replans lays its
+    local costmap over the global one before each plan. A planner keeps the
+    costmap it was last given, and anything it derives from one is made again
+    when `configure` is called.
     """
 
     def configure(self, costmap: Costmap | None) -> None:

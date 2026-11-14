@@ -37,22 +37,25 @@ default also appears, with a field for each, in the inspector of the window.
 
 **A planner** has two methods.
 
-- `configure(costmap)` is called once, before the first plan, with the robot's global
-  costmap (`None` if the world turns it off). The costmap is the same object afterwards,
-  so keep it.
+- `configure(costmap)` is called before the first plan with the robot's global costmap
+  (`None` if the world turns it off), and again with a new costmap whenever the map the
+  robot plans on changes: a robot with `replan` lays its local costmap over the global
+  one before each plan. Keep the latest, and make again anything you derived from the
+  one before.
 - `plan(start, goal)` returns the path as an array of shape (N, 3), rows of x, y, angle,
   or an array of shape (0, 3) if there is none. `start` and `goal` are poses with
   `.xyt` and `.translation`.
 
-**A smoother** has `configure(costmap)` and `smooth(path)`, which returns a better path of
-the same shape.
+**A smoother** has `configure(costmap)`, called as a planner's is, and `smooth(path)`,
+which returns a better path of the same shape.
 
 **A controller** has `command(obs)` and returns a `Twist`. It runs every `control_period`
 seconds, and its last command stays in force between runs. It sees only the observation:
 `obs.pose`, `obs.path`, `obs.goal`, `obs.goal_tolerance`, `obs.dt`, `obs.scans` (the
 latest scan of each lidar), `obs.costmap` (the local costmap) and `obs.path_changes`
-(a count that grows when the path is replaced, so a controller that keeps state knows
-to start over). It does not see the simulation.
+(a count that grows when the path is replaced, by a new task, `set_path` or a
+[replan](world-file.md#replanning), so a controller that keeps state knows to start
+over). It does not see the simulation.
 
 A planner that finds no way returns an empty path. The robot then stays still, and the log
 says so.

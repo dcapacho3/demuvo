@@ -37,6 +37,7 @@ planner = "demuvo.planners:StraightLine"      # optional; this is the default
 controller = "demuvo.controllers:PurePursuit" # optional; module:Class
 controller_params = { speed = 0.5, lookahead = 0.6 }   # optional
 control_period = 0.05     # optional: seconds between controller runs
+# replan = true                  # plan again while driving; see Replanning
 # estimator = "dead_reckoning"   # the pose the controller sees; default "ground_truth"
 # control_pose = "truth"         # the controller sees the true pose; the estimator still runs
 # sensors = { encoders = { noise = 0.01, ticks_per_rev = 2048 } }
@@ -152,13 +153,58 @@ it back up. A trajectory that leaves the local costmap is thrown out, so the win
 should hold `max_vel_x * sim_time + forward_point_distance` each way: 0.825 m with the
 defaults, inside the default 1.5 m. A robot with no lidar follows its path with no
 obstacle check. If no trajectory that moves is free, the robot stops until one is, and
-the log says so once. It has no recovery behaviours and does not ask for a new path.
+the log says so once. It has no recovery behaviours; [replanning](#replanning) gives it
+a new path.
 
 `examples/worlds/dwb.toml` gives a robot a straight-line path through a box and a
 circle. Only its lidar shows them, and DWB takes it round both.
 
 To use your own, write a class and name it in the file; see [your own
 algorithms](plugins.md).
+
+## Replanning
+
+A robot plans once for each task: at its first step, when it starts the next waypoint,
+and after a new goal. With `replan` it also plans again while it drives, as the Nav2
+behaviour tree does. Its planner then searches the global costmap with the robot's
+local costmap laid over it, cell by cell, so the path goes round what the lidar sees
+even when the map does not show it; the planner and smoother are configured again
+with the new costmap before each plan.
+
+```toml
+replan = true                                                      # the defaults
+replan = { period = 1.0, blocked = true, off_path = 0.5, stuck = 2.0, timer = false }
+```
+
+The triggers are checked at each run of the controller. The robot plans again when:
+
+- `blocked`: the path ahead of it crosses a cell of its local costmap of cost 253 or
+  more, where its centre cannot be. The lidar sees something on the path.
+- `off_path`: it is farther than this many metres from its path, for instance after
+  DWB steered it round an obstacle, so it gets a path from where it is. 0 turns it off.
+- `stuck`: it has stood still, below 0.01 m/s and 0.01 rad/s, for this many seconds
+  short of its goal. 0 turns it off.
+- `timer`: `period` seconds passed since the last plan, whatever else is true. This is
+  the 1 Hz replanning of Nav2's default tree.
+
+Two plans are never less than `period` seconds apart, and a robot within its goal's
+distance tolerance never plans again: it is turning to the goal's angle or holding
+there. A path given from outside with `set_path` is never planned again either; the
+robot's next task, or a new goal, brings the planner back.
+
+The new path is made at the controller's run, from the pose the controller sees, so it
+starts at the robot, and it replaces the old one whole before the controller runs. The
+controller follows it from that run on; the command it last gave stays in force until
+then, and its `path_changes` grows by one, so a controller that keeps state about the
+path starts over. A plan that finds no path leaves the path as it is, says so once, and
+is tried again every `period`, quietly, until a path is found; a robot whose first plan
+found nothing does the same. A planner that ignores the costmap, such as
+`StraightLine`, gives the same line again, so `blocked` suits a planner that searches
+it, such as `AStar`.
+
+`examples/worlds/replan.toml` has a global costmap with no static layer, so the map
+shows no obstacle. The robot finds the box and the circle with its lidar and plans
+again round them; without `replan` it follows its first path into the box.
 
 ## Costmap
 

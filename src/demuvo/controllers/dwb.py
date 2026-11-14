@@ -43,6 +43,7 @@ from robomath import wrap_angle
 
 from ..costmap import INSCRIBED, MAX_NON_OBSTACLE, Costmap
 from ..models import Twist
+from ..paths import along_path
 from ..plugins import check_not_negative, check_positive
 from .base import Observation
 
@@ -354,18 +355,6 @@ def rollout(
             yaw0 + np.broadcast_to(turned, forward.shape),
         ],
         axis=-1,
-    )
-
-
-def along_path(path: np.ndarray, spacing: float) -> np.ndarray:
-    """Points along the path's polyline, no more than `spacing` apart, in order."""
-    xy = path[:, :2]
-    if len(xy) < 2:
-        return xy.copy()
-    along = np.concatenate([[0.0], np.cumsum(np.hypot(*np.diff(xy, axis=0).T))])
-    at = np.linspace(0.0, along[-1], max(2, math.ceil(along[-1] / spacing) + 1))
-    return np.column_stack(
-        [np.interp(at, along, xy[:, 0]), np.interp(at, along, xy[:, 1])]
     )
 
 

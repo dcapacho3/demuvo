@@ -28,6 +28,7 @@ from .verify import WorldError, inside, numbers
 from .world import DEFAULT_GOAL_TOLERANCE, RobotSpec, World
 from .world.load import (
     _parse_obstacle,
+    _parse_replan,
     _parse_robot,
     _parse_sensors,
     _parse_task,
@@ -618,6 +619,25 @@ def set_control_period(world: World, name: str, period: float) -> World:
     spec = _robot(world, name)
     (value,) = numbers([period], 1, f"robot '{name}'", "control_period", True)
     return _replace_robot(world, dataclasses.replace(spec, control_period=value))
+
+
+def set_replan(world: World, name: str, replan: bool | dict | None) -> World:
+    """Choose when a robot plans again while it drives.
+
+    Args:
+        world: the world to start from.
+        name: the robot.
+        replan: True for the default triggers, False or None for none (the
+            robot plans once for each task), or a table of settings as the
+            world file's `replan` key takes them: `period`, `timer`, `blocked`,
+            `off_path` and `stuck`.
+
+    Raises:
+        WorldError: if a setting is unknown, of the wrong kind or out of range.
+    """
+    spec = _robot(world, name)
+    parsed = _parse_replan(False if replan is None else replan, f"robot '{name}'")
+    return _replace_robot(world, dataclasses.replace(spec, replan=parsed))
 
 
 def add_outline(world: World, kind: str, vertices: Sequence[Sequence[float]]) -> World:

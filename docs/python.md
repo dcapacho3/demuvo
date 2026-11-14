@@ -42,6 +42,7 @@ the same lines.
 | `add_robot`, `remove_robot`, `rename_robot`, `free_pose` | robots |
 | `set_pose`, `set_robot_shape`, `set_model`, `set_part`, `set_settings` | a robot's place, body, model and parts |
 | `set_estimator`, `set_control_pose`, `set_control_period`, `set_sensor` | what the controller sees, and the sensors |
+| `set_replan` | when a robot plans again while it drives |
 | `set_goal`, `add_goal`, `move_goal`, `set_goal_options`, `remove_goal` | goals and waypoints |
 | `add_obstacle`, `add_outline`, `move_obstacle`, `resize_obstacle`, `remove_obstacle` | obstacles |
 | `rename_obstacle`, `set_outline_pose`, `set_line_length`, `obstacle_label` | names, and turning a polygon or line |

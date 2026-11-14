@@ -177,7 +177,9 @@ how a class is listed in the window.
   and a local costmap that the robot builds from their scans.
 - **Planning and control:** `StraightLine` and `AStar` planners and a `LineOfSight` smoother
   on a global costmap, a `PurePursuit` controller, and a `DWB` controller, a local planner
-  that steers round what the lidar sees in the local costmap.
+  that steers round what the lidar sees in the local costmap. A robot can plan again
+  while it drives, on the global costmap with the local one laid over it, when its path
+  is blocked, it is off the path, it is stuck, or a timer runs out.
 - **Exact time:** a step length and a controller rate that you set apart, and results that
   repeat to the last bit on one machine.
 - **Scripting:** a `Run` to step a world from a script or a benchmark, edit functions that
@@ -196,7 +198,7 @@ how a class is listed in the window.
   limit that makes a world harder. Off by default, so the ideal world stays as it is.
 - [ ] Swarms: many robots, each running the same rule from its own sensors and its
   neighbours, with collisions and time reported over seeds.
-- [ ] Moving actors, and replanning while the robot drives.
+- [ ] Moving actors.
 - [ ] A benchmark runner that compares planners and controllers over worlds and seeds, with
   success, time, path length and collision metrics, a table and a CSV file.
 - [ ] Run logs and replay.
