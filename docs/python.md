@@ -98,6 +98,8 @@ name are `METRICS_DIR` and `METRICS_NAME` in `demuvo.evaluation.metrics`, one li
 each, so a benchmark that wants its files elsewhere changes them in one place. The
 run-level columns repeat on every row, so rows from many runs or seeds concatenate
 into one flat table. `--metrics [FILE]` writes the same file when the window closes.
+The format is locked: [the metrics file](../README.md#the-metrics-file) in the README
+names every column in order and says when a cell is left empty.
 
 ## What stays exact
 

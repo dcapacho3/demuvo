@@ -52,7 +52,8 @@ def _parser() -> argparse.ArgumentParser:
         const="",
         metavar="FILE",
         help="write the run's key numbers as a CSV file when the window closes; "
-        "FILE names it, else demuvo_metrics_<world>_<time>.csv here",
+        "FILE names it, else demuvo_metrics_<world>_<time>.csv here. The columns "
+        "are in the README, under 'The metrics file'",
     )
     parser.add_argument(
         "--one-process",

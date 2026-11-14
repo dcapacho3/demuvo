@@ -61,11 +61,23 @@ r1 task 1: reached at 19.26 s
 r1 drove 8.86 m
 ```
 
-`--metrics` writes the same run as numbers: one CSV row per robot with the world and
-seed, the time, the tasks done, the distance driven, the goal error left, the paths it
-was handed (replans included), its collisions, the parts it ran (model, planner,
-smoother, controller, replan, estimator) and its pose error. Without `FILE` the file is
-`demuvo_metrics_<world>_<time>.csv` in the current directory.
+## The metrics file
+
+`--metrics` writes the run as a CSV file when the window closes; from Python,
+`write_metrics(run.metrics("name"))` does the same. The file is UTF-8, with a header
+line and one row per robot. Values for the whole run repeat on every row, so files from
+many runs, worlds and seeds join into one table. The 21 columns, in order, say who ran
+(`robot`, `world`, `seed`), how it went (`time_s`, `steps`, `tasks_done`, `tasks_total`,
+`success`, `done_at_s`, `driven_m`, `goal_distance_m`, `goal_angle_rad`, `path_changes`,
+`collisions`) and what it ran (`model`, `planner`, `smoother`, `controller`, `replan`,
+`estimator`), with `pose_error_m` last. Units are in the names: seconds, metres,
+radians. `success` and `replan` are 1 or 0, and `path_changes` counts every path the
+robot was given, replans included. A value that does not apply is left empty: the goal
+error of a robot that finished, `success` for a robot with no tasks, `world` for a world
+with no file, and the parts of a robot driven from outside demuvo. Without `FILE` the
+file is `demuvo_metrics_<world>_<YYYYMMDD-HHMMSS>.csv` in the current directory
+(`world` in the name when no file was opened), and a file already there with that name
+is replaced.
 
 ## The sandbox
 
