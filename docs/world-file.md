@@ -176,6 +176,11 @@ replan = true                                                      # the default
 replan = { period = 1.0, blocked = true, off_path = 0.5, stuck = 2.0, timer = false }
 ```
 
+The window's [inspector](sandbox.md#the-inspector) switches it on and off and sets
+`period` and `off_path`; the other settings are set here, and kept when the inspector
+edits one of its two. From Python, `edit.set_replan` takes the same true, false or
+table.
+
 The triggers are checked at each run of the controller. The robot plans again when:
 
 - `blocked`: the path ahead of it crosses a cell of its local costmap of cost 253 or

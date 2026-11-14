@@ -76,8 +76,9 @@ resizes by dragging its edge.
 | Add robot, Delete | Ctrl+N, Delete | add a robot, delete the selected one |
 
 The inspector shows a form for what is selected: for a robot, its pose, goals, body,
-model, planner, smoother, controller, sensors and control period; for an obstacle, its pose
-and size; for nothing, the world and its costmaps. A field applies as it is left. A name
+model, planner, smoother, controller, sensors, control period and whether it plans again
+while it drives; for an obstacle, its pose and size; for nothing, the world and its
+costmaps. A field applies as it is left. A name
 in the scene list is renamed by a double click or F2. Ctrl+Z and Ctrl+Y undo and redo,
 Space plays, S steps and R resets. Warnings from a run go to the log panel. The File menu
 saves the world as TOML and opens one. [The sandbox](docs/sandbox.md) documents the whole
@@ -85,8 +86,9 @@ window and every key.
 
 ## World files
 
-A world is a TOML file: size, seed, obstacles (box, circle, polygon, wall), robots, tasks
-(goals and waypoints), sensors and costmaps. A file is checked when it loads, and a
+A world is a TOML file: size, seed, obstacles (box, circle, polygon, wall), robots and
+their parts, tasks (goals and waypoints), sensors, costmaps and, with the `replan` key,
+when a robot plans again while it drives. A file is checked when it loads, and a
 mistake is named by object and key. [The world file](docs/world-file.md) describes every key.
 
 ## Python
