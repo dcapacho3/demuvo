@@ -7,9 +7,9 @@ import numpy as np
 import pytest
 from robomath import Transform2D
 
-from demuvo import Navigation, Run, Simulation, load_world
+from demuvo import Navigation, Run, Simulation, Twist, load_world
 from demuvo.costmap import LETHAL, Costmap
-from demuvo.nav.replan import Replanner, Sight, path_blocked
+from demuvo.nav.replan import Replanner, Sight, changed_area, path_blocked
 from demuvo.world import ReplanSpec, Task
 
 EXAMPLE = Path(__file__).resolve().parents[4] / "examples" / "worlds" / "replan.toml"
@@ -122,6 +122,37 @@ def test_stillness_is_counted_through_the_waiting_period():
     )
 
 
+def test_a_changed_local_costmap_asks_for_a_plan_once_it_changed_enough():
+    """The first costmap is the reference; a body appearing in it is a change."""
+    spec = ReplanSpec(blocked=False, off_path=0.0, stuck=0.0, changed=0.1)
+    replanner = Replanner({"r1": spec})
+    empty = window()
+    assert replanner.reason("r1", sight(costmap=empty)) is None  # nothing to compare
+    assert replanner.reason("r1", sight(costmap=window([(3.0, 3.6)]))) is None
+    marks = [(3.0 + 0.05 * i, 3.6 + 0.05 * j) for i in range(8) for j in range(8)]
+    assert replanner.reason("r1", sight(costmap=window(marks))) == (
+        "the local costmap changed over 0.16 square metres"
+    )
+    replanner.planned("r1", window(marks))  # planned on it: the reference moves on
+    assert replanner.reason("r1", sight(costmap=window(marks))) is None
+    replanner.planned("r1", None)  # planned with no costmap: the next one is it
+    assert replanner.reason("r1", sight(costmap=empty)) is None
+    assert replanner.reason("r1", sight(costmap=window(marks))) is not None
+    off = Replanner({"r1": ReplanSpec(blocked=False, off_path=0.0, stuck=0.0)})
+    assert off.reason("r1", sight(costmap=empty)) is None
+    assert off.reason("r1", sight(costmap=window(marks))) is None
+
+
+def test_changed_area_compares_only_where_both_windows_lie():
+    """The same grid, a mark added, a window that rolled on, and two apart."""
+    assert changed_area(window(), window()) == 0.0
+    assert changed_area(window(), window([(3.0, 3.0)])) == pytest.approx(0.0025)
+    rolled = window([(1.0, 3.0)], centre=(2.0, 3.0))  # the mark is off the old grid
+    assert changed_area(window(), rolled) == 0.0
+    assert changed_area(window([(3.0, 3.0)]), rolled) == pytest.approx(0.0025)
+    assert changed_area(window(), window([(8.0, 3.0)], centre=(8.0, 3.0))) == 0.0
+
+
 def test_path_blocked_looks_from_the_nearest_point_on_and_inside_the_grid_only():
     """An empty path, a block behind, and a path leaving the grid."""
     pose = Transform2D.from_xyt((2.0, 3.0, 0.0))
@@ -167,7 +198,7 @@ def planner_module(tmp_path, monkeypatch):
     return re_nav
 
 
-def world_with(tmp_path, replan, lidar=False):
+def world_with(tmp_path, replan, lidar=False, extra=""):
     """A world file with one robot driving east, planning again as `replan` says."""
     sensors = "sensors = { lidar = { beams = 90, max_range = 4.0 } }\n" if lidar else ""
     text = (
@@ -177,7 +208,7 @@ def world_with(tmp_path, replan, lidar=False):
         '[[robot]]\nname = "r1"\nmodel = "diff_drive"\n'
         'shape = { name = "circle", radius = 0.2 }\npose = [1.0, 3.0, 0.0]\n'
         'planner = "re_nav:Line"\ncontroller = "re_nav:Drive"\n'
-        f"{sensors}replan = {replan}\n"
+        f"{sensors}replan = {replan}\n{extra}"
         '[costmap.global]\nplugins = ["inflation"]\n'
         '[[task]]\nrobot = "r1"\ngoal = [9.0, 3.0, 0.0]\n'
     )
@@ -223,6 +254,37 @@ def test_a_robot_that_replans_plans_on_what_its_lidar_sees(tmp_path, monkeypatch
     assert base.cost_at(4.82, 3.0) == 0  # the map does not show the box
     assert sim.robots["r1"].local_costmap.cost_at(4.82, 3.0) == LETHAL  # the lidar does
     assert merged.cost_at(4.82, 3.0) == LETHAL  # so the planner is told
+
+
+CHANGED = (
+    "{ period = 0.2, blocked = false, off_path = 0.0, stuck = 0.0, changed = 0.1 }"
+)
+OTHER = (
+    '[[robot]]\nname = "r2"\nmodel = "diff_drive"\n'
+    'shape = { name = "circle", radius = 0.2 }\npose = [3.0, 5.5, -1.5708]\n'
+)
+
+
+def test_another_robot_driving_into_the_local_costmap_makes_the_robot_plan_again(
+    tmp_path, monkeypatch, caplog
+):
+    """r2 comes south into r1's window; r1, planned once, plans again and says why."""
+    re_nav = planner_module(tmp_path, monkeypatch)
+    world = load_world(world_with(tmp_path, CHANGED, lidar=True, extra=OTHER))
+    sim = Simulation(world, dt=0.05)
+    nav = Navigation(world)
+    with caplog.at_level(logging.INFO, logger="demuvo.nav"):
+        for _ in range(16):  # 0.8 s: r2, at y 5.1, is still clear of the window
+            sim.step({**nav(sim), "r2": Twist(vx=0.5)})
+        assert len(re_nav.calls) == 1
+        for _ in range(24):  # 2 s: r2's body has come into the window, at y 4.5
+            sim.step({**nav(sim), "r2": Twist(vx=0.5)})
+    assert len(re_nav.calls) >= 2
+    reasons = [
+        r.getMessage() for r in caplog.records if "planned task" in r.getMessage()
+    ]
+    assert reasons and all("the local costmap changed over" in r for r in reasons)
+    assert sim.poses["r2"].xyt[1] - 0.2 < 4.5  # its body is in the window
 
 
 def test_a_path_from_outside_is_never_planned_again(tmp_path, monkeypatch):

@@ -52,6 +52,10 @@ class ReplanSpec:
             0 for never.
         stuck: seconds the robot stands still, short of its goal, after which
             it plans again; 0 for never.
+        changed: square metres of its local costmap that became blocked or clear
+            since the last plan, counted where the window then and the window
+            now both lie, from which it plans again: another robot or a moving
+            obstacle came into view or went; 0 for never.
     """
 
     period: float = 1.0
@@ -59,11 +63,12 @@ class ReplanSpec:
     blocked: bool = True
     off_path: float = 0.5
     stuck: float = 2.0
+    changed: float = 0.0
 
     def __post_init__(self) -> None:
         """Check the settings."""
         check_positive(self, "period")
-        check_not_negative(self, "off_path", "stuck")
+        check_not_negative(self, "off_path", "stuck", "changed")
         for name in ("timer", "blocked"):
             if not isinstance(getattr(self, name), bool):
                 raise ValueError(f"{name} must be true or false")

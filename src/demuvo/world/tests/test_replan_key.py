@@ -24,10 +24,10 @@ def test_every_setting_is_read_as_written(tmp_path):
     spec = replan_of(
         tmp_path,
         "replan = { period = 0.5, timer = true, blocked = false, off_path = 0.3, "
-        "stuck = 0 }",
+        "stuck = 0, changed = 0.25 }",
     )
     assert spec == ReplanSpec(
-        period=0.5, timer=True, blocked=False, off_path=0.3, stuck=0.0
+        period=0.5, timer=True, blocked=False, off_path=0.3, stuck=0.0, changed=0.25
     )
 
 
@@ -39,6 +39,7 @@ def test_every_setting_is_read_as_written(tmp_path):
         ("replan = { timer = 1 }", "robot 'a'.replan: 'timer' must be true or false"),
         ("replan = { period = 0 }", "robot 'a'.replan: period must be a positive"),
         ("replan = { off_path = -1 }", "robot 'a'.replan: off_path must be 0 or more"),
+        ("replan = { changed = -0.1 }", "robot 'a'.replan: changed must be 0 or more"),
         ('replan = { stuck = "long" }', "'stuck' needs 1 finite number"),
     ],
 )

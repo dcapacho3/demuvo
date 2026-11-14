@@ -228,7 +228,7 @@ def _parse_robot(item: dict, index: int, bounds, names: set[str]) -> RobotSpec:
     )
 
 
-REPLAN_KEYS = {"period", "timer", "blocked", "off_path", "stuck"}
+REPLAN_KEYS = {"period", "timer", "blocked", "off_path", "stuck", "changed"}
 
 
 def _parse_replan(value, label: str) -> ReplanSpec | None:

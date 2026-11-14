@@ -3,7 +3,9 @@
 `Navigation` asks the `Replanner` at each controller run and plans again when it
 gives a reason. The reasons, each a setting of the robot's `ReplanSpec`, are the
 ones Nav2's behaviour trees use: a timer, a path the local costmap shows blocked,
-a robot too far off its path, and a robot that stands still. The rules that hold
+a robot too far off its path, and a robot that stands still, and one more: a local
+costmap that changed since the plan, as it does when another robot or a moving
+obstacle comes into view or goes. The rules that hold
 for every trigger are here too: no plan within `period` of the last, none for a
 robot within reach of its goal, and a plan that failed is tried again on the
 timer alone.
@@ -22,6 +24,10 @@ from ..costmap import INSCRIBED, Costmap
 from ..evaluation.judge import STOPPED, goal_error
 from ..paths import along_path, distance_to_path
 from ..world import ReplanSpec, Task
+
+# How many cells a blocked cell may move between two local costmaps before the
+# move counts as a change; see `changed_area`.
+MARGIN = 2
 
 
 @dataclass(frozen=True)
@@ -63,14 +69,22 @@ class Replanner:
         specs: Mapping[str, ReplanSpec | None],
         stopped: tuple[float, float] = STOPPED,
     ) -> None:
-        """Start with no robot standing still."""
+        """Start with no robot standing still and no costmap seen."""
         self.specs = dict(specs)
         self._stopped = stopped
         self._still_since: dict[str, float] = {}
+        self._seen: dict[str, Costmap | None] = {}
 
     def forget(self, name: str) -> None:
         """Forget how long a robot has stood still, when its path is replaced."""
         self._still_since.pop(name, None)
+
+    def planned(self, name: str, costmap: Costmap | None) -> None:
+        """Note the local costmap a robot planned on, which `changed` measures from.
+
+        A robot that had none yet measures from the first one it gets.
+        """
+        self._seen[name] = costmap
 
     def reason(self, name: str, sight: Sight) -> str | None:
         """Why the robot should plan again now, in plain words, or None.
@@ -101,6 +115,12 @@ class Replanner:
             off = distance_to_path(sight.pose.translation, sight.path)
             if off > spec.off_path:
                 return f"it is {off:.2f} m off the path"
+        if spec.changed > 0 and sight.costmap is not None:
+            if self._seen.get(name) is None:
+                self._seen[name] = sight.costmap  # the first costmap: measure from it
+            area = changed_area(self._seen[name], sight.costmap)
+            if area + 1e-9 >= spec.changed:
+                return f"the local costmap changed over {area:.2f} square metres"
         if spec.stuck > 0 and still_for + 1e-9 >= spec.stuck:
             return f"it has stood still for {still_for:.1f} s"
         return None
@@ -130,3 +150,44 @@ def path_blocked(path: np.ndarray, pose: Transform2D, costmap: Costmap) -> bool:
     height, width = costmap.data.shape
     inside = (rows >= 0) & (rows < height) & (cols >= 0) & (cols < width)
     return bool((costmap.data[rows[inside], cols[inside]] >= INSCRIBED).any())
+
+
+def changed_area(before: Costmap, after: Costmap) -> float:
+    """Square metres that became blocked or clear between two local costmaps.
+
+    Both are a robot's local costmap, so they share a resolution, and the window
+    may have moved with the robot between them. A cell of cost `INSCRIBED` or
+    more is blocked. Only the cells both windows cover are compared, so the
+    window rolling on is not a change. A cell that became blocked counts only if
+    it lies more than `MARGIN` cells from every cell blocked before, and one that
+    became clear only if it lies that far from every cell blocked now: a wall
+    seen a little differently as the robot moves is not a change, while a body
+    that came or went in open ground is. Two windows that do not meet give 0.
+    """
+    res = after.resolution
+    dr = round((after.origin[1] - before.origin[1]) / res)
+    dc = round((after.origin[0] - before.origin[0]) / res)
+    height, width = after.data.shape
+    before_height, before_width = before.data.shape
+    r0, r1 = max(0, -dr), min(height, before_height - dr)
+    c0, c1 = max(0, -dc), min(width, before_width - dc)
+    if r0 >= r1 or c0 >= c1:
+        return 0.0
+    now = after.data[r0:r1, c0:c1] >= INSCRIBED
+    then = before.data[r0 + dr : r1 + dr, c0 + dc : c1 + dc] >= INSCRIBED
+    appeared = now & ~_dilate(then, MARGIN)
+    gone = then & ~_dilate(now, MARGIN)
+    return float((appeared | gone).sum()) * res * res
+
+
+def _dilate(cells: np.ndarray, count: int) -> np.ndarray:
+    """The cells and every cell within `count` steps of one, sides or corners."""
+    out = cells.copy()
+    for _ in range(count):
+        grown = out.copy()
+        grown[1:] |= out[:-1]
+        grown[:-1] |= out[1:]
+        grown[:, 1:] |= grown[:, :-1].copy()
+        grown[:, :-1] |= grown[:, 1:].copy()
+        out = grown
+    return out

@@ -346,6 +346,7 @@ class Navigation:
         """
         planner, smoother = self._planners[name], self._smoothers.get(name)
         self._configure(name, self._planning_map(name, sim))
+        self.replanner.planned(name, sim.robots[name].local_costmap)
         index = self.judge.current[name]
         with _quiet(plan.failed):  # a retry says nothing new
             path = planner.plan(pose, task.goal)

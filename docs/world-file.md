@@ -173,7 +173,7 @@ with the new costmap before each plan.
 
 ```toml
 replan = true                                                      # the defaults
-replan = { period = 1.0, blocked = true, off_path = 0.5, stuck = 2.0, timer = false }
+replan = { period = 1.0, blocked = true, off_path = 0.5, stuck = 2.0, timer = false, changed = 0.0 }
 ```
 
 The window's [inspector](sandbox.md#the-inspector) switches it on and off and sets
@@ -189,6 +189,14 @@ The triggers are checked at each run of the controller. The robot plans again wh
   DWB steered it round an obstacle, so it gets a path from where it is. 0 turns it off.
 - `stuck`: it has stood still, below 0.01 m/s and 0.01 rad/s, for this many seconds
   short of its goal. 0 turns it off.
+- `changed`: its local costmap changed by this many square metres since the last plan:
+  cells that became blocked or clear, counted where the window then and the window now
+  both lie, so the window rolling on with the robot does not count, and more than two
+  cells from anything blocked before or after, so a wall the lidar sees a little
+  differently as the robot moves does not count either. Another robot or a moving
+  obstacle came into view or went, and the plan may no longer be the best. A robot that
+  had no local costmap when it planned measures from the first one it gets. 0 turns it
+  off; a body the size of a robot changes about 0.3 square metres.
 - `timer`: `period` seconds passed since the last plan, whatever else is true. This is
   the 1 Hz replanning of Nav2's default tree.
 
