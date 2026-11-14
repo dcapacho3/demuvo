@@ -1,10 +1,11 @@
-"""The inspector's forms for one robot's body, pose source, sensors and goals.
+"""The inspector's forms for one robot: body, replanning, pose source, sensors, goals.
 
 Each field applies its edit through the session and says why when it is refused.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import math
 
@@ -21,6 +22,11 @@ STOP_CHOICES = {"default": None, "yes": True, "no": False}
 # How far, in metres, a new waypoint is put from the last goal.
 WAYPOINT_STEP = 0.5
 LENGTH = NumberSpec(0.05, 100.0, 0.05, 2, " m")
+# The replanning settings the form shows, each with how its field takes a number.
+REPLAN_FIELDS = {
+    "period": ("period", NumberSpec(0.05, 60.0, 0.1, 2, " s")),
+    "off_path": ("off path", NumberSpec(0.0, 100.0, 0.1, 2, " m")),
+}
 
 
 class RobotForm(FormBase):
@@ -77,6 +83,42 @@ class RobotForm(FormBase):
         else:
             kind, size = "box", (f["length"].value, f["width"].value)
         self._robot_edit(name, lambda w: edit.set_robot_shape(w, name, kind, size))
+
+    # -- replanning --
+    def replan(self, spec) -> None:
+        """Whether the robot plans again while it drives, and its period and distance.
+
+        The other settings of `ReplanSpec`, which the world file sets, are kept as
+        they are when a field here changes.
+        """
+        name = spec.name
+        self.column.add(Section("Replanning"))
+        self.switch(
+            "replan",
+            "plan again",
+            spec.replan is not None,
+            lambda on: self._robot_edit(
+                name, lambda w: edit.set_replan(w, name, True if on else None)
+            ),
+        )
+        if spec.replan is None:
+            return
+        for field, (label, number_spec) in REPLAN_FIELDS.items():
+            self.number(
+                f"replan.{field}",
+                label,
+                getattr(spec.replan, field),
+                number_spec,
+                lambda: self._replan_edited(name),
+            )
+
+    def _replan_edited(self, name: str) -> None:
+        """A replanning field changed; the settings not shown stay as they were."""
+        current = next(r for r in self.session.world.robots if r.name == name).replan
+        values = dataclasses.asdict(current)
+        for field in REPLAN_FIELDS:
+            values[field] = self.fields[f"replan.{field}"].value
+        self._robot_edit(name, lambda w: edit.set_replan(w, name, values))
 
     # -- pose source and sensors --
     def sensing(self, spec) -> None:

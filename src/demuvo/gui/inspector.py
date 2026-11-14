@@ -3,7 +3,8 @@
 With an obstacle selected it shows the obstacle; with nothing, the world.
 
 It shows the robot's pose and goal, its model, planner, smoother and controller, the
-settings of each part and the control period; or a hint when nothing is selected.
+settings of each part, the control period and its replanning; or a hint when nothing
+is selected.
 Each field applies its edit through the session and says why when it is refused.
 """
 
@@ -106,6 +107,7 @@ class Inspector:
                 lambda text, f=field: self._chosen(f, text),
             )
         self._settings(spec, forms)
+        forms.replan(spec)
         forms.sensing(spec)
 
     def _choices(self, spec):

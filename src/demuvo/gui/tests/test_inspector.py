@@ -12,6 +12,7 @@ from demuvo.gui.robotform import NO_GOAL
 from demuvo.gui.session import Session
 from demuvo.gui.widgets import Checkbox, Column, Label
 from demuvo.gui.worldform import NO_SIZE
+from demuvo.world import ReplanSpec
 from demuvo.world.shapes import Polygon
 
 from .fakes import EXAMPLES, FakeHost
@@ -59,7 +60,7 @@ def test_a_robot_gets_pose_goal_choices_settings_and_a_control_period():
     inspector, session, _, _ = build()
     assert set(inspector.fields) == {
         "x", "y", "th", "gx", "gy", "gth",
-        "model", "planner", "smoother", "controller", "period",
+        "model", "planner", "smoother", "controller", "period", "replan",
         "body", "radius", "estimator", "control_pose", "add_goal",
         "add_encoders", "add_lidar",
     }  # fmt: skip
@@ -167,6 +168,42 @@ def test_editing_the_control_period_applies_it_and_a_bad_one_is_reported():
     assert session.world.robots[0].control_period == 0.1
     inspector.fields["period"].set(0.002)
     assert reports and "below dt" in reports[-1]
+
+
+def test_replanning_is_switched_on_tuned_and_switched_off_in_the_form():
+    """The switch adds the spec and its two fields, which edit it; off removes it."""
+    inspector, session, reports, _ = build()
+    f = inspector.fields
+    assert not f["replan"].checked and "replan.period" not in f
+    f["replan"].set(True)
+    spec = session.world.robots[0].replan
+    assert spec == ReplanSpec()
+    f = inspector.fields
+    assert f["replan"].checked
+    assert (f["replan.period"].value, f["replan.off_path"].value) == (1.0, 0.5)
+    f["replan.period"].set(0.5)
+    assert session.world.robots[0].replan == ReplanSpec(period=0.5)
+    inspector.fields["replan.off_path"].set(0.0)
+    assert session.world.robots[0].replan == ReplanSpec(period=0.5, off_path=0.0)
+    assert not reports
+    inspector.fields["replan"].set(False)
+    assert session.world.robots[0].replan is None
+    assert "replan.period" not in inspector.fields
+
+
+def test_the_replanning_settings_the_form_does_not_show_are_kept():
+    """A file's timer, blocked and stuck survive an edit of the period."""
+    session = Session()
+    session.apply(
+        edit.set_replan(
+            session.world, "r1", {"timer": True, "blocked": False, "stuck": 0.0}
+        )
+    )
+    inspector, session, _, _ = build(session)
+    inspector.fields["replan.period"].set(2.0)
+    assert session.world.robots[0].replan == ReplanSpec(
+        period=2.0, timer=True, blocked=False, stuck=0.0
+    )
 
 
 def test_while_a_run_is_in_progress_the_fields_are_off_and_the_note_says_why():

@@ -88,6 +88,9 @@ The corners of a polygon or line are set in the world file.
 - its body, a disc or a box, and its size;
 - the model, planner, smoother and controller, each with its settings, and the control
   period;
+- whether it plans again while it drives, with the period between plans and how far off
+  the path it may stray; the other [replanning](world-file.md#replanning) settings are
+  set in the world file;
 - where the controller gets its pose (the true pose or an estimate) and the sensors:
   encoders, and any number of lidars.
 
