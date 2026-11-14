@@ -61,9 +61,10 @@ r1 task 1: reached at 19.26 s
 r1 drove 8.86 m
 ```
 
-`--metrics` writes the same run as numbers: one CSV row per robot with the seed, the
-time, the tasks done, the distance driven, the goal error left, the paths it was handed
-(replans included), its collisions and its pose error. Without `FILE` the file is
+`--metrics` writes the same run as numbers: one CSV row per robot with the world and
+seed, the time, the tasks done, the distance driven, the goal error left, the paths it
+was handed (replans included), its collisions, the parts it ran (model, planner,
+smoother, controller, replan, estimator) and its pose error. Without `FILE` the file is
 `demuvo_metrics_<world>_<time>.csv` in the current directory.
 
 ## The sandbox

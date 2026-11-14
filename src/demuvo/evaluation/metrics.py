@@ -19,6 +19,7 @@ from datetime import datetime
 from pathlib import Path
 
 from ..sim.simulation import Simulation
+from ..world import DEFAULT_PLANNER
 from .judge import Judge, goal_error
 
 # The default place and name of the file; `metrics_path` puts them together.
@@ -26,10 +27,14 @@ METRICS_DIR = Path(".")
 METRICS_NAME = "demuvo_metrics_{world}_{stamp}.csv"
 STAMP = "%Y%m%d-%H%M%S"
 
-# The columns of the file, in order. A number that does not apply to a robot,
-# such as the goal error of one whose tasks are all done, is left empty.
+# The columns of the file, in order: who ran (robot, world, seed), how it went
+# (time to collisions), and what it ran (model to pose_error_m), so rows from
+# many worlds, seeds and configurations compare in one table. A value that does
+# not apply to a robot, such as the goal error of one whose tasks are all done,
+# is left empty.
 COLUMNS = (
     "robot",
+    "world",
     "seed",
     "time_s",
     "steps",
@@ -42,6 +47,11 @@ COLUMNS = (
     "goal_angle_rad",
     "path_changes",
     "collisions",
+    "model",
+    "planner",
+    "smoother",
+    "controller",
+    "replan",
     "estimator",
     "pose_error_m",
 )
@@ -63,6 +73,7 @@ def metrics_rows(
     judge: Judge,
     path_changes: Mapping[str, int] | None = None,
     seed: int | None = None,
+    world: str = "",
 ) -> list[dict]:
     """The key numbers of a run, one row per robot; see `COLUMNS`.
 
@@ -72,7 +83,12 @@ def metrics_rows(
     is from done. `path_changes` counts every path the robot was handed, the
     first plan of each task and every replan alike; it is empty when the caller
     does not know it, as a simulation driven from outside demuvo does not.
-    `collisions` counts the contacts the robot was part of. `pose_error_m` is
+    `collisions` counts the contacts the robot was part of.
+
+    `model`, `planner`, `smoother`, `controller` and `replan` say what the robot
+    ran, so rows of different configurations compare. They are the parts demuvo
+    ran: a robot driven from outside has empty parts and `replan` 0, and a
+    robot with no planner of its own names the default one. `pose_error_m` is
     how far the estimator's pose ended from the true one, 0 under ground truth.
 
     Args:
@@ -82,19 +98,24 @@ def metrics_rows(
         path_changes: how many paths each robot was handed, by name; None if
             unknown.
         seed: the seed of the world, or None to leave the column empty.
+        world: the name of the world, usually the stem of its file; "" if it
+            has none, as a world built in memory does not.
     """
     rows = []
     for name, robot in sim.robots.items():
+        spec = robot.spec
         tasks = judge.tasks.get(name, [])
         done = sum(1 for key in judge.done if key[0] == name)
         all_done = bool(tasks) and done == len(tasks)
         distance = angle = ""
         if tasks and not all_done:
             distance, angle = goal_error(sim.poses[name], tasks[judge.current[name]])
+        driven = spec.controller is not None  # by demuvo, not from outside
         true, believed = sim.poses[name].xyt, robot.estimate.pose.xyt
         rows.append(
             {
                 "robot": name,
+                "world": world,
                 "seed": "" if seed is None else seed,
                 "time_s": sim.time,
                 "steps": sim.steps,
@@ -107,7 +128,12 @@ def metrics_rows(
                 "goal_angle_rad": angle,
                 "path_changes": "" if path_changes is None else path_changes[name],
                 "collisions": sum(1 for c in sim.collisions if name in (c.a, c.b)),
-                "estimator": robot.spec.estimator,
+                "model": spec.model,
+                "planner": (spec.planner or DEFAULT_PLANNER) if driven else "",
+                "smoother": (spec.smoother or "") if driven else "",
+                "controller": spec.controller or "",
+                "replan": int(driven and spec.replan is not None),
+                "estimator": spec.estimator,
                 "pose_error_m": math.hypot(
                     true[0] - believed[0], true[1] - believed[1]
                 ),

@@ -120,7 +120,8 @@ def test_the_metrics_come_from_the_worker_and_do_not_disturb_the_snapshot(pipe):
     far, near = RemoteRun(str(DEMO), connection=pipe[0]), Run(str(DEMO))
     far.until_done(60.0)
     near.until_done(60.0)
-    assert far.metrics() == near.metrics()
+    assert far.metrics("demo") == near.metrics("demo")
+    assert far.metrics("demo")[0]["world"] == "demo"
     assert far.poses["r1"] is not None
 
 

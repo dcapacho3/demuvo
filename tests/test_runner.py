@@ -89,6 +89,7 @@ def test_the_metrics_of_a_run_carry_its_seed_and_its_path_changes():
     run.until_done(60.0)
     (row,) = run.metrics()
     assert row["robot"] == "r1" and row["seed"] == run.world.seed
+    assert row["world"] == "" and run.metrics("demo")[0]["world"] == "demo"
     assert row["success"] == 1 and 19.0 < row["done_at_s"] < 20.0
     assert row["driven_m"] > 0.0
     assert row["path_changes"] == run.nav.path_changes["r1"] >= 1

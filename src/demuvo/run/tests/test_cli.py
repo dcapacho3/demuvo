@@ -203,8 +203,8 @@ def test_metrics_writes_the_named_csv_file(tmp_path, monkeypatch, capsys):
     assert main([DEMO, "--metrics", str(file)]) == 0
     assert capsys.readouterr().out.strip() == str(file)
     lines = file.read_text(encoding="utf-8").splitlines()
-    assert lines[0].startswith("robot,seed,time_s")
-    assert lines[1].startswith("r1,")
+    assert lines[0].startswith("robot,world,seed,time_s")
+    assert lines[1].startswith("r1,demo,7,")
 
 
 def test_metrics_without_a_file_names_one_after_the_world(

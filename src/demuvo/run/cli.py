@@ -124,9 +124,9 @@ def main(argv: list[str] | None = None) -> int:
             if lines:
                 print("\n".join(lines))
         if code == 0 and args.metrics is not None:
-            stem = Path(args.world).stem if args.world else "world"
-            where = args.metrics or metrics_path(stem)
-            print(write_metrics(session.run.metrics(), where))
+            stem = Path(args.world).stem if args.world else ""
+            where = args.metrics or metrics_path(stem or "world")
+            print(write_metrics(session.run.metrics(stem), where))
     finally:
         session.close()
     return code

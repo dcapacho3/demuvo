@@ -76,17 +76,22 @@ lidar noise gives rows that differ.
 ## The metrics file
 
 `run.metrics()` gives the run as numbers instead of lines: one row per robot with the
-seed, the time and steps, the tasks done and when, the distance driven, the goal error
-left, the paths the robot was handed (replans included), its collisions, its estimator
-and its pose error at the end. `write_metrics` turns the rows into a CSV file:
+world and seed, the time and steps, the tasks done and when, the distance driven, the
+goal error left, the paths the robot was handed (replans included), its collisions, the
+parts it ran (model, planner, smoother, controller, replan and estimator) and its pose
+error at the end. The parts are there so rows of different configurations compare in
+one table; a robot driven from outside demuvo has empty parts. `write_metrics` turns
+the rows into a CSV file:
 
 ```python
 from demuvo.evaluation import write_metrics
 
 run = Run("mine.toml")
 run.until_done(60.0)
-print(write_metrics(run.metrics()))  # demuvo_metrics_world_<time>.csv, here
+print(write_metrics(run.metrics("mine")))  # demuvo_metrics_world_<time>.csv, here
 ```
+
+`run.metrics("mine")` names the world in the rows; a run does not keep its file's name.
 
 `write_metrics(rows, "runs/mine.csv")` names the file instead. The default place and
 name are `METRICS_DIR` and `METRICS_NAME` in `demuvo.evaluation.metrics`, one line

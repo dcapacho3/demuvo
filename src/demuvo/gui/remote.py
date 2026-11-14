@@ -76,7 +76,7 @@ def _obey(connection, buffer: LogBuffer) -> None:
         if command == "result":
             connection.send((run.result(), run.finished))
         elif command == "metrics":
-            connection.send(run.metrics())
+            connection.send(run.metrics(*arguments))
         else:
             reply = snapshot(run)
             reply["log"] = buffer.drain()
@@ -231,9 +231,9 @@ class RemoteRun:
         """What each robot did so far; see `Run.result`."""
         return self.result_state()[0]
 
-    def metrics(self) -> list[dict]:
+    def metrics(self, world: str = "") -> list[dict]:
         """The key numbers of the run so far; see `Run.metrics`."""
-        return self._ask("metrics")
+        return self._ask("metrics", world)
 
     @property
     def finished(self) -> bool:

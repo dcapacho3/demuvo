@@ -1,6 +1,7 @@
 """Tests for the key numbers of a run and their CSV file."""
 
 import csv
+import dataclasses
 from datetime import datetime
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from demuvo import Simulation, Task, load_world
 from demuvo.evaluation import Judge, metrics_path, metrics_rows, write_metrics
 from demuvo.evaluation import metrics as module
 from demuvo.sim.collisions import Collision
+from demuvo.world import ReplanSpec
 
 DEMO = Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml"
 
@@ -20,9 +22,16 @@ def goal(x):
     return Task("r1", Transform2D.from_xyt((x, 1.0, 0.0)))
 
 
-def judged(*tasks):
-    """The demo robot, which stays at (1, 1), after one step with a judge."""
-    sim = Simulation(load_world(DEMO), dt=0.1)
+def judged(*tasks, **spec_changes):
+    """The demo robot, which stays at (1, 1), after one step with a judge.
+
+    `spec_changes` replace fields of its spec, such as `controller=None`.
+    """
+    world = load_world(DEMO)
+    if spec_changes:
+        robot = dataclasses.replace(world.robots[0], **spec_changes)
+        world = dataclasses.replace(world, robots=(robot,))
+    sim = Simulation(world, dt=0.1)
     judge = Judge({"r1": list(tasks)})
     sim.step({})
     judge.update(sim)
@@ -76,6 +85,41 @@ def test_collisions_count_the_contacts_the_robot_was_part_of():
     assert row["collisions"] == 1
 
 
+def test_the_rows_name_the_parts_the_robot_ran():
+    """The model and the parts of the demo robot, and the world when given."""
+    sim, judge = judged(goal(1.0))
+    (row,) = metrics_rows(sim, judge)
+    assert row["world"] == ""
+    assert (row["model"], row["replan"]) == ("diff_drive", 0)
+    assert row["planner"] == "demuvo.planners:StraightLine"
+    assert row["controller"] == "demuvo.controllers:PurePursuit"
+    assert row["smoother"] == ""
+    (row,) = metrics_rows(sim, judge, world="demo")
+    assert row["world"] == "demo"
+
+
+def test_a_robot_with_no_planner_of_its_own_names_the_default():
+    """An empty planner in the spec is the default planner in the row."""
+    sim, judge = judged(goal(1.0), planner=None)
+    (row,) = metrics_rows(sim, judge)
+    assert row["planner"] == "demuvo.planners:StraightLine"
+
+
+def test_a_replanning_robot_says_so():
+    """`replan` is 1 with a replan spec and a controller to act on it."""
+    sim, judge = judged(goal(1.0), replan=ReplanSpec())
+    (row,) = metrics_rows(sim, judge)
+    assert row["replan"] == 1
+
+
+def test_a_robot_driven_from_outside_has_empty_parts():
+    """No controller: demuvo ran no planner or smoother, and never replans."""
+    sim, judge = judged(goal(1.0), controller=None, replan=ReplanSpec())
+    (row,) = metrics_rows(sim, judge)
+    assert (row["planner"], row["smoother"], row["controller"]) == ("", "", "")
+    assert row["replan"] == 0
+
+
 def test_ground_truth_gives_a_pose_error_of_zero():
     """The demo robot believes exactly where it is."""
     sim, judge = judged(goal(1.0))
@@ -111,4 +155,4 @@ def test_write_metrics_without_a_destination_takes_the_default_path(
     sim, judge = judged(goal(1.0))
     file = write_metrics(metrics_rows(sim, judge))
     assert file.parent == tmp_path and file.name.startswith("demuvo_metrics_world_")
-    assert "robot,seed,time_s" in file.read_text(encoding="utf-8")
+    assert "robot,world,seed,time_s" in file.read_text(encoding="utf-8")

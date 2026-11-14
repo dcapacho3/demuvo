@@ -12,6 +12,8 @@ from .shapes import Shape
 DEFAULT_GOAL_TOLERANCE = (0.1, 0.1)
 DEFAULT_DT = 0.01
 DEFAULT_CONTROL_PERIOD = 0.05
+# The planner of a robot whose spec names none.
+DEFAULT_PLANNER = "demuvo.planners:StraightLine"
 
 
 @dataclass(frozen=True)

@@ -146,14 +146,18 @@ class Run:
         self.nav.judge.update(self.sim)
         return result_lines(self.sim, self.nav.judge)
 
-    def metrics(self) -> list[dict]:
+    def metrics(self, world: str = "") -> list[dict]:
         """The key numbers of the run so far, one row per robot; see `metrics_rows`.
 
         `evaluation.write_metrics` turns the rows into a CSV file.
+
+        Args:
+            world: the name of the world for the rows, usually the stem of its
+                file, which the run does not keep; "" leaves the column empty.
         """
         self.nav.judge.update(self.sim)
         return metrics_rows(
-            self.sim, self.nav.judge, self.nav.path_changes, self.world.seed
+            self.sim, self.nav.judge, self.nav.path_changes, self.world.seed, world
         )
 
     def _robot(self, name: str):

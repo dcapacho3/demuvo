@@ -19,11 +19,10 @@ from ..planners import Planner
 from ..plugins import load_class
 from ..sim.simulation import Simulation
 from ..smoothers import Smoother
-from ..world import DEFAULT_GOAL_TOLERANCE, Task, World, WorldError
+from ..world import DEFAULT_GOAL_TOLERANCE, DEFAULT_PLANNER, Task, World, WorldError
 from .replan import Replanner, Sight
 
 LOGGER = logging.getLogger(__name__)
-DEFAULT_PLANNER = "demuvo.planners:StraightLine"
 
 
 @dataclass
