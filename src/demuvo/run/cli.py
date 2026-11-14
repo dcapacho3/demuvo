@@ -1,7 +1,7 @@
 """The demuvo command - open a world file in the sandbox window.
 
-demuvo [world.toml] [--bench] [--check] [--dt S] [--result] [--seconds S]
-       [--seeds N [--jobs J] [--limit S]] [--install-desktop]
+demuvo [world.toml] [--bench] [--check] [--dt S] [--result] [--metrics [FILE]]
+       [--seconds S] [--seeds N [--jobs J] [--limit S]] [--install-desktop]
 """
 
 from __future__ import annotations
@@ -9,7 +9,9 @@ from __future__ import annotations
 import argparse
 import sys
 from dataclasses import replace
+from pathlib import Path
 
+from ..evaluation import metrics_path, write_metrics
 from ..gui.app import show
 from ..gui.session import Session
 from ..runner import Run
@@ -43,6 +45,14 @@ def _parser() -> argparse.ArgumentParser:
         "--result",
         action="store_true",
         help="print what each robot did when the window closes",
+    )
+    parser.add_argument(
+        "--metrics",
+        nargs="?",
+        const="",
+        metavar="FILE",
+        help="write the run's key numbers as a CSV file when the window closes; "
+        "FILE names it, else demuvo_metrics_<world>_<time>.csv here",
     )
     parser.add_argument(
         "--one-process",
@@ -113,6 +123,10 @@ def main(argv: list[str] | None = None) -> int:
             lines = session.run.result()
             if lines:
                 print("\n".join(lines))
+        if code == 0 and args.metrics is not None:
+            stem = Path(args.world).stem if args.world else "world"
+            where = args.metrics or metrics_path(stem)
+            print(write_metrics(session.run.metrics(), where))
     finally:
         session.close()
     return code

@@ -45,6 +45,7 @@ demuvo [world.toml] [options]
 | `--bench` | open the world fixed, as a benchmark: every run is the same |
 | `--check` | check the file, print a summary, open nothing |
 | `--result` | print how each task went when the window closes |
+| `--metrics [FILE]` | write the run's key numbers as a CSV file when the window closes |
 | `--dt S` | step length in seconds, replacing the file's |
 | `--seconds S` | close the window after `S` seconds |
 | `--one-process` | simulate in the window's process, not in a process of its own |
@@ -59,6 +60,11 @@ driven. For `examples/worlds/demo.toml` after the robot reaches the star:
 r1 task 1: reached at 19.26 s
 r1 drove 8.86 m
 ```
+
+`--metrics` writes the same run as numbers: one CSV row per robot with the seed, the
+time, the tasks done, the distance driven, the goal error left, the paths it was handed
+(replans included), its collisions and its pose error. Without `FILE` the file is
+`demuvo_metrics_<world>_<time>.csv` in the current directory.
 
 ## The sandbox
 

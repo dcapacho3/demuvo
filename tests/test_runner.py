@@ -83,6 +83,17 @@ def test_a_run_knows_when_every_task_is_done():
     assert any("reached at" in line for line in run.result())
 
 
+def test_the_metrics_of_a_run_carry_its_seed_and_its_path_changes():
+    """One row for r1, with the world's seed and the paths its planner handed over."""
+    run = Run(DEMO)
+    run.until_done(60.0)
+    (row,) = run.metrics()
+    assert row["robot"] == "r1" and row["seed"] == run.world.seed
+    assert row["success"] == 1 and 19.0 < row["done_at_s"] < 20.0
+    assert row["driven_m"] > 0.0
+    assert row["path_changes"] == run.nav.path_changes["r1"] >= 1
+
+
 def test_until_done_gives_up_at_the_limit():
     """Too little time says False and stops on time."""
     run = Run(DEMO)

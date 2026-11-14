@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .costmap import Costmap
-from .evaluation import result_lines
+from .evaluation import metrics_rows, result_lines
 from .nav.navigation import Navigation
 from .sim.simulation import Simulation
 from .verify import WorldError
@@ -145,6 +145,16 @@ class Run:
         """What each robot did so far, one line per task; see `result_lines`."""
         self.nav.judge.update(self.sim)
         return result_lines(self.sim, self.nav.judge)
+
+    def metrics(self) -> list[dict]:
+        """The key numbers of the run so far, one row per robot; see `metrics_rows`.
+
+        `evaluation.write_metrics` turns the rows into a CSV file.
+        """
+        self.nav.judge.update(self.sim)
+        return metrics_rows(
+            self.sim, self.nav.judge, self.nav.path_changes, self.world.seed
+        )
 
     def _robot(self, name: str):
         """The robot of that name in the simulation, or a plain error."""

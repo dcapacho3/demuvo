@@ -73,6 +73,27 @@ lidar noise gives rows that differ.
 `--result` prints how the run went when the window closes, in the same lines as
 `run.result()`.
 
+## The metrics file
+
+`run.metrics()` gives the run as numbers instead of lines: one row per robot with the
+seed, the time and steps, the tasks done and when, the distance driven, the goal error
+left, the paths the robot was handed (replans included), its collisions, its estimator
+and its pose error at the end. `write_metrics` turns the rows into a CSV file:
+
+```python
+from demuvo.evaluation import write_metrics
+
+run = Run("mine.toml")
+run.until_done(60.0)
+print(write_metrics(run.metrics()))  # demuvo_metrics_world_<time>.csv, here
+```
+
+`write_metrics(rows, "runs/mine.csv")` names the file instead. The default place and
+name are `METRICS_DIR` and `METRICS_NAME` in `demuvo.evaluation.metrics`, one line
+each, so a benchmark that wants its files elsewhere changes them in one place. The
+run-level columns repeat on every row, so rows from many runs or seeds concatenate
+into one flat table. `--metrics [FILE]` writes the same file when the window closes.
+
 ## What stays exact
 
 The same world and seed give the same run on one machine and one numpy build. On another

@@ -191,6 +191,34 @@ def test_the_result_is_printed_only_when_asked(monkeypatch, capsys):
     assert lines[1].startswith("r1 drove ")
 
 
+def test_metrics_writes_the_named_csv_file(tmp_path, monkeypatch, capsys):
+    """--metrics FILE writes the key numbers there and prints the path."""
+
+    def drive_to_the_goal(session, seconds):
+        session.run.until_done(60.0)
+        return 0
+
+    monkeypatch.setattr(cli, "show", drive_to_the_goal)
+    file = tmp_path / "run.csv"
+    assert main([DEMO, "--metrics", str(file)]) == 0
+    assert capsys.readouterr().out.strip() == str(file)
+    lines = file.read_text(encoding="utf-8").splitlines()
+    assert lines[0].startswith("robot,seed,time_s")
+    assert lines[1].startswith("r1,")
+
+
+def test_metrics_without_a_file_names_one_after_the_world(
+    tmp_path, monkeypatch, capsys
+):
+    """The default is demuvo_metrics_<world>_<time>.csv in the current directory."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli, "show", lambda session, seconds: 0)
+    assert main([DEMO, "--metrics"]) == 0
+    written = Path(capsys.readouterr().out.strip())
+    assert written.name.startswith("demuvo_metrics_demo_")
+    assert (tmp_path / written).read_text(encoding="utf-8").startswith("robot,")
+
+
 def test_with_nothing_done_no_result_lines_are_printed(monkeypatch, capsys):
     """A blank world has no task, so there is nothing to say."""
     monkeypatch.setattr(cli, "show", lambda session, seconds: 0)

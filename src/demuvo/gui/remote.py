@@ -42,7 +42,8 @@ def serve(connection) -> None:
     """The worker: obey commands from the window until told to stop.
 
     Each command is a tuple and has one reply, a snapshot, except `("result",)`,
-    which replies with the result lines, and `("stop",)`, which replies with nothing.
+    which replies with the result lines, `("metrics",)`, which replies with the
+    metrics rows, and `("stop",)`, which replies with nothing.
     Warnings and log lines the run gives are not printed here; they go in the reply.
     """
     buffer = LogBuffer()
@@ -74,6 +75,8 @@ def _obey(connection, buffer: LogBuffer) -> None:
             run.until_done(*arguments)
         if command == "result":
             connection.send((run.result(), run.finished))
+        elif command == "metrics":
+            connection.send(run.metrics())
         else:
             reply = snapshot(run)
             reply["log"] = buffer.drain()
@@ -148,7 +151,7 @@ class RemoteRun:
         self._connection.send(command)
         self._waiting = True
         reply = self._receive()
-        if command[0] != "result":
+        if command[0] not in ("result", "metrics"):
             self._snap = reply
         return reply
 
@@ -227,6 +230,10 @@ class RemoteRun:
     def result(self) -> list[str]:
         """What each robot did so far; see `Run.result`."""
         return self.result_state()[0]
+
+    def metrics(self) -> list[dict]:
+        """The key numbers of the run so far; see `Run.metrics`."""
+        return self._ask("metrics")
 
     @property
     def finished(self) -> bool:

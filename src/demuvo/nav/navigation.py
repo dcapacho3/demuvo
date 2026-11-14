@@ -139,6 +139,15 @@ class Navigation:
                     ("configure", "smooth"),
                 )
 
+    @property
+    def path_changes(self) -> dict[str, int]:
+        """How many paths each robot was handed, by name.
+
+        The first plan of each task, every replan and every `set_path` count
+        one each, as `Observation.path_changes` counts them for a controller.
+        """
+        return dict(self._path_changes)
+
     def check(self, dt: float) -> None:
         """Check every control period against the simulation step `dt`.
 

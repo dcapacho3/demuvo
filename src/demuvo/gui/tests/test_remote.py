@@ -115,6 +115,15 @@ def test_the_result_and_the_finish_come_from_the_worker(pipe):
     assert any("reached at" in line for line in run.result())
 
 
+def test_the_metrics_come_from_the_worker_and_do_not_disturb_the_snapshot(pipe):
+    """The rows are those of a run here, and the poses still read afterwards."""
+    far, near = RemoteRun(str(DEMO), connection=pipe[0]), Run(str(DEMO))
+    far.until_done(60.0)
+    near.until_done(60.0)
+    assert far.metrics() == near.metrics()
+    assert far.poses["r1"] is not None
+
+
 def test_a_world_in_memory_is_loaded_and_a_step_length_of_its_own_is_used(pipe):
     """A `World` object, with dt given."""
     world = edit.new_world()
