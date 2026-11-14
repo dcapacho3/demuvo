@@ -48,11 +48,16 @@ def test_capture_sends_warnings_and_log_lines_to_the_buffer_and_then_lets_go():
     """Nothing reaches the terminal while it is on; afterwards things are as before."""
     buffer = LogBuffer()
     before = warnings.showwarning
+    logger = logging.getLogger("demuvo.test")
+    # `capture` listens on the root logger, as the standard library's loggers
+    # propagate to it. A pytest plugin may swap the logger class for one that does
+    # not, as ROS 2's launch_testing does, so say so here rather than depend on it.
+    logger.propagate = True
     release = capture(buffer)
     warnings.warn("a period that is odd")
-    logging.getLogger("demuvo.test").warning("no way from %s", "here")
-    logging.getLogger("demuvo.test").error("broken")
-    logging.getLogger("demuvo.test").info("quiet")
+    logger.warning("no way from %s", "here")
+    logger.error("broken")
+    logger.info("quiet")
     release()
     assert [(e.level, e.text) for e in buffer.entries] == [
         ("warning", "a period that is odd"),
@@ -60,5 +65,5 @@ def test_capture_sends_warnings_and_log_lines_to_the_buffer_and_then_lets_go():
         ("error", "broken"),
     ]
     assert warnings.showwarning is before
-    logging.getLogger("demuvo.test").warning("after")
+    logger.warning("after")
     assert len(buffer.entries) == 3
