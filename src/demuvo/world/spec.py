@@ -128,6 +128,66 @@ class RobotSpec:
     replan: ReplanSpec | None = None
 
 
+# What an actor is like when neither it nor the `[actors]` table says.
+DEFAULT_ACTOR_SOLID = True
+DEFAULT_ACTOR_COLLIDE = False
+
+
+@dataclass(frozen=True)
+class ActorSpec:
+    """A movable obstacle that the global costmap does not know about.
+
+    An actor has a body and a pose like an `Obstacle`, but its pose changes
+    while the run goes on. The global costmap is built from the obstacles
+    alone, so a planner never sees an actor: a robot meets one through its
+    lidar, its local costmap and, if it comes to that, a collision. An actor
+    with a `replan` robot is the case `ReplanSpec.blocked` and
+    `ReplanSpec.changed` were written for.
+
+    An actor is not a robot. It has no model, no sensors, no estimator, no
+    planner and no tasks, and it is not scored.
+
+    Attributes:
+        name: unique name, among the actors and the robots both. The window
+            lists an actor by name and a collision names it, so unlike an
+            obstacle an actor must have one.
+        shape: its body, a shape that encloses an area.
+        pose: where it starts.
+        motion: "module:Class" of the rule that moves it, or None to stand
+            still. A motion is built with the actor's start pose and a random
+            stream of its own, and gives its pose at a time.
+        motion_params: keyword arguments for the motion class.
+        solid: True if a robot that runs into this actor is pushed back out,
+            as it is by an obstacle; False if the robot passes through and
+            only the collision is recorded. This is about robots.
+        collide: True if this actor meets other actors. Two actors are tested
+            only if both say True. A contact between two actors is recorded
+            and neither is moved, which keeps a motion a function of time
+            alone; pushing them apart may come later. This is about actors.
+    """
+
+    name: str
+    shape: Shape
+    pose: Transform2D
+    motion: str | None = None
+    motion_params: dict = field(default_factory=dict)
+    solid: bool = DEFAULT_ACTOR_SOLID
+    collide: bool = DEFAULT_ACTOR_COLLIDE
+
+
+@dataclass(frozen=True)
+class ActorDefaults:
+    """What `[actors]` says every actor is like unless the actor says otherwise.
+
+    Attributes:
+        solid: the `solid` of an actor that does not set it.
+        collide: the `collide` of an actor that does not set it.
+    """
+
+    solid: bool = DEFAULT_ACTOR_SOLID
+    collide: bool = DEFAULT_ACTOR_COLLIDE
+
+
 @dataclass(frozen=True)
 class Task:
     """Something a robot is to do: go to a goal.
@@ -237,6 +297,8 @@ class World:
         seed: seed for every random number the run uses.
         obstacles: the obstacles, in file order.
         robots: the robots, in file order.
+        actors: the actors, in file order. An actor is a movable obstacle the
+            global costmap is not built from; see `ActorSpec`.
         tasks: what the robots are to do, in file order.
         dt: length of a simulation step in seconds.
         sensors: default settings of the sensors of every robot, by sensor
@@ -245,6 +307,9 @@ class World:
         local_costmap: how the local costmap of a robot with a lidar is built.
         origin: where the lower-left corner of the world is, in metres. The world
             spans from there to the origin plus `size`.
+        actor_defaults: what `[actors]` says every actor is like unless the
+            actor says otherwise. The actors themselves already carry the
+            answer; this is kept so a world writes back as it was read.
     """
 
     size: tuple[float, float]
@@ -257,6 +322,8 @@ class World:
     costmap: CostmapSpec = field(default_factory=CostmapSpec)
     local_costmap: LocalCostmapSpec = field(default_factory=LocalCostmapSpec)
     origin: tuple[float, float] = (0.0, 0.0)
+    actors: tuple[ActorSpec, ...] = ()
+    actor_defaults: ActorDefaults = field(default_factory=ActorDefaults)
 
     @property
     def bounds(self) -> tuple[float, float, float, float]:

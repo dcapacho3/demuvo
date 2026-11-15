@@ -21,6 +21,8 @@ from .spec import (
     DEFAULT_CONTROL_PERIOD,
     DEFAULT_DT,
     DEFAULT_GOAL_TOLERANCE,
+    ActorDefaults,
+    ActorSpec,
     CostmapSpec,
     LocalCostmapSpec,
     ReplanSpec,
@@ -152,6 +154,19 @@ def _replan(spec: ReplanSpec) -> bool | dict:
     return out or True
 
 
+def _actor(spec: ActorSpec, defaults: ActorDefaults) -> list[str]:
+    """The `[[actor]]` block of an actor; a key left at the default is left out."""
+    out = {"name": spec.name, "shape": _shape(spec.shape), "pose": _pose(spec.pose)}
+    if spec.motion:
+        out["motion"] = spec.motion
+        if spec.motion_params:
+            out["motion_params"] = spec.motion_params
+    for key in ("solid", "collide"):
+        if getattr(spec, key) != getattr(defaults, key):
+            out[key] = getattr(spec, key)
+    return ["[[actor]]", *_lines(out), ""]
+
+
 def _task(task: Task) -> list[str]:
     """The `[[task]]` block of a task."""
     out = {"robot": task.robot, "goal": _pose(task.goal)}
@@ -185,6 +200,19 @@ def world_text(world: World, base: Path) -> str:
         lines += ["[[obstacle]]", *_lines(table), ""]
     for spec in world.robots:
         lines += _robot(spec)
+    if world.actor_defaults != ActorDefaults():
+        lines += [
+            "[actors]",
+            *_lines(
+                {
+                    f.name: getattr(world.actor_defaults, f.name)
+                    for f in fields(ActorDefaults)
+                }
+            ),
+            "",
+        ]
+    for spec in world.actors:
+        lines += _actor(spec, world.actor_defaults)
     for task in world.tasks:
         lines += _task(task)
     if world.sensors:

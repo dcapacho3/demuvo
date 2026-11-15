@@ -65,6 +65,40 @@ with `estimator = "dead_reckoning"`. The third sensor, `perfect_pose`, reads the
 pose and has no settings; the default `ground_truth` estimator adds it itself, so a
 world file never needs to name it.
 
+## Actors
+
+An actor is a movable obstacle that the global costmap is not built from. A planner
+never sees one, so a robot meets an actor through its lidar, its local costmap and, if
+it comes to that, a collision. This is the case [replanning](#replanning) was written
+for: `blocked` and `changed` fire on what the lidar finds that the map did not show.
+
+```toml
+[actors]                  # optional: what every actor is like unless it says otherwise
+solid = true              # a robot that runs into an actor is pushed back out
+collide = false           # actors ignore each other
+
+[[actor]]
+name = "walker"           # required, and unique among the actors and the robots both
+shape = { name = "circle", radius = 0.25 }    # a circle, a box or a polygon
+pose = [3.0, 1.0, 0.0]    # where it starts
+motion = "demuvo.actors:Waypoints"            # optional; module:Class, see below
+motion_params = { points = [[3.0, 1.0], [3.0, 5.0]], speed = 0.6, loop = true }
+# solid = false           # optional: a robot passes through, the collision is still counted
+# collide = true          # optional: this actor meets other actors
+```
+
+An actor is not a robot. It has no model, no sensors, no estimator, no planner and no
+tasks, and it gets no row in the [metrics file](../README.md#the-metrics-file). Like a
+robot's body, its shape must enclose an area, and it must start inside the world. An
+actor with no `motion` stands still, which makes it an obstacle the costmap cannot see.
+
+`solid` and `collide` are two different questions. `solid` is about robots: `true`, the
+default, pushes a robot back out of the actor as an obstacle would; `false` lets the
+robot pass through, and the collision is still recorded. `collide` is about other
+actors, and is `false` by default, so actors walk through each other. Two actors are
+tested only if both say `true`, and a contact between them is recorded without either
+being moved, which keeps a motion a function of time alone.
+
 ## Tasks and planners
 
 A robot that has a task gets a path from its planner, and its controller follows it.

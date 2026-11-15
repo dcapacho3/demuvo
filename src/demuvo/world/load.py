@@ -28,6 +28,8 @@ from .spec import (
     DEFAULT_CONTROL_PERIOD,
     DEFAULT_DT,
     DEFAULT_GOAL_TOLERANCE,
+    ActorDefaults,
+    ActorSpec,
     CostmapSpec,
     LocalCostmapSpec,
     Obstacle,
@@ -63,6 +65,60 @@ def _check_obstacle_names(obstacles) -> None:
         if obstacle.name and obstacle.name in taken:
             raise WorldError(f"obstacle {i}: name '{obstacle.name}' used twice")
         taken.add(obstacle.name)
+
+
+ACTOR_KEYS = {"name", "shape", "pose", "motion", "motion_params", "solid", "collide"}
+
+
+def _flag(item: dict, key: str, label: str, default: bool) -> bool:
+    """An optional true-or-false key, or the default if it is absent."""
+    if key not in item:
+        return default
+    value = item[key]
+    if not isinstance(value, bool):
+        raise WorldError(f"{label}: '{key}' must be true or false")
+    return value
+
+
+def _parse_actor_defaults(value) -> ActorDefaults:
+    """Check the `[actors]` table: what every actor is like unless it says otherwise."""
+    data = table(value, "actors")
+    check_keys(data, {"solid", "collide"}, "actors")
+    fallback = ActorDefaults()
+    return ActorDefaults(
+        _flag(data, "solid", "actors", fallback.solid),
+        _flag(data, "collide", "actors", fallback.collide),
+    )
+
+
+def _parse_actor(
+    item: dict, index: int, bounds, names: set[str], defaults: ActorDefaults
+) -> ActorSpec:
+    """Build and check one `[[actor]]`; `names` holds every name read so far.
+
+    An actor shares its namespace with the robots, since both end up as the
+    name of a body in a collision.
+    """
+    item = table(item, f"actor {index}")
+    name = text(item, "name", f"actor {index}")
+    label = f"actor '{name}'"
+    if name in names:
+        raise WorldError(f"{label}: name used twice")
+    names.add(name)
+    check_keys(item, ACTOR_KEYS, label)
+    shape = parse_shape(require_key(item, "shape", label), label, robot=True)
+    pose = _pose(item, label)
+    if not inside(shape.points(pose), bounds):
+        raise WorldError(f"{label}: 'pose' must lie inside the world")
+    return ActorSpec(
+        name,
+        shape,
+        pose,
+        _plugin(item, "motion", label),
+        _plugin_params(item, "motion_params", "motion", label),
+        _flag(item, "solid", label, defaults.solid),
+        _flag(item, "collide", label, defaults.collide),
+    )
 
 
 def _pose(item: dict, label: str, key: str = "pose") -> Transform2D:
@@ -505,7 +561,17 @@ def load_world(path: str | Path) -> World:
         )
     check_keys(
         data,
-        {"version", "world", "obstacle", "robot", "task", "sensors", "costmap"},
+        {
+            "version",
+            "world",
+            "obstacle",
+            "robot",
+            "actor",
+            "actors",
+            "task",
+            "sensors",
+            "costmap",
+        },
         "file",
     )
 
@@ -537,6 +603,12 @@ def load_world(path: str | Path) -> World:
     if not robots:
         raise WorldError("file: needs at least one [[robot]]")
 
+    actor_defaults = _parse_actor_defaults(data.get("actors", {}))
+    actors = tuple(
+        _parse_actor(item, i, bounds, names, actor_defaults)
+        for i, item in enumerate(items(data, "actor"), start=1)
+    )
+
     by_name = {r.name: r for r in robots}
     tasks = tuple(
         _parse_task(item, i, bounds, by_name)
@@ -554,4 +626,6 @@ def load_world(path: str | Path) -> World:
         costmap,
         local_costmap,
         origin,
+        actors,
+        actor_defaults,
     )

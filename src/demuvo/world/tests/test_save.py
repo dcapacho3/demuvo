@@ -70,6 +70,24 @@ estimator = "dead_reckoning"
 sensors = { encoders = { noise = 0.01 } }
 replan = true
 
+[actors]
+solid = false
+collide = true
+
+[[actor]]
+name = "walker"
+shape = { name = "circle", radius = 0.25 }
+pose = [2.0, 2.0, 0.0]
+motion = "demuvo.actors:Waypoints"
+motion_params = { points = [[2.0, 2.0], [2.0, 4.0]], speed = 0.6, loop = true }
+
+[[actor]]
+name = "cart"
+shape = { name = "box", size = [0.5, 0.4] }
+pose = [4.0, 1.0, 0.25]
+solid = true
+collide = false
+
 [[task]]
 robot = "a"
 goal = [5.0, 5.0, 1.0]
