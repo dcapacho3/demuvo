@@ -4,8 +4,7 @@ version = 1
 # first path runs straight through where they will be; only the lidar finds them, and
 # the robot plans again when its path ahead is blocked. The walker goes back and forth
 # across the corridor, the cart does a lap round the box and waits at every corner.
-# Actors are not wired into the simulation yet: this file loads and checks, and the
-# actors will move once they are.
+# The actors move and a lidar sees them; being pushed out of one is not wired in yet.
 
 [world]
 size = [10.0, 6.0]        # metres

@@ -1,4 +1,12 @@
-"""The scene - the segments and circles a ray can hit, built from the world."""
+"""The scene - the segments and circles a ray can hit, built from the world.
+
+There are three kinds of body in it. The border and the obstacles never move and
+are built once, as `Scene.FIXED`. A robot's body has its index in `world.robots`
+as its owner, so its own sensors can leave it out. An actor's body has its index
+in `world.actors` plus the number of robots, so it belongs to no robot and every
+robot's lidar sees it; `solid` says whether a robot is pushed out of an actor and
+has nothing to do with being seen.
+"""
 
 from __future__ import annotations
 
@@ -66,12 +74,32 @@ def static_scene(world: World) -> Scene:
     return parts_scene([(Scene.FIXED, parts)])
 
 
-def with_robots(static: Scene, bodies: Sequence[Sequence[Part]]) -> Scene:
-    """The static scene plus the body of each robot, whose owner is its index."""
-    robots = parts_scene(list(enumerate(bodies)))
+def actor_owner(robots: int, index: int) -> int:
+    """The owner of the actor at `index` in a world with this many robots.
+
+    Actors are numbered after the robots, so a robot's own index still names its
+    own body and no actor can ever be skipped as if it were one.
+    """
+    return robots + index
+
+
+def with_robots(
+    static: Scene,
+    bodies: Sequence[Sequence[Part]],
+    actors: Sequence[Sequence[Part]] = (),
+) -> Scene:
+    """The static scene plus the body of each robot, then of each actor.
+
+    A robot's owner is its index; an actor's is `actor_owner`, which is its own
+    index after the robots.
+    """
+    moving = parts_scene(
+        list(enumerate(bodies))
+        + [(actor_owner(len(bodies), i), parts) for i, parts in enumerate(actors)]
+    )
     return Scene(
-        np.concatenate([static.segments, robots.segments]),
-        np.concatenate([static.segment_owner, robots.segment_owner]),
-        np.concatenate([static.circles, robots.circles]),
-        np.concatenate([static.circle_owner, robots.circle_owner]),
+        np.concatenate([static.segments, moving.segments]),
+        np.concatenate([static.segment_owner, moving.segment_owner]),
+        np.concatenate([static.circles, moving.circles]),
+        np.concatenate([static.circle_owner, moving.circle_owner]),
     )

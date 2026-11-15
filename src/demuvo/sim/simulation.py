@@ -12,6 +12,8 @@ from ..costmap import build_costmaps
 from ..models import MODELS, Twist
 from ..sensing import Estimate, Scene, StepTruth
 from ..world import World
+from ..world.shapes import Part
+from .actors import Actors
 from .collisions import Checker, Collision, Contact
 from .robot import Robot
 from .scene import static_scene, with_robots
@@ -41,6 +43,9 @@ class Simulation:
         costmaps: the global costmap of each robot, by name; None for all if the
             world turns the costmap off. Robots of one radius share a costmap.
         robots: the sensors and estimator of each robot, by name.
+        actors: the actors of the world and the motion of each; empty if the
+            world has none. An actor is a movable obstacle the global costmap
+            is not built from, so a robot meets one through its lidar.
         estimates: what each robot believes its pose is, by name; the same as
             `poses` for a robot whose estimator is ground truth.
         poses: current pose of each robot, by name, as a Transform2D; its
@@ -88,6 +93,7 @@ class Simulation:
             )
             for r in world.robots
         }
+        self.actors = Actors(world)
         self.poses: dict[str, Transform2D] = {r.name: r.pose for r in world.robots}
         self.steps = 0
         self.velocity = {r.name: np.zeros(3) for r in world.robots}
@@ -162,17 +168,31 @@ class Simulation:
             )
 
     def scene(self) -> Scene:
-        """What a ray can hit now: the border, the obstacles and every robot's body.
+        """What a ray can hit now: the border, the obstacles, the robots and the actors.
 
-        The body of a robot has its index in `world.robots` as its owner. The
-        scene is built on the first call after a step and kept until the next.
+        The body of a robot has its index in `world.robots` as its owner, and an
+        actor's is its own index after the robots, so a lidar that leaves out its
+        own robot still sees every actor, `solid` or not. The scene is built on
+        the first call after a step and kept until the next.
         """
         if self._scene is None or self._scene[0] != self.steps:
             bodies = [
                 spec.shape.parts(self.poses[spec.name]) for spec in self.world.robots
             ]
-            self._scene = (self.steps, with_robots(self._static_scene, bodies))
+            actors = list(self.actor_parts().values())
+            self._scene = (
+                self.steps,
+                with_robots(self._static_scene, bodies, actors),
+            )
         return self._scene[1]
+
+    def actor_poses(self) -> dict[str, Transform2D]:
+        """Where every actor is now, by name, in file order."""
+        return self.actors.poses_at(self.time)
+
+    def actor_parts(self) -> dict[str, list[Part]]:
+        """The convex parts of every actor's body now, by name, in file order."""
+        return self.actors.parts_at(self.time)
 
     def _velocities(self, moved: dict[str, Transform2D]) -> dict[str, np.ndarray]:
         """The body velocity (vx, vy, wz) of each robot over this step."""
