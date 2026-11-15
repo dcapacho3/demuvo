@@ -87,6 +87,11 @@ motion_params = { points = [[3.0, 1.0], [3.0, 5.0]], speed = 0.6, loop = true }
 # collide = true          # optional: this actor meets other actors
 ```
 
+![A walker crosses the corridor and a cart does a lap round the box. The robot's first
+path runs straight through them; its lidar finds the walker and A* takes it round.](actors.gif)
+
+`examples/worlds/actors.toml` is the world above.
+
 An actor is not a robot. It has no model, no sensors, no estimator, no planner and no
 tasks, and it gets no row in the [metrics file](../README.md#the-metrics-file). Like a
 robot's body, its shape must enclose an area, and it must start inside the world. An

@@ -14,6 +14,7 @@ from collections import deque
 from dataclasses import dataclass, field
 
 import numpy as np
+from robomath import Transform2D
 
 from ..world.shapes import Circle, LineString
 from . import look
@@ -29,6 +30,7 @@ LAYERS = {
     "costmap": ("global costmap", True),
     "local": ("local costmap", False),
     "obstacles": ("obstacles", True),
+    "actors": ("actors", True),
     "trails": ("trails", True),
     "paths": ("paths", True),
     "goals": ("goals", True),
@@ -94,6 +96,7 @@ class SceneDraw:
         palette: the costmap palette, one of `look.PALETTES`.
         selected: the name of the selected robot, or None.
         selected_obstacle: the 0-based place of the selected obstacle, or None.
+        selected_actor: the 0-based place of the selected actor, or None.
         trails: the recent places of each robot, by name.
         colors: the colour of each robot, by name.
         feet: the footprint of each robot, by name.
@@ -107,6 +110,9 @@ class SceneDraw:
         self.view: View | None = None
         self.selected: str | None = None
         self.selected_obstacle: int | None = None
+        self.selected_actor: int | None = None
+        self._dragged_actor: dict[int, np.ndarray] = {}
+        self._actor_poses: dict[str, np.ndarray] = {}
         self._dragged: dict[str, np.ndarray] = {}
         self.sprites = SpriteCache()
         self._cutout = _Cutout()
@@ -148,8 +154,9 @@ class SceneDraw:
             self._cutout.key = None
 
     def refresh_poses(self) -> None:
-        """Read every robot's pose once; one at a time would rebuild all of them."""
+        """Read every robot's and actor's pose once; one at a time rebuilds all."""
         self._poses = self.run.poses
+        self._actor_poses = self.run.actor_poses
 
     def drag(self, name: str, x: float, y: float, angle: float) -> None:
         """Draw a robot at a pose of its own, while the user drags it."""
@@ -166,6 +173,23 @@ class SceneDraw:
         if name not in self._poses:
             self.refresh_poses()
         return self._poses[name]
+
+    def drag_actor(self, index: int, x: float, y: float, angle: float) -> None:
+        """Draw an actor at a pose of its own, while the user drags it."""
+        self._dragged_actor = {index: np.array([x, y, angle])}
+
+    def drop_actor(self) -> None:
+        """Draw the dragged actor where its motion has it again."""
+        self._dragged_actor = {}
+
+    def actor_pose(self, index: int) -> np.ndarray:
+        """An actor's pose as drawn: where it is dragged to, else where it is."""
+        if index in self._dragged_actor:
+            return self._dragged_actor[index]
+        name = self.world.actors[index].name
+        if name not in self._actor_poses:
+            self.refresh_poses()
+        return self._actor_poses[name]
 
     def record_trails(self) -> None:
         """Add each robot's place to its trail."""
@@ -337,6 +361,95 @@ class SceneDraw:
             else:
                 canvas.polygon(screen, fill)
 
+    def _draw_actors(self, canvas: Canvas, opacity: float) -> None:
+        """Every actor where it is now; one that is not solid is drawn hollow.
+
+        Actors move every step, so they are drawn here and not into the cut-out.
+        """
+        view = self.view
+        edge = rgba(look.NAVY, opacity)
+        for index, spec in enumerate(self.world.actors):
+            fill = rgba(look.AMBER, opacity * (0.35 if not spec.solid else 1.0))
+            x, y, angle = (float(v) for v in self.actor_pose(index))
+            pose = Transform2D.from_xyt(np.array([x, y, angle]))
+            if isinstance(spec.shape, Circle):
+                px, py = view.to_screen(x, y)
+                canvas.circle(
+                    (float(px), float(py)),
+                    spec.shape.radius * view.scale,
+                    fill=fill,
+                    stroke=edge,
+                    width=2,
+                )
+            else:
+                corners = np.array(spec.shape.points(pose), dtype=float)
+                sx, sy = view.to_screen(corners[:, 0], corners[:, 1])
+                canvas.convex(
+                    np.column_stack([sx, sy]), fill=fill, stroke=edge, width=2
+                )
+            self._actor_nose(canvas, spec, x, y, angle, edge)
+
+    def _actor_nose(self, canvas: Canvas, spec, x, y, angle, color) -> None:
+        """A short tick from the middle, so which way an actor faces can be seen."""
+        reach = _actor_reach(spec.shape)
+        tip = (x + reach * math.cos(angle), y + reach * math.sin(angle))
+        start = self.view.to_screen(x, y)
+        end = self.view.to_screen(*tip)
+        polyline(canvas, np.array([start, end], dtype=float), 2, color)
+
+    def actor_boxes(self) -> dict[str, tuple[int, int, int, int]]:
+        """The screen box of each actor now, by name, with room for its outline."""
+        boxes = {}
+        for index, spec in enumerate(self.world.actors):
+            x, y, _ = (float(v) for v in self.actor_pose(index))
+            reach = _actor_reach(spec.shape) * self.view.scale + 6
+            px, py = (float(v) for v in self.view.to_screen(x, y))
+            boxes[spec.name] = (
+                int(px - reach),
+                int(py - reach),
+                int(px + reach) + 1,
+                int(py + reach) + 1,
+            )
+        return boxes
+
+    def actor_at(self, sx: float, sy: float) -> int | None:
+        """The place of the topmost actor under a pixel, or None."""
+        x, y = self.view.to_world(sx, sy)
+        for index in range(len(self.world.actors) - 1, -1, -1):
+            spec = self.world.actors[index]
+            ax, ay, angle = (float(v) for v in self.actor_pose(index))
+            if isinstance(spec.shape, Circle):
+                if math.hypot(x - ax, y - ay) <= spec.shape.radius:
+                    return index
+                continue
+            pose = Transform2D.from_xyt(np.array([ax, ay, angle]))
+            points = spec.shape.points(pose)
+            reach = CLICK_PIXELS / self.view.scale
+            if _in_polygon(x, y, points) or _near_edge(
+                x, y, points, reach, closed=True
+            ):
+                return index
+        return None
+
+    def _draw_selected_actor(self, canvas: Canvas) -> None:
+        """Outline the selected actor, which moves, so it is drawn every frame."""
+        index = self.selected_actor
+        if index is None or index >= len(self.world.actors):
+            return
+        spec = self.world.actors[index]
+        x, y, angle = (float(v) for v in self.actor_pose(index))
+        color = rgba(look.TEAL, 1.0)
+        if isinstance(spec.shape, Circle):
+            px, py = self.view.to_screen(x, y)
+            radius = spec.shape.radius * self.view.scale + 3
+            canvas.circle((float(px), float(py)), radius, stroke=color, width=2)
+            return
+        pose = Transform2D.from_xyt(np.array([x, y, angle]))
+        corners = np.array(spec.shape.points(pose), dtype=float)
+        sx, sy = self.view.to_screen(corners[:, 0], corners[:, 1])
+        ring = np.column_stack([sx, sy])
+        polyline(canvas, np.vstack([ring, ring[:1]]), 3, color, dash=(6, 4))
+
     def _paths(self, canvas: Canvas, view: View, opacity: float) -> None:
         """A dashed line for each robot with a goal: its path, else straight there."""
         goals = {t.robot: t.goal.xyt for t in self.world.tasks}
@@ -500,6 +613,7 @@ class SceneDraw:
         canvas.set_clip(max(left, b0), max(top, b1), min(right, b2), min(bottom, b3))
         self.draw_overlays(canvas)
         self._draw_selected_obstacle(canvas)
+        self._draw_selected_actor(canvas)
         canvas.set_clip(left, top, right, bottom)
         if self.layers.alpha("robots") > 0.001:
             draw_robots(self, canvas, self.layers.alpha("robots"))
@@ -516,7 +630,7 @@ class SceneDraw:
         full = (int(x), int(y), int(x + width), int(y + height))
         self.refresh_poses()
         _, key = self.cutout_key()
-        boxes = robot_boxes(self)
+        boxes = robot_boxes(self) | self.actor_boxes()
         last, self._last_boxes = self._last_boxes, boxes
         everything = (
             last is None
@@ -541,6 +655,15 @@ class SceneDraw:
             self._draw_trails(canvas, alpha("trails"))
         if alpha("rays") > 0.001:
             self._draw_rays(canvas, alpha("rays"))
+        if alpha("actors") > 0.001:
+            self._draw_actors(canvas, alpha("actors"))
+
+
+def _actor_reach(shape) -> float:
+    """How far an actor's body reaches from its middle, in metres."""
+    if isinstance(shape, Circle):
+        return shape.radius
+    return max(math.hypot(x, y) for x, y in shape.points(Transform2D.identity()))
 
 
 def _near_edge(x: float, y: float, points, reach: float, *, closed: bool) -> bool:

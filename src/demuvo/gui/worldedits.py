@@ -44,11 +44,12 @@ class WorldEdits:
         *,
         rebuild: bool = False,
         select: str | None = None,
+        actor: int | None = None,
     ):
         """Apply an edit to the world; `keep` is the obstacle left selected.
 
-        `rebuild` is for an edit of the robots, and `select` names the robot to
-        leave selected.
+        `rebuild` is for an edit of the robots, `select` names the robot to leave
+        selected, and `actor` the 0-based place of the actor to leave selected.
         """
         session = self.session
         if (why := session.guard()) is not None:
@@ -60,6 +61,7 @@ class WorldEdits:
         message = session.apply(world, rebuild=rebuild, select=select)
         if message is None:
             session.scene.selected_obstacle = keep
+            session.scene.selected_actor = actor
         return message
 
     def change_world(self, make: Callable[[World], World]) -> str | None:
@@ -89,6 +91,47 @@ class WorldEdits:
         if message is None:
             session.scene.selected = None
         return message
+
+    def change_actor(self, index: int, make: Callable[[World], World]) -> str | None:
+        """Apply an edit of one actor, and keep that actor selected."""
+        return self._edit(make, rebuild=True, select="", actor=index)
+
+    def move_actor(self, index: int, pose: tuple[float, float, float]) -> str | None:
+        """Move an actor; one that would leave the world stays where it was."""
+        return self.change_actor(index, lambda w: edit.move_actor(w, index, pose))
+
+    def resize_actor(self, index: int, size: tuple[float, ...]) -> str | None:
+        """Give an actor a new body size."""
+        return self.change_actor(index, lambda w: edit.resize_actor(w, index, size))
+
+    def rename_actor(self, index: int, new: str) -> str | None:
+        """Give an actor another name."""
+        return self.change_actor(index, lambda w: edit.rename_actor(w, index, new))
+
+    def set_actor_flag(self, index: int, key: str, on: bool) -> str | None:
+        """Set `solid` or `collide` of an actor."""
+        return self.change_actor(
+            index, lambda w: edit.set_actor_flag(w, index, key, on)
+        )
+
+    def set_actor_motion(self, index: int, path: str | None) -> str | None:
+        """Give an actor a motion, or none so it stands still."""
+        return self.change_actor(index, lambda w: edit.set_actor_motion(w, index, path))
+
+    def set_actor_motion_params(self, index: int, values: dict) -> str | None:
+        """Change the settings of an actor's motion."""
+        return self.change_actor(
+            index, lambda w: edit.set_actor_motion_params(w, index, values)
+        )
+
+    def delete_actor(self) -> str | None:
+        """Delete the selected actor."""
+        index = self.session.scene.selected_actor
+        if index is None:
+            return self.session.guard()
+        return self._edit(
+            lambda w: edit.remove_actor(w, index), rebuild=True, select=""
+        )
 
     def rename_robot(self, old: str, new: str) -> str | None:
         """Give a robot another name, and keep it selected."""

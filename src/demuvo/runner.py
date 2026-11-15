@@ -96,6 +96,11 @@ class Run:
         """The true pose of each robot as (x, y, angle), by name."""
         return {name: pose.xyt for name, pose in self.sim.poses.items()}
 
+    @property
+    def actor_poses(self) -> dict[str, np.ndarray]:
+        """Where each actor is now as (x, y, angle), by name; empty without actors."""
+        return {name: pose.xyt for name, pose in self.sim.actor_poses().items()}
+
     def step(self, count: int = 1) -> None:
         """Advance by `count` steps."""
         for _ in range(count):

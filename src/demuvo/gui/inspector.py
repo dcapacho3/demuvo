@@ -1,6 +1,6 @@
 """The inspector - the form for the selected robot, in the right-hand column.
 
-With an obstacle selected it shows the obstacle; with nothing, the world.
+With an obstacle or an actor selected it shows that; with nothing, the world.
 
 It shows the robot's pose and goal, its model, planner, smoother and controller, the
 settings of each part, the control period and its replanning; or a hint when nothing
@@ -14,6 +14,7 @@ import math
 
 from .. import edit, options
 from . import look
+from .actorform import ActorForm
 from .inputs import NumberSpec, Spin
 from .panels import FormRow, Note, TitleRow
 from .robotform import RobotForm
@@ -21,7 +22,7 @@ from .session import Session
 from .widgets import Checkbox, Column, Label, Section, Widget
 from .worldform import OUTLINES, WorldForm
 
-HINT = "Select a robot or an obstacle to see and edit it."
+HINT = "Select a robot, an actor or an obstacle to see and edit it."
 # Largest value a setting field accepts.
 SETTING_MAX = 1000.0
 
@@ -58,6 +59,7 @@ class Inspector:
         }
         self.fields: dict[str, Widget] = {}
         self.settings: dict[str, dict[str, Widget]] = {}
+        self.motion: dict[str, Widget] = {}
 
     @property
     def name(self) -> str | None:
@@ -69,11 +71,16 @@ class Inspector:
         col = self.column
         col.clear()
         col.add(Section("Inspector"), self.note)
-        self.fields, self.settings = {}, {}
+        self.fields, self.settings, self.motion = {}, {}, {}
         forms = WorldForm(col, self.session, self.fields, self._done)
         obstacle = self.session.scene.selected_obstacle
+        actor = self.session.scene.selected_actor
         if name is not None:
             self._robot(name)
+        elif actor is not None:
+            ActorForm(col, self.session, self.fields, self._done, self.motion).actor(
+                actor
+            )
         elif obstacle is not None:
             forms.obstacle(obstacle)
         else:
@@ -207,10 +214,14 @@ class Inspector:
         self.column.layout()
 
     def sync_pose(self) -> None:
-        """Show the dragged robot's or obstacle's pose in its three pose fields."""
+        """Show the dragged robot's, actor's or obstacle's pose in its pose fields."""
         name = self.name
         place = self.session.scene.selected_obstacle
-        if place is not None and "ox" in self.fields:
+        spot = self.session.scene.selected_actor
+        if spot is not None and "ax" in self.fields:
+            x, y, angle = (float(v) for v in self.session.scene.actor_pose(spot))
+            values = (("ax", x), ("ay", y), ("ath", math.degrees(angle)))
+        elif place is not None and "ox" in self.fields:
             world = self.session.world
             if world.obstacles[place].shape.name in OUTLINES:
                 x, y, angle = edit.outline_center(world, place)

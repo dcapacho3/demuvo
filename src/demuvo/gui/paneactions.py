@@ -36,6 +36,15 @@ class PaneActions:
         if self.session.select_obstacle(index):
             self.program.refresh()
 
+    def select_actor(self, index: int) -> None:
+        """Select an actor by its 0-based place."""
+        if self.session.select_actor(index):
+            self.program.refresh()
+
+    def actor_dropped(self, index: int, x: float, y: float, angle: float) -> None:
+        """A dragged actor was dropped: the world follows at the drop."""
+        self.program.edited(self.session.edits.move_actor(index, (x, y, angle)))
+
     def dragged(self) -> None:
         """A robot is being dragged: show its pose, redraw only the robots."""
         self.program.inspector.sync_pose()

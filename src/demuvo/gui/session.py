@@ -153,19 +153,55 @@ class Session:
 
     def select(self, name: str | None) -> bool:
         """Select a robot, or none; True if the selection changed."""
-        if name == self.scene.selected and self.scene.selected_obstacle is None:
+        if name == self.scene.selected and self._nothing_else_selected():
             return False
         self.scene.selected = name
         self.scene.selected_obstacle = None
+        self.scene.selected_actor = None
         return True
+
+    def _nothing_else_selected(self) -> bool:
+        """True if neither an obstacle nor an actor is selected."""
+        return (
+            self.scene.selected_obstacle is None and self.scene.selected_actor is None
+        )
 
     def select_obstacle(self, index: int | None) -> bool:
         """Select an obstacle by its 0-based place, or none; True if it changed."""
-        if index == self.scene.selected_obstacle and self.scene.selected is None:
+        same = index == self.scene.selected_obstacle and self.scene.selected is None
+        if same and self.scene.selected_actor is None:
             return False
         self.scene.selected_obstacle = index
         self.scene.selected = None
+        self.scene.selected_actor = None
         return True
+
+    def select_actor(self, index: int | None) -> bool:
+        """Select an actor by its 0-based place, or none; True if it changed."""
+        same = index == self.scene.selected_actor and self.scene.selected is None
+        if same and self.scene.selected_obstacle is None:
+            return False
+        self.scene.selected_actor = index
+        self.scene.selected = None
+        self.scene.selected_obstacle = None
+        return True
+
+    def add_actor(self) -> str | None:
+        """Add an actor at a free place, and select it."""
+        if (why := self.guard()) is not None:
+            return why
+        taken = edit.actor_names(self.world)
+        name = next(f"a{k}" for k in range(1, 10_000) if f"a{k}" not in taken)
+        try:
+            pose = edit.free_pose(self.world, radius=edit.ACTOR_RADIUS)
+            world = edit.add_actor(self.world, name, pose)
+        except WorldError as error:
+            return REFUSED.format(error)
+        place = len(self.world.actors)
+        message = self.apply(world, rebuild=True, select="")
+        if message is None:
+            self.select_actor(place)
+        return message
 
     def set_tool(self, tool: str) -> None:
         """Choose the "select", "goal", "box" or "circle" tool."""

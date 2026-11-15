@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from bisect import bisect_right
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 import numpy as np
 from robomath import Transform2D
@@ -35,7 +36,13 @@ class Waypoints:
             when it comes back to it. 0 passes straight through.
         delay: seconds it stands at the start before it first moves.
         face: True to face the way it moves; False to keep the start angle.
+
+    Attributes of the class:
+        CHOICES: the settings that are one of a few words, for a form to show as
+            a drop-down; see `demuvo.options.choices_of`.
     """
+
+    CHOICES: ClassVar[dict[str, tuple[str, ...]]] = {"mode": MODES}
 
     points: list = field(default_factory=list)
     speed: float = 0.5

@@ -143,3 +143,33 @@ def test_the_estimators_and_sensors_are_listed_with_their_settings():
     lidar = {s.name: s.kind for s in options.sensor_settings("lidar")}
     assert lidar["beams"] is int and lidar["max_range"] is float
     assert "mount" not in lidar
+
+
+def test_the_motions_of_an_actor_are_listed():
+    """The table a form shows; "stands still" means no motion at all."""
+    table = options.motions()
+    assert table["stands still"] is None
+    assert table["Waypoints"] == "demuvo.actors:Waypoints"
+
+
+def test_the_arguments_of_a_class_include_what_a_form_cannot_show():
+    """A form asks for them to see what it must fill in itself, such as points."""
+    assert "points" in options.arguments_of("demuvo.actors:Waypoints")
+    assert options.arguments_of(None) == ()
+    # a class that is not a dataclass is read from its __init__
+    assert options.arguments_of("demuvo.sensing.lidar:Lidar") == (
+        "model",
+        "rng",
+        "settings",
+    )
+
+
+def test_the_word_settings_of_a_class_are_offered_as_choices():
+    """A motion says which of its settings are one of a few words."""
+    assert options.choices_of("demuvo.actors:Waypoints")["mode"] == (
+        "once",
+        "loop",
+        "bounce",
+    )
+    assert options.choices_of(None) == {}
+    assert options.choices_of("demuvo.planners:AStar") == {}

@@ -5,7 +5,8 @@ planners, smoothers and controllers exist, and which settings each one takes.
 This module builds them, so a window does not have to know any class by name.
 
 A package of its own joins a list by naming its class in its entry points, with
-the group `demuvo.planners`, `demuvo.smoothers` or `demuvo.controllers`:
+the group `demuvo.planners`, `demuvo.smoothers`, `demuvo.controllers` or
+`demuvo.actors`:
 
     [project.entry-points."demuvo.planners"]
     greedy = "mybench.planners:Greedy"
@@ -29,12 +30,18 @@ from .sensing.lidar import LidarSettings
 from .verify import WorldError
 
 NO_SMOOTHER = "none"
+# The motion of an actor that stands where it was put.
+NO_MOTION = "stands still"
 NO_CONTROLLER = "none (driven from outside)"
 
 _PLANNERS = {"Straight line": DEFAULT_PLANNER, "A*": "demuvo.planners:AStar"}
 _SMOOTHERS = {
     NO_SMOOTHER: None,
     "Line of sight": "demuvo.smoothers.line_of_sight:LineOfSight",
+}
+_MOTIONS = {
+    NO_MOTION: None,
+    "Waypoints": "demuvo.actors:Waypoints",
 }
 _CONTROLLERS = {
     "Pure pursuit": "demuvo.controllers:PurePursuit",
@@ -90,6 +97,11 @@ def controllers() -> dict[str, str | None]:
     return _with_entry_points(_CONTROLLERS, "demuvo.controllers")
 
 
+def motions() -> dict[str, str | None]:
+    """The motions of an actor by friendly name; "stands still" maps to None."""
+    return _with_entry_points(_MOTIONS, "demuvo.actors")
+
+
 def estimators() -> tuple[str, ...]:
     """The names of the estimators, which give a controller its pose."""
     return tuple(ESTIMATORS)
@@ -142,6 +154,44 @@ def _fields(cls) -> list[Setting]:
     ]
 
 
+def _class_of(path: str):
+    """The class a "module:Class" path names.
+
+    Raises:
+        WorldError: if the module or the class cannot be found.
+    """
+    module, _, name = path.partition(":")
+    try:
+        return getattr(import_module(module), name)
+    except (ImportError, AttributeError) as error:
+        raise WorldError(f"cannot load '{path}': {error}") from error
+
+
+def arguments_of(path: str | None) -> tuple[str, ...]:
+    """Every keyword a class takes, settings a form cannot show among them.
+
+    A form uses it to see whether a class wants something it must fill in itself,
+    such as the points of a path.
+    """
+    if not path:
+        return ()
+    cls = _class_of(path)
+    if dataclasses.is_dataclass(cls):
+        return tuple(f.name for f in dataclasses.fields(cls))
+    return tuple(inspect.signature(cls).parameters)
+
+
+def choices_of(path: str | None) -> dict[str, tuple[str, ...]]:
+    """The settings of a class that are one of a few words, and the words.
+
+    A class offers them as a `CHOICES` class attribute, `{"mode": ("once", ...)}`,
+    so a form can show a drop-down for a setting that is not a number.
+    """
+    if not path:
+        return {}
+    return {k: tuple(v) for k, v in getattr(_class_of(path), "CHOICES", {}).items()}
+
+
 def sensor_settings(kind: str) -> list[Setting]:
     """The number settings of a sensor kind; a lidar's mount is set apart."""
     return _fields(_SENSORS[kind])
@@ -160,9 +210,4 @@ def settings_of(path: str | None) -> list[Setting]:
     """
     if not path:
         return []
-    module, _, name = path.partition(":")
-    try:
-        cls = getattr(import_module(module), name)
-    except (ImportError, AttributeError) as error:
-        raise WorldError(f"cannot load '{path}': {error}") from error
-    return _fields(cls)
+    return _fields(_class_of(path))

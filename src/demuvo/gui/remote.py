@@ -32,6 +32,7 @@ def snapshot(run: Run) -> dict:
     return {
         "time": run.time,
         "poses": run.poses,
+        "actors": run.actor_poses,
         "paths": {name: run.path(name) for name in names},
         "scans": {name: run.scans(name) for name in names},
         "local": {name: run.local_costmap(name) for name in names},
@@ -172,6 +173,11 @@ class RemoteRun:
     def poses(self) -> dict:
         """The true pose of each robot in the latest snapshot."""
         return self._snap["poses"]
+
+    @property
+    def actor_poses(self) -> dict:
+        """Where each actor is in the latest snapshot, by name."""
+        return self._snap["actors"]
 
     def scans(self, name: str) -> list[Beams]:
         """The latest scans of a robot."""

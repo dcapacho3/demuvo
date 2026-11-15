@@ -46,7 +46,8 @@ class ScenePane(Widget):
             heading)`, `waypoint_added(name, x, y, heading)`, `dragged()`,
             `dropped(name, x, y, angle)`, `robot_moved(name, x, y, angle)`,
             `obstacle_moved(index, x, y)`, `obstacle_drawn(kind, pose, size)`,
-            `outline_drawn(kind, vertices)` and `sketch_changed()`.
+            `outline_drawn(kind, vertices)`, `select_actor(index)`,
+            `actor_dropped(index, x, y, angle)` and `sketch_changed()`.
     """
 
     def __init__(self, session: Session, pill: Pill, actions) -> None:
@@ -57,6 +58,7 @@ class ScenePane(Widget):
         self.dragging: str | None = None
         self.grab = (0.0, 0.0)
         self.moving: int | None = None
+        self.moving_actor: int | None = None
         self.ghost: tuple[int, float, float] | None = None
         self.sketch: tuple[float, float, float, float] | None = None
         self.outline: list[tuple[float, float]] = []
@@ -182,6 +184,17 @@ class ScenePane(Widget):
             else:
                 self.actions.goal_set(scene.selected, x, y, heading)
             return
+        spot = None if name else scene.actor_at(event.x, event.y)
+        if spot is not None:
+            self.actions.select_actor(spot)
+            if session.editable:
+                self.moving_actor = spot
+                session.history.begin()
+                x, y = scene.view.to_world(event.x, event.y)
+                px, py, angle = scene.actor_pose(spot)
+                self.grab = (float(px) - x, float(py) - y)
+                scene.drag_actor(spot, float(px), float(py), float(angle))
+            return
         place = None if name else scene.obstacle_at(event.x, event.y)
         if place is not None:
             self.actions.select_obstacle(place)
@@ -215,6 +228,14 @@ class ScenePane(Widget):
             self.ghost = (self.moving, x + self.grab[0], y + self.grab[1])
             self.actions.obstacle_moved(*self.ghost)
             self.actions.sketch_changed()
+        elif self.moving_actor is not None:
+            scene = self.session.scene
+            x, y = scene.view.to_world(event.x, event.y)
+            angle = float(scene.actor_pose(self.moving_actor)[2])
+            scene.drag_actor(
+                self.moving_actor, x + self.grab[0], y + self.grab[1], angle
+            )
+            self.actions.dragged()
         elif self.dragging:
             scene = self.session.scene
             x, y = scene.view.to_world(event.x, event.y)
@@ -235,6 +256,12 @@ class ScenePane(Widget):
             x0, y0, x1, y1 = self.sketch
             self.sketch = None
             self._finish_sketch(x0, y0, x1, y1)
+        if self.moving_actor is not None:
+            scene = self.session.scene
+            index, self.moving_actor = self.moving_actor, None
+            x, y, angle = (float(v) for v in scene.actor_pose(index))
+            scene.drop_actor()
+            self.actions.actor_dropped(index, x, y, angle)
         if self.dragging:
             scene = self.session.scene
             name, self.dragging = self.dragging, None

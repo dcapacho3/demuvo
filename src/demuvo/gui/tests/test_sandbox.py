@@ -265,7 +265,8 @@ def test_the_menus_list_the_commands_and_run_them(app):
     ]  # fmt: skip
     edit_items = program.menu_items("Edit")
     assert [i.text for i in edit_items if not i.separator] == [
-        "Undo", "Redo", "Add robot", "Delete selected", "Set goal", "Draw box",
+        "Undo", "Redo", "Add robot", "Add actor", "Delete selected", "Set goal",
+        "Draw box",
         "Draw circle", "Draw polygon", "Draw line", "Select", "Reset run",
     ]  # fmt: skip
     next(i for i in edit_items if i.text == "Add robot").action()

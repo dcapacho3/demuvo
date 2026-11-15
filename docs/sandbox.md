@@ -31,7 +31,7 @@ the setting, and the world stays as it was.
 
 | Where | What |
 | --- | --- |
-| Left | the scene list (robots and obstacles) and the layer switches |
+| Left | the scene list (robots, actors and obstacles) and the layer switches |
 | Middle | the world, with the playback pill (play, step, reset, speed, the clock) |
 | Right | the inspector: the form for what is selected |
 | Bottom | the log, which opens when a run gives a warning |
@@ -46,14 +46,15 @@ Pick a tool from the tool bar or by key, then use the pointer.
 
 | Tool | Key | What it does |
 | --- | --- | --- |
-| Select | V | Click a robot or an obstacle to select it. Drag it to move it. |
+| Select | V | Click a robot, an actor or an obstacle to select it. Drag it to move it. |
 | Goal | G | Click the floor to set the selected robot's goal. Shift and click adds a waypoint after the goals it has. It is grey until a robot is selected. |
 | Box | B | Drag from one corner to the other. |
 | Circle | C | Drag from the centre outwards. |
 | Polygon | P | Click the corners. Click near the first corner, double click, right click or press Enter to close it. |
 | Line | L | Click the points. Double click, right click or press Enter to finish. |
 | Add robot | Ctrl+N | Puts a robot at a free place. |
-| Delete | Delete | Removes the selected robot or obstacle. |
+| Add actor | Ctrl+M | Puts an actor at a free place. |
+| Delete | Delete | Removes the selected robot, actor or obstacle. |
 
 After you draw a shape, the pointer goes back to Select, so the next drag moves it. Esc
 cancels a polygon or line that is half drawn.
@@ -76,6 +77,10 @@ Up, Down and the wheel change it by a step.
 
 **Nothing selected** shows the world: its width, height, seed and step length, the
 corner, the sensors every robot starts with, and the global and local costmap.
+
+**An actor** shows where it starts, its body, whether it is `solid` and whether it can
+`collide` with other actors, and its motion with that motion's settings; see
+[Actors](#actors).
 
 **An obstacle** shows its pose and size. A polygon or line shows its middle and its
 rotation instead, and turns about that middle. A line of two points also has a length.
@@ -123,10 +128,45 @@ The speed goes from 0.25x to 8x. While a run plays, the status bar shows "real t
 100%": the simulated seconds gained for each real second, as a share of the speed you
 chose. It turns amber below 90%, which means the run is falling behind.
 
-The layers are the global and local costmap, obstacles, trails, paths, goals, lidar rays
-and robots, with an opacity and a palette for the costmaps. The floor is always shown. A
+The layers are the global and local costmap, obstacles, actors, trails, paths, goals,
+lidar rays and robots, with an opacity and a palette for the costmaps. The floor is always shown. A
 world with up to ten robots starts with the lidar rays on. The rays appear after the
 first step.
+
+## Actors
+
+An actor is a moving obstacle that the global costmap is not built from, so a planner
+never sees one: a robot finds an actor with its lidar, puts it in its local costmap and,
+with `replan`, plans around it. Add one with the tool bar button, Ctrl+M or
+Edit > Add actor. It arrives at a free place, standing still, and it is drawn in amber
+with a tick that shows which way it faces.
+
+![The actors world in the sandbox: the scene list has an Actors group, the walker is
+selected, and the inspector shows its pose, body, the solid and collide switches and
+its Waypoints motion with mode, speed, wait, delay and face. The cart, which is not
+solid, is drawn hollow.](actors.png)
+
+Click an actor to select it, drag it to move it, F2 to rename it, Delete to remove it.
+The inspector then shows:
+
+| Field | What it does |
+| --- | --- |
+| x, y, heading | where it starts |
+| radius, or length and width | its body, a disc or a box |
+| solid | on, a robot is pushed out of it; off, the robot drives through and the collision is still counted |
+| collide | on, it meets other actors that also have it on; the contact is recorded and neither is moved |
+| motion | how it moves: "stands still", or a class such as Waypoints |
+
+Picking a motion shows its settings under it. **Waypoints** goes from where the actor
+starts through its points at `speed`, facing the way it goes: `mode` is `once` (stay at
+the last point), `loop` (back to the start and round again) or `bounce` (turn round and
+come back), with `wait` at every point it reaches, `delay` before it first moves, and
+`face` off to slide without turning. The points themselves are in the world file; the
+window gives a new motion one point to be going on with. See
+[the world file](world-file.md#actors) for every key, and
+[your own algorithms](plugins.md) to write a motion of your own.
+
+An actor that is not solid is drawn hollow. Actors have a layer switch of their own.
 
 ## The log
 
@@ -148,8 +188,8 @@ starting a world forgets the list. Undo is off while a run is in progress.
 | Space, S, R | play or pause, step, reset |
 | V, G, B, C, P, L | the select, goal, box, circle, polygon and line tools |
 | Enter, Esc | finish or cancel a polygon or line |
-| F2 | rename the selected robot or obstacle |
-| Ctrl+N, Delete | add a robot, delete the selected one |
+| F2 | rename the selected robot, actor or obstacle |
+| Ctrl+N, Ctrl+M, Delete | add a robot, add an actor, delete the selected one |
 | Ctrl+O, Ctrl+S | open a world file, save the world |
 | Ctrl+Z, Ctrl+Y | undo, redo |
 | Ctrl+1, Ctrl+2, Ctrl+3 | the scene list, the inspector, the log |

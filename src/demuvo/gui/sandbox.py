@@ -58,6 +58,8 @@ BUTTON = 32
 RAYS_UP_TO = 10
 # The key of an obstacle row in the scene list, followed by its 0-based place.
 OBSTACLE_KEY = "obstacle:"
+# The key of an actor row in the scene list, followed by its 0-based place.
+ACTOR_KEY = "actor:"
 
 
 class Sandbox:
@@ -191,6 +193,14 @@ class Sandbox:
                 "tool",
             ),
             ("add", "robot_add", self._add_robot, "Add robot (Ctrl+N)", False, None),
+            (
+                "add_actor",
+                "actor_add",
+                self._add_actor,
+                "Add actor (Ctrl+M)",
+                False,
+                None,
+            ),
             ("delete", "trash", self._delete_selected, "Delete (Del)", False, None),
             (
                 "bottom",
@@ -223,7 +233,7 @@ class Sandbox:
         top = MENU_H + 6
         self.buttons["left"].set_rect(8, top, BUTTON, BUTTON)
         x = 8 + 36 + 6
-        for key in (*TOOL_MESSAGES, "add", "delete"):
+        for key in (*TOOL_MESSAGES, "add", "add_actor", "delete"):
             self.buttons[key].set_rect(x, top, BUTTON, BUTTON)
             x += 34
         self.buttons["right"].set_rect(width - 40, top, BUTTON, BUTTON)
@@ -271,6 +281,12 @@ class Sandbox:
                 MenuItem(separator=True),
                 MenuItem(
                     "Add robot", shortcut="Ctrl+N", enabled=ok, action=self._add_robot
+                ),
+                MenuItem(
+                    "Add actor",
+                    shortcut="Ctrl+M",
+                    enabled=ok,
+                    action=self._add_actor,
                 ),
                 MenuItem(
                     "Delete selected",
@@ -366,6 +382,7 @@ class Sandbox:
             (KEY["2"], True): lambda: self._toggle_panel("right"),
             (KEY["3"], True): lambda: self._toggle_panel("bottom"),
             (KEY["n"], True): self._add_robot,
+            (KEY["m"], True): self._add_actor,
             (KEY["f2"], False): self._rename_selected,
             (KEY["z"], True): self._undo,
             (KEY["y"], True): self._redo,
@@ -462,16 +479,17 @@ class Sandbox:
         robots = session.world.robots
         rows = [("", f"Robots ({len(robots)})", None, 0)]
         rows += [(r.name, r.name, session.scene.colors[r.name], 1) for r in robots]
+        if session.world.actors:
+            rows += [("", f"Actors ({len(session.world.actors)})", None, 0)]
+            for k, spec in enumerate(session.world.actors):
+                rows.append((f"{ACTOR_KEY}{k}", spec.name, look.AMBER, 1))
         rows += [("", "Obstacles", None, 0)]
         for k in range(1, len(session.world.obstacles) + 1):
             label = edit.obstacle_label(session.world, k - 1)
             rows.append((f"{OBSTACLE_KEY}{k - 1}", label, look.NAVY2, 1))
         self.tree.set_rows([Row(*row) for row in rows])
         self.tree.preferred_height = float(max(32 * len(rows), 10))
-        place = session.scene.selected_obstacle
-        self.tree.selected = (
-            session.scene.selected if place is None else f"{OBSTACLE_KEY}{place}"
-        )
+        self.tree.selected = _row_key(session.scene)
         status = self.shell.layout.chrome.status
         status.count = f"{len(robots)} robot" + ("" if len(robots) == 1 else "s")
         self.shell.layout.apply()
@@ -480,7 +498,7 @@ class Sandbox:
         """Enable what the mode allows, show the badge, and tell the inspector."""
         session = self.session
         ok = session.editable
-        for key in ("add", "delete", "box", "circle", "polygon", "line"):
+        for key in ("add", "add_actor", "delete", "box", "circle", "polygon", "line"):
             self.buttons[key].enabled = ok
         self.buttons["goal"].enabled = ok and session.scene.selected is not None
         if session.tool != "select" and not self.buttons[session.tool].enabled:
@@ -655,9 +673,11 @@ class Sandbox:
 
     # -- editing: what the pane tells --
     def select(self, name: str | None) -> None:
-        """Select a robot, an obstacle (key "obstacle:N") or none."""
+        """Select a robot, an obstacle ("obstacle:N"), an actor ("actor:N") or none."""
         if name is not None and name.startswith(OBSTACLE_KEY):
             changed = self.session.select_obstacle(int(name[len(OBSTACLE_KEY) :]))
+        elif name is not None and name.startswith(ACTOR_KEY):
+            changed = self.session.select_actor(int(name[len(ACTOR_KEY) :]))
         else:
             changed = self.session.select(name)
         if changed:
@@ -680,6 +700,10 @@ class Sandbox:
             index = int(key[len(OBSTACLE_KEY) :])
             current = self.session.world.obstacles[index].name
             submit = functools.partial(self._renamed, "obstacle", index)
+        elif key.startswith(ACTOR_KEY):
+            index = int(key[len(ACTOR_KEY) :])
+            current = self.session.world.actors[index].name
+            submit = functools.partial(self._renamed, "actor", index)
         else:
             current = key
             submit = functools.partial(self._renamed, "robot", key)
@@ -689,19 +713,18 @@ class Sandbox:
         )
 
     def _renamed(self, kind: str, which, text: str) -> None:
-        """Rename an obstacle (by its place) or a robot (by its name), and show it."""
+        """Rename an obstacle or actor (by its place) or a robot (by its name)."""
         edits = self.session.edits
         if kind == "obstacle":
             self.edited(edits.rename_obstacle(which, text))
+        elif kind == "actor":
+            self.edited(edits.rename_actor(which, text))
         else:
             self.edited(edits.rename_robot(which, text))
 
     def _rename_selected(self) -> None:
-        """F2: rename the selected robot or obstacle."""
-        place = self.session.scene.selected_obstacle
-        key = self.session.scene.selected or (
-            None if place is None else f"{OBSTACLE_KEY}{place}"
-        )
+        """F2: rename the selected robot, obstacle or actor."""
+        key = _row_key(self.session.scene)
         if key is not None:
             self._rename(key, self.tree.row_rect(key))
 
@@ -709,10 +732,16 @@ class Sandbox:
         """Add a robot."""
         self.edited(self.session.add_robot())
 
+    def _add_actor(self) -> None:
+        """Add an actor: a movable obstacle the global costmap is not built from."""
+        self.edited(self.session.add_actor())
+
     def _delete_selected(self) -> None:
-        """Delete the selected obstacle, or else the selected robot."""
+        """Delete the selected obstacle or actor, or else the selected robot."""
         if self.session.scene.selected_obstacle is not None:
             self.edited(self.session.edits.delete_obstacle())
+        elif self.session.scene.selected_actor is not None:
+            self.edited(self.session.edits.delete_actor())
         else:
             self.edited(self.session.delete_robot())
 
@@ -764,3 +793,12 @@ class Sandbox:
                     int(pill.y + pill.height),
                 )
             )
+
+
+def _row_key(scene) -> str | None:
+    """The scene list row of what is selected: a robot name, "obstacle:N", "actor:N"."""
+    if scene.selected_obstacle is not None:
+        return f"{OBSTACLE_KEY}{scene.selected_obstacle}"
+    if scene.selected_actor is not None:
+        return f"{ACTOR_KEY}{scene.selected_actor}"
+    return scene.selected
