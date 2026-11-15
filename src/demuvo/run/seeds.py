@@ -2,13 +2,14 @@
 
 The seeds are the world's own seed and the ones after it. Each run is alone in
 its process, so `jobs` runs go at once and the rows come out the same however
-many there are.
+many there are. Each row can also carry the run's metrics rows, for one CSV
+file that covers every seed.
 """
 
 from __future__ import annotations
 
 import multiprocessing
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from ..runner import Run
 from ..world import World
@@ -23,23 +24,40 @@ class Row:
         done: True if every robot finished its tasks before the limit.
         time: simulated seconds when the run ended.
         collisions: contacts counted over the run.
+        metrics: the run's metrics rows, one per robot (see `Run.metrics`), if
+            `run_seeds` was asked for them; else empty. They are left out of
+            comparisons, hashing and repr, so a row still compares by the four
+            numbers above.
     """
 
     seed: int
     done: bool
     time: float
     collisions: int
+    metrics: tuple[dict, ...] = field(default=(), compare=False, repr=False)
 
 
-def _one(job: tuple[World, float]) -> Row:
-    """Run a world to the end; a module function so a process can receive it."""
-    world, limit = job
+def _one(job: tuple[World, float, str | None]) -> Row:
+    """Run a world to the end; a module function so a process can receive it.
+
+    The third item is the world's name for the metrics rows, or None for none.
+    """
+    world, limit, name = job
     run = Run(world)
     done = run.until_done(limit)
-    return Row(world.seed, done, run.time, len(run.sim.collisions))
+    metrics = () if name is None else tuple(run.metrics(name))
+    return Row(world.seed, done, run.time, len(run.sim.collisions), metrics)
 
 
-def run_seeds(world: World, count: int, limit: float, jobs: int = 1) -> list[Row]:
+def run_seeds(
+    world: World,
+    count: int,
+    limit: float,
+    jobs: int = 1,
+    *,
+    metrics: bool = False,
+    world_name: str = "",
+) -> list[Row]:
     """Run `count` seeds, starting at the world's, one row each in seed order.
 
     Args:
@@ -47,8 +65,13 @@ def run_seeds(world: World, count: int, limit: float, jobs: int = 1) -> list[Row
         count: how many seeds.
         limit: simulated seconds after which a run that is not done stops.
         jobs: how many runs go at once; 1 runs them here, in order.
+        metrics: True to fill each row's `metrics`, taken in the run's own
+            process at its end.
+        world_name: the name of the world in the metrics rows, usually the
+            stem of its file.
     """
-    work = [(replace(world, seed=world.seed + i), limit) for i in range(count)]
+    name = world_name if metrics else None
+    work = [(replace(world, seed=world.seed + i), limit, name) for i in range(count)]
     if jobs <= 1:
         return [_one(item) for item in work]
     with multiprocessing.get_context("spawn").Pool(min(jobs, count)) as pool:

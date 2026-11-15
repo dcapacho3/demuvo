@@ -235,6 +235,40 @@ def test_seeds_print_a_table_and_open_no_window(capsys, windows):
     assert windows == []
 
 
+def test_seeds_with_metrics_write_one_file_for_every_seed(tmp_path, capsys):
+    """The table is printed as before, then the path of a file with each seed."""
+    file = tmp_path / "seeds.csv"
+    assert main([DEMO, "--seeds", "2", "--jobs", "2", "--metrics", str(file)]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0].startswith("seed") and lines[-2] == "2 of 2 runs done"
+    assert lines[-1] == str(file)
+    csv_lines = file.read_text(encoding="utf-8").splitlines()
+    assert csv_lines[0].startswith("robot,world,seed,time_s")
+    assert [line.split(",")[:3] for line in csv_lines[1:]] == [
+        ["r1", "demo", "7"],
+        ["r1", "demo", "8"],
+    ]
+
+
+def test_seeds_with_metrics_and_no_file_name_one_after_the_world(
+    tmp_path, monkeypatch, capsys
+):
+    """The default name is the same as for a run in the window."""
+    monkeypatch.chdir(tmp_path)
+    assert main([DEMO, "--seeds", "1", "--metrics"]) == 0
+    written = Path(capsys.readouterr().out.splitlines()[-1])
+    assert written.name.startswith("demuvo_metrics_demo_")
+    assert (tmp_path / written).read_text(encoding="utf-8").startswith("robot,")
+
+
+def test_seeds_without_metrics_write_no_file(tmp_path, monkeypatch, capsys):
+    """Nothing but the table, as before."""
+    monkeypatch.chdir(tmp_path)
+    assert main([DEMO, "--seeds", "1"]) == 0
+    assert capsys.readouterr().out.splitlines()[-1] == "1 of 1 runs done"
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_seeds_need_a_file(capsys):
     """Without a world there is nothing to run."""
     assert main(["--seeds", "2"]) == 1

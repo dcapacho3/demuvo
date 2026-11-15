@@ -68,7 +68,8 @@ seed  done  time (s)  collisions
 ```
 
 The demo world has no noise, so every seed gives the same row. A world with encoder or
-lidar noise gives rows that differ.
+lidar noise gives rows that differ. `--metrics [FILE]` also writes every seed to one CSV
+file, described [below](#the-metrics-file).
 
 `--result` prints how the run went when the window closes, in the same lines as
 `run.result()`.
@@ -97,7 +98,10 @@ print(write_metrics(run.metrics("mine")))  # demuvo_metrics_world_<time>.csv, he
 name are `METRICS_DIR` and `METRICS_NAME` in `demuvo.evaluation.metrics`, one line
 each, so a benchmark that wants its files elsewhere changes them in one place. The
 run-level columns repeat on every row, so rows from many runs or seeds concatenate
-into one flat table. `--metrics [FILE]` writes the same file when the window closes.
+into one flat table. `--metrics [FILE]` writes the same file when the window closes,
+and with `--seeds` one file for all the seeds. From Python,
+`run_seeds(world, 4, 120.0, metrics=True, world_name="mine")` from `demuvo.run.seeds`
+fills each row's `metrics`; join them with `[m for row in rows for m in row.metrics]`.
 The format is locked: [the metrics file](../README.md#the-metrics-file) in the README
 names every column in order and says when a cell is left empty.
 

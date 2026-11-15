@@ -51,9 +51,10 @@ def _parser() -> argparse.ArgumentParser:
         nargs="?",
         const="",
         metavar="FILE",
-        help="write the run's key numbers as a CSV file when the window closes; "
-        "FILE names it, else demuvo_metrics_<world>_<time>.csv here. The columns "
-        "are in the README, under 'The metrics file'",
+        help="write the run's key numbers as a CSV file when the window closes, "
+        "or one file for every seed with --seeds; FILE names it, else "
+        "demuvo_metrics_<world>_<time>.csv here. The columns are in the README, "
+        "under 'The metrics file'",
     )
     parser.add_argument(
         "--one-process",
@@ -147,12 +148,23 @@ def _check(world, name: str) -> int:
 
 
 def _seeds(world, args) -> int:
-    """Run the world under several seeds and print the table."""
+    """Run the world under several seeds and print the table.
+
+    With --metrics, one CSV file then holds the metrics rows of every seed, in
+    seed order, and its path is printed after the table.
+    """
     if world is None:
         print("demuvo: --seeds needs a world file", file=sys.stderr)
         return 1
     if args.seeds < 1 or args.jobs < 1 or args.limit <= 0:
         print("demuvo: --seeds, --jobs and --limit must be above 0", file=sys.stderr)
         return 1
-    print(table(run_seeds(world, args.seeds, args.limit, args.jobs)))
+    stem, wanted = Path(args.world).stem, args.metrics is not None
+    rows = run_seeds(
+        world, args.seeds, args.limit, args.jobs, metrics=wanted, world_name=stem
+    )
+    print(table(rows))
+    if wanted:
+        where = args.metrics or metrics_path(stem)
+        print(write_metrics([line for row in rows for line in row.metrics], where))
     return 0

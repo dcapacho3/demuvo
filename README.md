@@ -45,7 +45,7 @@ demuvo [world.toml] [options]
 | `--bench` | open the world fixed, as a benchmark: every run is the same |
 | `--check` | check the file, print a summary, open nothing |
 | `--result` | print how each task went when the window closes |
-| `--metrics [FILE]` | write the run's key numbers as a CSV file when the window closes |
+| `--metrics [FILE]` | write the run's key numbers as a CSV file when the window closes; with `--seeds`, one file for every seed |
 | `--dt S` | step length in seconds, replacing the file's |
 | `--seconds S` | close the window after `S` seconds |
 | `--one-process` | simulate in the window's process, not in a process of its own |
@@ -78,6 +78,10 @@ with no file, and the parts of a robot driven from outside demuvo. Without `FILE
 file is `demuvo_metrics_<world>_<YYYYMMDD-HHMMSS>.csv` in the current directory
 (`world` in the name when no file was opened), and a file already there with that name
 is replaced.
+
+With `--seeds N`, `--metrics` writes one file for all the seeds, with the same columns and
+the same name, and prints its path after the table. It holds every robot of every seed,
+seeds in order; the `seed` column tells the runs apart, and `time_s` is each run's own.
 
 ## The sandbox
 
@@ -147,7 +151,8 @@ seed  done  time (s)  collisions
 ```
 
 The demo world has no noise, so the rows match. A world with encoder or lidar noise gives
-rows that differ, and the same seed always gives the same row.
+rows that differ, and the same seed always gives the same row. Add `--metrics` to also
+write every seed to one CSV file; see [the metrics file](#the-metrics-file).
 
 ## Adding a planner, smoother or controller
 

@@ -38,3 +38,32 @@ def test_the_table_lists_rows_and_counts_those_done():
         "   2    no     30.00           3",
         "1 of 2 runs done",
     ]
+
+
+def test_rows_carry_no_metrics_unless_asked():
+    """By default a row is the four numbers it always was."""
+    (row,) = run_seeds(load_world(DEMO), 1, limit=2.0)
+    assert row.metrics == ()
+
+
+def test_asked_for_each_row_carries_its_runs_metrics():
+    """One metrics row per robot, with the run's own seed, time and outcome."""
+    world = load_world(DEMO)
+    rows = run_seeds(world, 2, 120.0, metrics=True, world_name="demo")
+    for row in rows:
+        (line,) = row.metrics
+        assert (line["robot"], line["world"], line["seed"]) == ("r1", "demo", row.seed)
+        assert line["time_s"] == row.time and line["collisions"] == row.collisions
+        assert line["success"] == int(row.done)
+
+
+def test_metrics_are_the_same_from_processes_and_leave_comparison_alone():
+    """Two jobs give the same metrics; the metrics do not change equality or hash."""
+    world = load_world(DEMO)
+    apart = run_seeds(world, 2, 2.0, jobs=2, metrics=True, world_name="demo")
+    together = run_seeds(world, 2, 2.0, metrics=True, world_name="demo")
+    assert [r.metrics for r in apart] == [r.metrics for r in together]
+    assert apart == run_seeds(world, 2, 2.0)
+    first = apart[0]
+    plain = Row(first.seed, first.done, first.time, first.collisions)
+    assert hash(first) == hash(plain)
