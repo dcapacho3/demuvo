@@ -4,7 +4,9 @@ version = 1
 # first path runs straight through where they will be; only the lidar finds them, and
 # the robot plans again when its path ahead is blocked. The walker goes back and forth
 # across the corridor, the cart does a lap round the box and waits at every corner.
-# The actors move and a lidar sees them; being pushed out of one is not wired in yet.
+# The walker is solid, so a robot that reaches it is pushed back out; the cart is not,
+# so a robot drives through it and the contact is only counted. With this seed the
+# robot sees the walker in time and goes round, and the run ends with no collision.
 
 [world]
 size = [10.0, 6.0]        # metres

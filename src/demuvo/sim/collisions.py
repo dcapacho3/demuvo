@@ -6,6 +6,14 @@ Obstacles never move, so their parts go into a quadtree once, at load. Robots
 change every step, so their boxes are compared all at once with numpy. Each body
 also has a layer and a mask, a pair is tested only if each one's layer is in the
 other's mask. The default is that everything meets everything.
+
+Actors move too, and are given to `check` beside the robots. An actor is never
+moved by what it touches: its pose comes from its motion alone. A robot that
+meets a `solid` actor is pushed out of it, a robot that meets one that is not
+`solid` passes through and the contact is only recorded, and two actors are
+tested only if both carry `collide`, and then neither is moved. An actor is not
+tested against the obstacles or the border: where its motion takes it is the
+world file's business, not the checker's.
 """
 
 from __future__ import annotations
@@ -38,6 +46,9 @@ class Contact:
         normal: unit vector pointing from a toward b.
         depth: how far they overlap, in metres: the least distance that parts them.
         b_moves: True if b is a robot, which the caller may move too.
+        pushes: True if the overlap must be cleared, which is the usual case;
+            False records it and leaves both where they are, as for a robot
+            inside an actor that is not `solid` and for two actors.
     """
 
     a: str
@@ -45,6 +56,7 @@ class Contact:
     normal: tuple[float, float]
     depth: float
     b_moves: bool
+    pushes: bool = True
 
 
 @dataclass(frozen=True)
@@ -99,7 +111,8 @@ class Checker:
     """Finds the overlaps among the robots and the fixed world.
 
     Args:
-        world: the world; its obstacles and its border are fixed from here on.
+        world: the world; its obstacles and its border are fixed from here on,
+            and its actors are the bodies `check` may be given beside the robots.
         layers: optional (layer, mask) for a robot by name or an obstacle by
             "obstacle N"; a body not listed gets (1, ALL).
     """
@@ -111,6 +124,8 @@ class Checker:
     ) -> None:
         """Cut the fixed world into parts and put them in the quadtree."""
         self._shapes = {r.name: r.shape for r in world.robots}
+        self._actors = {a.name: a for a in world.actors}
+        self._shapes |= {a.name: a.shape for a in world.actors}
         self._seen: dict[str, tuple[Transform2D, list[Part], Box]] = {}
         self._layers = dict(layers or {})
         self._fixed: list[tuple[str, Part]] = []
@@ -127,6 +142,21 @@ class Checker:
         layer_b, mask_b = self._layers.get(b, (1, ALL))
         return bool(layer_a & mask_b) and bool(layer_b & mask_a)
 
+    def _pair(self, a: str, b: str) -> tuple[bool, bool] | None:
+        """Whether to test these two, and then `b_moves` and `pushes` of the contact.
+
+        `a` is a robot unless both are actors, since `check` lists the robots
+        first and takes its pairs from the upper triangle.
+        """
+        second = self._actors.get(b)
+        if second is None:  # two robots: either may be pushed
+            return True, True
+        if a not in self._actors:  # a robot against an actor
+            return False, second.solid
+        if self._actors[a].collide and second.collide:  # two actors: recorded only
+            return False, False
+        return None
+
     def _body(self, name: str, pose: Transform2D) -> tuple[list[Part], Box]:
         """The parts of a robot at a pose and the box around them."""
         seen = self._seen.get(name)
@@ -136,23 +166,33 @@ class Checker:
         return seen[1], seen[2]
 
     def check(
-        self, poses: Mapping[str, Transform2D], moved: Collection[str] | None = None
+        self,
+        poses: Mapping[str, Transform2D],
+        moved: Collection[str] | None = None,
+        actors: Mapping[str, Transform2D] | None = None,
     ) -> list[Contact]:
-        """Every overlap among the robots at these poses, and with the world.
+        """Every overlap among the robots and the actors, and with the world.
 
         Args:
             poses: the pose of each robot to test, by name; the same set of
                 poses as one step proposes.
             moved: if given, only the contacts of these robots are looked for.
                 Use it to test again after moving some robots, when the others
-                were clear before. None tests all.
+                were clear before. None tests all. An actor never moves between
+                two calls of one step, so it need not be listed.
+            actors: the pose of each actor to test, by name, or None for none.
+                An actor is tested against the robots, and against another actor
+                when both carry `collide`.
 
         Returns:
             One contact per pair of bodies, the deepest, in a fixed order:
-            robot against robot first, then robot against the world.
+            robot against robot and against actor first, then robot against the
+            world. A contact whose `pushes` is False is reported but must be
+            left as it is.
         """
-        names = list(poses)
-        bodies = {n: self._body(n, poses[n]) for n in names}
+        all_poses = {**poses, **(actors or {})}
+        names = list(all_poses)
+        bodies = {n: self._body(n, all_poses[n]) for n in names}
         parts = {n: bodies[n][0] for n in names}
         boxes = np.array([bodies[n][1] for n in names]).reshape(-1, 4)
         contacts = []
@@ -169,9 +209,13 @@ class Checker:
         hits = meets[rows, cols]
         for i, j in zip(rows[hits], cols[hits]):
             a, b = names[i], names[j]
-            if self._meet(a, b) and (found := _deepest(parts[a], parts[b])):
-                contacts.append(Contact(a, b, found[0], found[1], True))
-        for name in names if moved is None else [n for n in names if n in moved]:
+            rule = self._pair(a, b)
+            if rule is None or not self._meet(a, b):
+                continue
+            if found := _deepest(parts[a], parts[b]):
+                contacts.append(Contact(a, b, found[0], found[1], *rule))
+        robots = poses if moved is None else [n for n in poses if n in moved]
+        for name in robots:
             contacts += self._against_world(name, parts[name])
         return contacts
 

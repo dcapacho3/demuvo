@@ -103,7 +103,8 @@ class Simulation:
         self._static_scene = static_scene(world)
         self._scene: tuple[int, Scene] | None = None  # the step it was built for
         self._touching: set[tuple[str, str]] = set()
-        if overlaps := self.checker.check(self.poses):
+        start = self.checker.check(self.poses, actors=self.actors.poses_at(0.0))
+        if overlaps := [c for c in start if c.pushes]:
             raise ValueError(
                 f"'{overlaps[0].a}' starts inside '{overlaps[0].b}'; "
                 "move one of them in the world file"
@@ -146,7 +147,9 @@ class Simulation:
             name: model.step(self.poses[name], clipped[name], self.dt)
             for name, model in self.models.items()
         }
-        moved = self._resolve(moved)
+        # The actors are where their motion puts them at the end of the step, so a
+        # robot is pushed out of where an actor is now, not where it was.
+        moved = self._resolve(moved, self.actors.poses_at((self.steps + 1) * self.dt))
         velocity = self._velocities(moved)
         self.driven = {
             name: self.driven[name] + math.hypot(v[0], v[1]) * self.dt
@@ -205,16 +208,26 @@ class Simulation:
         after = np.array([pose.matrix for pose in moved.values()])
         return dict(zip(moved, rminus_se2(after, before) / self.dt))
 
-    def _resolve(self, moved: dict[str, Transform2D]) -> dict[str, Transform2D]:
-        """Push the proposed poses out of every overlap and record collisions."""
+    def _resolve(
+        self,
+        moved: dict[str, Transform2D],
+        actors: dict[str, Transform2D],
+    ) -> dict[str, Transform2D]:
+        """Push the proposed poses out of every overlap and record collisions.
+
+        Every contact is recorded as a collision, the actors' among them, but
+        only a contact that `pushes` moves anything: a robot inside an actor
+        that is not `solid`, and two actors, are left where they are.
+        """
         poses = dict(moved)
-        contacts = self.checker.check(poses)
+        contacts = self.checker.check(poses, actors=actors)
         pairs = {(c.a, c.b) for c in contacts}
         time = (self.steps + 1) * self.dt
         self.collisions += [
             Collision(time, a, b) for a, b in sorted(pairs - self._touching)
         ]
         self._touching = pairs
+        contacts = [c for c in contacts if c.pushes]
         for _ in range(MAX_PASSES):
             if not contacts:
                 return poses
@@ -224,22 +237,27 @@ class Simulation:
                 poses[name] = Transform2D.from_xyt(
                     np.array([x + push[0], y + push[1], angle])
                 )
-            contacts = self.checker.check(poses, pushes)
+            contacts = [
+                c for c in self.checker.check(poses, pushes, actors=actors) if c.pushes
+            ]
         while contacts:
             back = {n for c in contacts for n in (c.a, c.b if c.b_moves else c.a)}
             back = {n for n in back if poses[n] is not self.poses[n]}
             if not back:
                 break
             poses.update({n: self.poses[n] for n in back})
-            contacts = self.checker.check(poses, back)
+            contacts = [
+                c for c in self.checker.check(poses, back, actors=actors) if c.pushes
+            ]
         return poses
 
 
 def _pushes(contacts: list[Contact]) -> dict[str, tuple[float, float]]:
     """The push that clears the deepest contact of each robot.
 
-    A robot against the world takes the whole depth; two robots share it, so the
-    result does not depend on which one is listed first.
+    A robot against the world, or against an actor, takes the whole depth; two
+    robots share it, so the result does not depend on which one is listed first.
+    Every contact here `pushes`: the caller has already dropped the others.
     """
     best: dict[str, tuple[float, tuple[float, float]]] = {}
 
