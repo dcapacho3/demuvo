@@ -258,7 +258,7 @@ The window tests need `libglfw3`, `libgl1` and `xvfb`, and are skipped where the
 missing.
 
 Each part of the code is a folder under `src/demuvo/` (`world`, `models`, `costmap`,
-`sim`, `planners`, `controllers`, `nav`, `evaluation`, `run`, `gui`), plus the files
+`sim`, `actors`, `planners`, `controllers`, `nav`, `evaluation`, `run`, `gui`), plus the files
 `options.py`, `edit.py` and `runner.py`, and its tests sit in a `tests` folder inside it.
 
 Pose maths comes from [robomath](https://github.com/dcapacho3/robomath).

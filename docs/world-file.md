@@ -92,6 +92,16 @@ tasks, and it gets no row in the [metrics file](../README.md#the-metrics-file). 
 robot's body, its shape must enclose an area, and it must start inside the world. An
 actor with no `motion` stands still, which makes it an obstacle the costmap cannot see.
 
+The one motion available now is `demuvo.actors:Waypoints`: straight from the start pose
+through `points`, in order, at `speed` metres per second, facing the way it goes. `mode`
+says what happens after the last point: `"once"` stays there, `"loop"` (the default)
+goes straight back to the start and round again, `"bounce"` turns round and comes back
+through the points. `wait` is the seconds it stands at every point it arrives at, `delay`
+the seconds before it first moves, and `face = false` keeps the start angle while it
+moves. One point and `"bounce"` is an actor going back and forth between two places. A
+motion of your own is a class with `configure(start, rng)` and `pose_at(time)`; see
+[your own algorithms](plugins.md).
+
 `solid` and `collide` are two different questions. `solid` is about robots: `true`, the
 default, pushes a robot back out of the actor as an obstacle would; `false` lets the
 robot pass through, and the collision is still recorded. `collide` is about other

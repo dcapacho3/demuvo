@@ -1,0 +1,118 @@
+"""The waypoints motion: along a line of points at a speed, once, round or back."""
+
+from __future__ import annotations
+
+import math
+from bisect import bisect_right
+from dataclasses import dataclass, field
+
+import numpy as np
+from robomath import Transform2D
+
+from ..plugins import check_not_negative, check_positive
+
+# How the actor goes on after the last point.
+MODES = ("once", "loop", "bounce")
+
+
+@dataclass(frozen=True)
+class Waypoints:
+    """Straight from the start pose through the points, in order, at one speed.
+
+    The actor leaves where its `pose` puts it, so `points` are the places it
+    goes to after that: one point and `mode = "bounce"` is an actor going back
+    and forth between two places. It faces the way it moves, and when it stops
+    it keeps facing the way it came.
+
+    Attributes:
+        points: the places it goes to after the start, as [x, y] pairs, in order.
+            At least one, and no two in a row the same.
+        speed: metres per second along every leg.
+        mode: what it does after the last point. "once" stays there; "loop" goes
+            straight back to the start and does it all again; "bounce" turns
+            round and goes back through the points to the start, and again.
+        wait: seconds it stands at every point it arrives at, the start included
+            when it comes back to it. 0 passes straight through.
+        delay: seconds it stands at the start before it first moves.
+        face: True to face the way it moves; False to keep the start angle.
+    """
+
+    points: list = field(default_factory=list)
+    speed: float = 0.5
+    mode: str = "loop"
+    wait: float = 0.0
+    delay: float = 0.0
+    face: bool = True
+
+    def __post_init__(self) -> None:
+        """Check the settings; the legs are built in `configure`."""
+        check_positive(self, "speed")
+        check_not_negative(self, "wait", "delay")
+        if self.mode not in MODES:
+            raise ValueError(
+                f"mode must be one of {', '.join(MODES)}, got {self.mode!r}"
+            )
+        if not isinstance(self.face, bool):
+            raise ValueError(f"face must be true or false, got {self.face!r}")
+        if not isinstance(self.points, list) or not self.points:
+            raise ValueError("points needs at least one [x, y]")
+        for point in self.points:
+            if (
+                not isinstance(point, list | tuple)
+                or len(point) != 2
+                or not all(
+                    isinstance(v, int | float)
+                    and not isinstance(v, bool)
+                    and math.isfinite(v)
+                    for v in point
+                )
+            ):
+                raise ValueError(f"points: each must be [x, y], got {point!r}")
+
+    def configure(self, start: Transform2D, rng: np.random.Generator) -> None:
+        """Lay out the legs from the start pose; this motion draws no random number."""
+        x, y, angle = (float(v) for v in start.xyt)
+        stops = [(x, y), *((float(a), float(b)) for a, b in self.points)]
+        if self.mode == "loop":
+            stops.append(stops[0])
+        elif self.mode == "bounce":
+            stops += stops[-2::-1]
+        for a, b in zip(stops, stops[1:]):
+            if a == b:
+                raise ValueError(f"points: two in a row are the same place, {list(a)}")
+        # One lap: from leaving the start to standing again where the lap ends.
+        # The first entry of `times` is when each leg starts, the stops follow.
+        times, legs = [], []
+        clock = 0.0
+        for a, b in zip(stops, stops[1:]):
+            length = math.hypot(b[0] - a[0], b[1] - a[1])
+            times.append(clock)
+            legs.append((a, b, length / self.speed))
+            clock += length / self.speed + self.wait
+        if self.mode == "once":
+            clock -= self.wait  # the last stop is for good, not a wait
+        object.__setattr__(self, "_angle", angle)
+        object.__setattr__(self, "_times", times)
+        object.__setattr__(self, "_legs", legs)
+        object.__setattr__(self, "_lap", clock)
+
+    def pose_at(self, time: float) -> Transform2D:
+        """The pose at this time; before 0 and before `delay` it is the start pose."""
+        legs = getattr(self, "_legs", None)
+        if legs is None:
+            raise RuntimeError("configure must be called before pose_at")
+        t = max(0.0, time - self.delay)
+        if self.mode == "once":
+            t = min(t, self._lap)
+        else:
+            t %= self._lap
+        k = bisect_right(self._times, t) - 1
+        (ax, ay), (bx, by), duration = legs[k]
+        if t == 0.0 and time - self.delay <= 0.0:
+            # Still waiting to leave: the start pose, as the file gave it.
+            return Transform2D.from_xyt(np.array([ax, ay, self._angle]))
+        heading = math.atan2(by - ay, bx - ax) if self.face else self._angle
+        s = min(1.0, (t - self._times[k]) / duration)
+        return Transform2D.from_xyt(
+            np.array([ax + (bx - ax) * s, ay + (by - ay) * s, heading])
+        )

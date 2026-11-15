@@ -57,6 +57,13 @@ latest scan of each lidar), `obs.costmap` (the local costmap) and `obs.path_chan
 [replan](world-file.md#replanning), so a controller that keeps state knows to start
 over). It does not see the simulation.
 
+**A motion** moves an [actor](world-file.md#actors), not a robot, and is named as
+`motion = "module:Class"` with `motion_params`. It has `configure(start, rng)`, called once
+with the actor's start pose and a random stream of its own, and `pose_at(time)`, which
+returns the actor's pose at a simulated time. The pose must depend on the time alone, so
+draw any random number in `configure` and keep it; that is what makes a run repeat.
+`demuvo.actors:Waypoints` is the one that comes with demuvo.
+
 A planner that finds no way returns an empty path. The robot then stays still, and the log
 says so.
 

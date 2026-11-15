@@ -1,0 +1,50 @@
+version = 1
+
+# Two actors cross the robot's way. Neither is on the global costmap, so the planner's
+# first path runs straight through where they will be; only the lidar finds them, and
+# the robot plans again when its path ahead is blocked. The walker goes back and forth
+# across the corridor, the cart does a lap round the box and waits at every corner.
+# Actors are not wired into the simulation yet: this file loads and checks, and the
+# actors will move once they are.
+
+[world]
+size = [10.0, 6.0]        # metres
+seed = 11
+
+[[obstacle]]
+pose = [5.0, 4.5, 0.0]
+shape = { name = "box", size = [1.0, 1.0] }
+
+[[actor]]
+name = "walker"
+shape = { name = "circle", radius = 0.25 }
+pose = [4.0, 0.5, 0.0]    # where it starts
+motion = "demuvo.actors:Waypoints"
+# After the start it goes to each point in turn. "bounce" turns round at the last point
+# and comes back; one point and "bounce" is back and forth between two places.
+motion_params = { points = [[4.0, 3.5]], speed = 0.6, mode = "bounce", wait = 0.5 }
+
+[[actor]]
+name = "cart"
+shape = { name = "box", size = [0.6, 0.4] }
+pose = [6.5, 3.5, 0.0]
+solid = false             # a robot drives through it; the collision still counts
+motion = "demuvo.actors:Waypoints"
+# "loop" goes straight back to the start after the last point, and again.
+motion_params = { points = [[6.5, 5.5], [3.5, 5.5], [3.5, 3.5]], speed = 0.4, mode = "loop", wait = 1.0, delay = 2.0 }
+
+[[robot]]
+name = "r1"
+model = "diff_drive"
+shape = { name = "circle", radius = 0.2 }
+pose = [1.0, 2.0, 0.0]
+planner = "demuvo.planners:AStar"
+smoother = "demuvo.smoothers.line_of_sight:LineOfSight"
+controller = "demuvo.controllers:PurePursuit"
+controller_params = { speed = 0.5, lookahead = 0.6 }
+sensors = { lidar = { beams = 180, max_range = 4.0, noise = 0.01 } }
+replan = { period = 1.0, blocked = true, changed = 0.2 }
+
+[[task]]
+robot = "r1"
+goal = [9.0, 2.0, 0.0]

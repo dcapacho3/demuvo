@@ -10,16 +10,22 @@ from .verify import WorldError
 
 
 def load_class(
-    path: str, params: Mapping, robot: str, kind: str, method: str | tuple[str, ...]
+    path: str,
+    params: Mapping,
+    robot: str,
+    kind: str,
+    method: str | tuple[str, ...],
+    who: str = "robot",
 ):
     """Build the class `path` ("module:Class") with `params` as keyword arguments.
 
     Args:
         path: module and class, for example "demuvo.controllers:PurePursuit".
         params: keyword arguments for the class.
-        robot: name of the robot that asked for it, for the error message.
-        kind: "planner" or "controller", for the error message.
+        robot: name of the robot, or actor, that asked for it, for the error message.
+        kind: "planner", "controller" or "motion", for the error message.
         method: the method the object must have, such as "command", or several.
+        who: what asked for it, "robot" or "actor", for the error message.
 
     Raises:
         WorldError: if the module, the class or its arguments do not work, or
@@ -31,11 +37,11 @@ def load_class(
         obj = getattr(import_module(module), cls)(**params)
     except (ImportError, AttributeError, TypeError, ValueError) as error:
         raise WorldError(
-            f"robot '{robot}': cannot load {kind} '{path}': {error}"
+            f"{who} '{robot}': cannot load {kind} '{path}': {error}"
         ) from error
     for name in (method,) if isinstance(method, str) else method:
         if not callable(getattr(obj, name, None)):
-            raise WorldError(f"robot '{robot}': {kind} '{path}' has no '{name}' method")
+            raise WorldError(f"{who} '{robot}': {kind} '{path}' has no '{name}' method")
     return obj
 
 
