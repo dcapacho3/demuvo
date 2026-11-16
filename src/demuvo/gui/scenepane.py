@@ -59,6 +59,7 @@ class ScenePane(Widget):
         self.grab = (0.0, 0.0)
         self.moving: int | None = None
         self.moving_actor: int | None = None
+        self.moving_point: int | None = None
         self.ghost: tuple[int, float, float] | None = None
         self.sketch: tuple[float, float, float, float] | None = None
         self.outline: list[tuple[float, float]] = []
@@ -184,6 +185,8 @@ class ScenePane(Widget):
             else:
                 self.actions.goal_set(scene.selected, x, y, heading)
             return
+        if not name and session.editable and self._route_pressed(event):
+            return
         spot = None if name else scene.actor_at(event.x, event.y)
         if spot is not None:
             self.actions.select_actor(spot)
@@ -214,6 +217,38 @@ class ScenePane(Widget):
             self.grab = (px - x, py - y)
             scene.drag(name, px, py, float(angle))
 
+    def _params(self, index: int) -> dict:
+        """The motion settings of an actor."""
+        return self.session.world.actors[index].motion_params
+
+    def _route_pressed(self, event: Event) -> bool:
+        """Grab or make a waypoint of the selected actor; True if it took the press.
+
+        A dot is dragged. The middle of a leg puts a new waypoint there and drags
+        it. Shift and a click on the floor puts one at the end.
+        """
+        scene = self.session.scene
+        index = scene.selected_actor
+        if (
+            index is None
+            or "points" not in self.session.world.actors[index].motion_params
+        ):
+            return False
+        x, y = scene.view.to_world(event.x, event.y)
+        place = scene.point_at(event.x, event.y)
+        if place is None and scene.leg_at(event.x, event.y) is not None:
+            place = scene.leg_at(event.x, event.y)
+            self.actions.point_inserted(index, place, x, y)
+        elif place is None and event.shift and scene.actor_at(event.x, event.y) is None:
+            count = len(self._params(index)["points"])
+            self.actions.point_inserted(index, count, x, y)
+            return True
+        if place is None:
+            return False
+        self.moving_point = place
+        self.session.history.begin()
+        return True
+
     def on_move(self, event: Event) -> None:
         """Carry the dragged robot or obstacle, or stretch the sketch."""
         if self.outline:
@@ -227,6 +262,11 @@ class ScenePane(Widget):
             x, y = self.session.scene.view.to_world(event.x, event.y)
             self.ghost = (self.moving, x + self.grab[0], y + self.grab[1])
             self.actions.obstacle_moved(*self.ghost)
+            self.actions.sketch_changed()
+        elif self.moving_point is not None:
+            scene = self.session.scene
+            x, y = scene.view.to_world(event.x, event.y)
+            scene.drag_point = (self.moving_point, x, y)
             self.actions.sketch_changed()
         elif self.moving_actor is not None:
             scene = self.session.scene
@@ -256,6 +296,12 @@ class ScenePane(Widget):
             x0, y0, x1, y1 = self.sketch
             self.sketch = None
             self._finish_sketch(x0, y0, x1, y1)
+        if self.moving_point is not None:
+            scene = self.session.scene
+            place, self.moving_point = self.moving_point, None
+            drag, scene.drag_point = scene.drag_point, None
+            if drag is not None:
+                self.actions.point_dropped(scene.selected_actor, place, *drag[1:])
         if self.moving_actor is not None:
             scene = self.session.scene
             index, self.moving_actor = self.moving_actor, None

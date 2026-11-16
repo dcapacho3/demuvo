@@ -144,3 +144,9 @@ def test_a_robot_cannot_be_put_inside_a_solid_actor(world):
     """The refusal names the actor."""
     with pytest.raises(WorldError, match="overlap w"):
         edit.add_robot(world, "n", (3.0, 3.0, 0.0))
+
+
+def test_a_robot_can_be_put_inside_an_actor_that_is_not_solid(world):
+    """A robot drives through it, so the overlap is no reason to refuse."""
+    world = edit.set_actor_flag(world, 0, "solid", False)
+    assert edit.add_robot(world, "n", (3.0, 3.0, 0.0)).robots[-1].name == "n"

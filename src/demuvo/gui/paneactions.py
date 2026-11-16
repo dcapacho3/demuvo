@@ -45,6 +45,24 @@ class PaneActions:
         """A dragged actor was dropped: the world follows at the drop."""
         self.program.edited(self.session.edits.move_actor(index, (x, y, angle)))
 
+    def point_dropped(self, index: int, place: int, x: float, y: float) -> None:
+        """A dragged waypoint of an actor was dropped at a place."""
+        self._points(index, lambda points: points.__setitem__(place, [x, y]))
+
+    def point_inserted(self, index: int, place: int, x: float, y: float) -> None:
+        """A waypoint is put in the actor's route at a place."""
+        self._points(index, lambda points: points.insert(place, [x, y]))
+
+    def _points(self, index: int, change) -> None:
+        """Apply a change to a copy of an actor's waypoints, and set them."""
+        points = [
+            list(p) for p in self.session.world.actors[index].motion_params["points"]
+        ]
+        change(points)
+        self.program.edited(
+            self.session.edits.set_actor_motion_params(index, {"points": points})
+        )
+
     def dragged(self) -> None:
         """A robot is being dragged: show its pose, redraw only the robots."""
         self.program.inspector.sync_pose()

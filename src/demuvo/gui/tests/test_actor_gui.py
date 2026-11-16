@@ -415,3 +415,81 @@ def test_the_last_waypoint_has_no_remove_button():
     program.inspector.fields["wp1remove"].on_click()
     assert "wp0remove" not in program.inspector.fields
     assert len(program.session.world.actors[index].motion_params["points"]) == 1
+
+
+def _points(program):
+    """The waypoints of the first actor."""
+    return program.session.world.actors[0].motion_params["points"]
+
+
+def _drag(window, program, start, target):
+    """Press at one world point and release at another."""
+    first, last = at(program, *start), at(program, *target)
+    window.mouse_move(*first)
+    window.mouse_press(Event(*first))
+    window.mouse_move(*last)
+    window.mouse_release(Event(*last))
+
+
+def test_dragging_a_waypoint_dot_moves_that_waypoint():
+    """The drop sets the point; the others stay, and the actor does not move."""
+    program, window, _ = _selected_actor_with_route()
+    before = program.session.world.actors[0].pose.xyt.copy()
+    first, last = at(program, 7.0, 5.0), at(program, 8.0, 4.0)
+    window.mouse_move(*first)
+    window.mouse_press(Event(*first))
+    window.mouse_move(*last)
+    live = program.session.scene.route(0)
+    window.mouse_release(Event(*last))
+    assert live[2] == pytest.approx([8.0, 4.0], abs=0.05)
+    assert _points(program)[0] == [7.0, 1.0]
+    assert _points(program)[1] == pytest.approx([8.0, 4.0], abs=0.05)
+    assert (program.session.world.actors[0].pose.xyt == before).all()
+
+
+def test_dragging_the_middle_of_a_leg_puts_a_new_waypoint_there():
+    """The leg from the first to the second point is cut at its middle."""
+    program, window, _ = _selected_actor_with_route()
+    _drag(window, program, (7.0, 3.0), (6.0, 3.0))
+    assert len(_points(program)) == 3
+    assert _points(program)[1] == pytest.approx([6.0, 3.0], abs=0.05)
+    assert _points(program)[2] == [7.0, 5.0]
+
+
+def test_shift_click_on_the_floor_adds_a_waypoint_at_the_end():
+    """Only with an actor that has a route selected, and not on a body."""
+    program, window, _ = _selected_actor_with_route()
+    x, y = at(program, 2.0, 5.0)
+    window.mouse_move(x, y)
+    window.mouse_press(Event(x, y, shift=True))
+    window.mouse_release(Event(x, y))
+    assert _points(program)[-1] == pytest.approx([2.0, 5.0], abs=0.05)
+    assert len(_points(program)) == 3
+
+
+def test_a_press_away_from_the_route_does_nothing_to_it():
+    """A plain click on the floor leaves the points as they were."""
+    program, window, _ = _selected_actor_with_route()
+    click(window, *at(program, 2.0, 5.0))
+    assert len(_points(program)) == 2
+
+
+def test_an_actor_with_no_route_is_not_given_one_by_a_click():
+    """The route code only acts on an actor whose motion has points."""
+    window, program = start()
+    program._add_actor()
+    program.select(f"{ACTOR_KEY}0")
+    window.mouse_move(100, 100)
+    window.mouse_press(Event(100, 100, shift=True))
+    window.mouse_release(Event(100, 100))
+    assert program.session.world.actors[0].motion is None
+
+
+def test_no_waypoint_is_under_a_pixel_without_an_actor_or_a_route():
+    """Nothing selected, or an actor that stands still, has no point to pick."""
+    window, program = start()
+    assert program.session.scene.point_at(100, 100) is None
+    program._add_actor()
+    program.select(f"{ACTOR_KEY}0")
+    assert program.session.scene.selected_actor == 0
+    assert program.session.scene.point_at(100, 100) is None

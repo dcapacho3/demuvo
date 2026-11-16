@@ -40,6 +40,8 @@ LAYERS = {
 }
 # A click this close, in pixels, to an edge counts as on the shape.
 CLICK_PIXELS = 6.0
+# A click this close, in pixels, to a waypoint dot or a leg's middle picks it.
+ROUTE_PIXELS = 10.0
 # Points kept in the trail of a robot.
 TRAIL = 400
 # A changed path redraws the cut-out at most this often, in seconds.
@@ -113,6 +115,8 @@ class SceneDraw:
         self.selected_obstacle: int | None = None
         self.selected_actor: int | None = None
         self._dragged_actor: dict[int, np.ndarray] = {}
+        # The waypoint being dragged, as (its place, x, y), drawn there until dropped.
+        self.drag_point: tuple[int, float, float] | None = None
         self._actor_poses: dict[str, np.ndarray] = {}
         self._dragged: dict[str, np.ndarray] = {}
         self.sprites = SpriteCache()
@@ -390,6 +394,39 @@ class SceneDraw:
                 )
             self._actor_nose(canvas, spec, x, y, angle, edge)
 
+    def route(self, index: int) -> np.ndarray:
+        """The start and waypoints of an actor as drawn, with a dragged point moved."""
+        stops = route_of(self.world.actors[index])
+        if self.drag_point is not None and index == self.selected_actor:
+            place, x, y = self.drag_point
+            stops[place + 1] = (x, y)
+        return stops
+
+    def point_at(self, sx: float, sy: float) -> int | None:
+        """The place of the selected actor's waypoint under a pixel, or None."""
+        return self._near_route(sx, sy, lambda stops: stops[1:])
+
+    def leg_at(self, sx: float, sy: float) -> int | None:
+        """The place a new waypoint takes if the middle of a leg is dragged, or None.
+
+        The legs are those of the selected actor. The leg that ends at waypoint
+        k puts the new one at k, just before it.
+        """
+        return self._near_route(sx, sy, lambda stops: (stops[:-1] + stops[1:]) / 2)
+
+    def _near_route(self, sx, sy, picks) -> int | None:
+        """The place of the nearest picked route spot within a dot's reach, or None."""
+        index = self.selected_actor
+        if index is None:
+            return None
+        spots = picks(self.route(index))
+        if not len(spots):
+            return None
+        px, py = self.view.to_screen(spots[:, 0], spots[:, 1])
+        away = np.hypot(px - sx, py - sy)
+        nearest = int(np.argmin(away))
+        return nearest if away[nearest] <= ROUTE_PIXELS else None
+
     def _draw_routes(self, canvas: Canvas, opacity: float) -> None:
         """The route of each actor that has waypoints: a dashed line and numbered dots.
 
@@ -398,7 +435,7 @@ class SceneDraw:
         """
         view = self.view
         for index, spec in enumerate(self.world.actors):
-            stops = route_of(spec)
+            stops = self.route(index)
             if len(stops) < 2:
                 continue
             faint = opacity * (1.0 if index == self.selected_actor else 0.45)
