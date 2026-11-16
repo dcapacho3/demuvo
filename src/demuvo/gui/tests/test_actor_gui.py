@@ -369,3 +369,49 @@ def test_an_actor_route_is_a_layer_and_is_drawn_numbered():
     scene.layers.shown["routes"] = 0.0
     scene.draw_overlays(hidden)
     assert (shown.px != hidden.px).any()
+
+
+def _selected_actor_with_route():
+    """A window with one actor on a two-point route, selected."""
+    window, program = start()
+    program._add_actor()
+    program.select(f"{ACTOR_KEY}0")
+    program.inspector.fields["motion"].choose("Waypoints")
+    program.session.edits.set_actor_motion_params(
+        0, {"points": [[7.0, 1.0], [7.0, 5.0]]}
+    )
+    program.refresh()
+    return program, window, 0
+
+
+def test_the_waypoints_fold_shows_a_row_per_point_when_opened():
+    """Closed it is one button with the count; opened, each point has x and y."""
+    program, _, _ = _selected_actor_with_route()
+    fields = program.inspector.fields
+    assert fields["waypoints"].text == "Show waypoints (2)" and "wp0x" not in fields
+    fields["waypoints"].on_click()
+    fields = program.inspector.fields
+    assert fields["waypoints"].text == "Hide waypoints (2)"
+    assert (fields["wp1x"].value, fields["wp1y"].value) == (7.0, 5.0)
+
+
+def test_waypoints_are_added_edited_and_removed_from_the_fold():
+    """Each button and field changes the points of the actor, and undo restores them."""
+    program, _, index = _selected_actor_with_route()
+    program.inspector.fields["waypoints"].on_click()
+    program.inspector.fields["wp_add"].on_click()
+    points = program.session.world.actors[index].motion_params["points"]
+    assert points == [[7.0, 1.0], [7.0, 5.0], [7.5, 5.0]]
+    program.inspector.fields["wp0x"].set(2.0)
+    assert program.session.world.actors[index].motion_params["points"][0] == [2.0, 1.0]
+    program.inspector.fields["wp0remove"].on_click()
+    assert len(program.session.world.actors[index].motion_params["points"]) == 2
+
+
+def test_the_last_waypoint_has_no_remove_button():
+    """A route needs one point, so the button is not offered for it."""
+    program, _, index = _selected_actor_with_route()
+    program.inspector.fields["waypoints"].on_click()
+    program.inspector.fields["wp1remove"].on_click()
+    assert "wp0remove" not in program.inspector.fields
+    assert len(program.session.world.actors[index].motion_params["points"]) == 1

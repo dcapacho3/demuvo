@@ -124,6 +124,16 @@ def label_of(choices: dict[str, str | None], path: str | None) -> str:
     return path or "none"
 
 
+def field_names(path: str | None) -> tuple[str, ...]:
+    """Every setting name of a motion class, lists included; () for no class."""
+    if not path:
+        return ()
+    cls = _class_of(path)
+    if dataclasses.is_dataclass(cls):
+        return tuple(f.name for f in dataclasses.fields(cls))
+    return tuple(inspect.signature(cls).parameters)
+
+
 def _fields(cls) -> list[Setting]:
     """The settings of a class: a dataclass's fields, else its `__init__` arguments.
 

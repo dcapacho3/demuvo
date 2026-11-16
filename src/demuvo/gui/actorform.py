@@ -17,7 +17,7 @@ from . import look
 from .formbase import FormBase
 from .inputs import NumberSpec
 from .panels import TitleRow
-from .widgets import Checkbox, Label, Section
+from .widgets import Checkbox, Label, Section, TextButton
 
 # The largest body an actor can be given here, in metres.
 MAX_SIZE = 200.0
@@ -27,6 +27,9 @@ WHAT = (
     "An actor is a moving obstacle. A planner never sees it: a robot finds it "
     "with its lidar."
 )
+# The section that shows the waypoints, and how far a new one is put, in metres.
+FOLD = "waypoints"
+WAYPOINT_STEP = 0.5
 NO_MOTION_SETTINGS = "This motion has nothing to set here."
 # What each flag means, in the order they are shown.
 FLAGS = (
@@ -120,6 +123,62 @@ class ActorForm(FormBase):
         for setting in known:
             value = spec.motion_params.get(setting.name, setting.default)
             self._setting_field(setting, value)
+        if "points" in options.field_names(spec.motion):
+            self._waypoints(spec)
+
+    def _waypoints(self, spec) -> None:
+        """A fold that opens a row of x and y for each point of the route."""
+        points = [list(p) for p in spec.motion_params.get("points", [])]
+        opened = FOLD in self.session.opened
+        word = "Hide" if opened else "Show"
+        fold = TextButton(f"{word} waypoints ({len(points)})", self._toggle)
+        self.fields["waypoints"] = fold  # opening it only looks, so it works mid-run
+        self.column.add(fold)
+        if not opened:
+            return
+        bounds = self.session.world.bounds
+        for k, (x, y) in enumerate(points):
+            self.column.add(Label(f"Waypoint {k + 1}", 12, look.MUTED))
+            for axis, value, low, high in (
+                ("x", x, bounds[0], bounds[2]),
+                ("y", y, bounds[1], bounds[3]),
+            ):
+                self.number(
+                    f"wp{k}{axis}",
+                    axis,
+                    value,
+                    NumberSpec(low, high, 0.05, 2, " m"),
+                    self._points_edited,
+                )
+            if len(points) > 1:
+                self.button(
+                    f"wp{k}remove",
+                    "Remove waypoint",
+                    lambda k=k: self._points_set(points[:k] + points[k + 1 :]),
+                )
+        last = points[-1]
+        step = [min(max(last[0] + WAYPOINT_STEP, bounds[0]), bounds[2]), last[1]]
+        self.button("wp_add", "Add waypoint", lambda: self._points_set([*points, step]))
+
+    def _toggle(self) -> None:
+        """Open or close the waypoint fold, and show the form again."""
+        self.session.opened ^= {FOLD}
+        self.done(None)
+
+    def _points_edited(self) -> None:
+        """An x or y field of a waypoint changed."""
+        spec = self.session.world.actors[self.index]
+        count = len(spec.motion_params.get("points", []))
+        f = self.fields
+        self._points_set(
+            [[f[f"wp{k}x"].value, f[f"wp{k}y"].value] for k in range(count)]
+        )
+
+    def _points_set(self, points: list) -> None:
+        """Give the actor these waypoints."""
+        self.done(
+            self.session.edits.set_actor_motion_params(self.index, {"points": points})
+        )
 
     def _setting_field(self, setting, value) -> None:
         """A row for one motion setting: a switch, a whole number or a number."""

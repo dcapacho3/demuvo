@@ -173,3 +173,11 @@ def test_the_word_settings_of_a_class_are_offered_as_choices():
     )
     assert options.choices_of(None) == {}
     assert options.choices_of("demuvo.planners:AStar") == {}
+
+
+def test_field_names_list_every_setting_of_a_motion_lists_included():
+    """A form asks this to know whether a motion has waypoints to show."""
+    assert options.field_names(None) == ()
+    assert "points" in options.field_names("demuvo.actors:Waypoints")
+    assert options.field_names("demuvo.gui.tests.test_actor_gui:Plain") == ()
+    assert options.field_names("demuvo.controllers:PurePursuit") != ()
