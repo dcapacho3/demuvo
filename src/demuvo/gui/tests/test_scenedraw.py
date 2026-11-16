@@ -310,6 +310,7 @@ def test_an_arrow_points_along_its_heading_and_has_an_outline():
 def test_the_layer_table_lists_the_layers_bottom_first():
     """Robots are on top; the floor is below everything."""
     names = list(scenedraw.LAYERS)
+    assert names.index("actors") < names.index("routes") < names.index("trails")
     assert names[0] == "floor" and names[-1] == "robots"
     assert scenedraw.LAYERS["rays"][1] is False and scenedraw.LAYERS["floor"][1] is True
 

@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from demuvo import edit
-from demuvo.gui import look
+from demuvo.gui import look, scenedraw
 from demuvo.gui.keys import CTRL, KEY
 from demuvo.gui.sandbox import ACTOR_KEY, Sandbox
 from demuvo.gui.session import Session
@@ -351,3 +351,21 @@ def test_an_actor_that_will_not_fit_is_reported(app, monkeypatch):
     monkeypatch.setattr(edit, "free_pose", no_room)
     assert "no free place" in program.session.add_actor()
     assert program.session.world.actors == ()
+
+
+def test_an_actor_route_is_a_layer_and_is_drawn_numbered():
+    """The route shows with the actor, and turning its layer off hides it."""
+    from demuvo.gui.raster import Canvas
+
+    session = Session()
+    session.add_actor()
+    session.edits.set_actor_motion(0, "demuvo.actors:Waypoints")
+    session.edits.set_actor_motion_params(0, {"points": [[7.0, 1.0], [7.0, 5.0]]})
+    scene = session.scene
+    scene.fit((0, 0, 800, 480))
+    assert scenedraw.route_of(session.world.actors[0]).shape == (3, 2)
+    shown, hidden = Canvas(800, 480, "#ffffff"), Canvas(800, 480, "#ffffff")
+    scene.draw_overlays(shown)
+    scene.layers.shown["routes"] = 0.0
+    scene.draw_overlays(hidden)
+    assert (shown.px != hidden.px).any()

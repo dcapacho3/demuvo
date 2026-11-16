@@ -17,7 +17,7 @@ import numpy as np
 from robomath import Transform2D
 
 from ..world.shapes import Circle, LineString
-from . import look
+from . import font, look
 from .raster import Canvas, is_convex, rgba
 from .robots import draw_robots, footprint, robot_at, robot_boxes
 from .sprites import SpriteCache
@@ -31,6 +31,7 @@ LAYERS = {
     "local": ("local costmap", False),
     "obstacles": ("obstacles", True),
     "actors": ("actors", True),
+    "routes": ("actor routes", True),
     "trails": ("trails", True),
     "paths": ("paths", True),
     "goals": ("goals", True),
@@ -389,6 +390,35 @@ class SceneDraw:
                 )
             self._actor_nose(canvas, spec, x, y, angle, edge)
 
+    def _draw_routes(self, canvas: Canvas, opacity: float) -> None:
+        """The route of each actor that has waypoints: a dashed line and numbered dots.
+
+        The selected actor's route is drawn in full, the others' fainter. A loop
+        closes back to the start, which is drawn as a ring.
+        """
+        view = self.view
+        for index, spec in enumerate(self.world.actors):
+            stops = route_of(spec)
+            if len(stops) < 2:
+                continue
+            faint = opacity * (1.0 if index == self.selected_actor else 0.45)
+            color = rgba(look.AMBER, faint)
+            sx, sy = view.to_screen(stops[:, 0], stops[:, 1])
+            line = np.column_stack([sx, sy])
+            if spec.motion_params.get("mode", "loop") == "loop":
+                line = np.vstack([line, line[:1]])
+            polyline(canvas, line, 2, color, dash=(7, 5))
+            canvas.circle((float(sx[0]), float(sy[0])), 5, stroke=color, width=2)
+            for number, (x, y) in enumerate(line[1 : len(stops)], 1):
+                canvas.circle((float(x), float(y)), 9, fill=color)
+                canvas.text(
+                    font.bold(),
+                    str(number),
+                    (float(x) - 3 * len(str(number)), float(y) + 4),
+                    size=11,
+                    color=rgba(look.NAVY, faint),
+                )
+
     def _actor_nose(self, canvas: Canvas, spec, x, y, angle, color) -> None:
         """A short tick from the middle, so which way an actor faces can be seen."""
         reach = _actor_reach(spec.shape)
@@ -416,18 +446,9 @@ class SceneDraw:
         """The place of the topmost actor under a pixel, or None."""
         x, y = self.view.to_world(sx, sy)
         for index in range(len(self.world.actors) - 1, -1, -1):
-            spec = self.world.actors[index]
-            ax, ay, angle = (float(v) for v in self.actor_pose(index))
-            if isinstance(spec.shape, Circle):
-                if math.hypot(x - ax, y - ay) <= spec.shape.radius:
-                    return index
-                continue
-            pose = Transform2D.from_xyt(np.array([ax, ay, angle]))
-            points = spec.shape.points(pose)
-            reach = CLICK_PIXELS / self.view.scale
-            if _in_polygon(x, y, points) or _near_edge(
-                x, y, points, reach, closed=True
-            ):
+            shape = self.world.actors[index].shape
+            pose = Transform2D.from_xyt(np.array(self.actor_pose(index), dtype=float))
+            if self._body_hit(x, y, shape, pose):
                 return index
         return None
 
@@ -562,19 +583,21 @@ class SceneDraw:
         x, y = self.view.to_world(sx, sy)
         for index in range(len(self.world.obstacles) - 1, -1, -1):
             obstacle = self.world.obstacles[index]
-            shape = obstacle.shape
-            if isinstance(shape, Circle):
-                cx, cy = obstacle.pose.translation
-                hit = math.hypot(x - cx, y - cy) <= shape.radius
-            else:
-                points = shape.points(obstacle.pose)
-                reach = CLICK_PIXELS / self.view.scale
-                hit = _near_edge(x, y, points, reach, closed=shape.closed)
-                if shape.closed:
-                    hit = hit or _in_polygon(x, y, points)
-            if hit:
+            if self._body_hit(x, y, obstacle.shape, obstacle.pose):
                 return index
         return None
+
+    def _body_hit(self, x: float, y: float, shape, pose) -> bool:
+        """True if a world point is on a body: inside it, or near the edge of a line."""
+        if isinstance(shape, Circle):
+            cx, cy = pose.translation
+            return math.hypot(x - cx, y - cy) <= shape.radius
+        points = shape.points(pose)
+        closed = shape.closed
+        reach = CLICK_PIXELS / self.view.scale
+        return _near_edge(x, y, points, reach, closed=closed) or (
+            closed and _in_polygon(x, y, points)
+        )
 
     def _draw_selected_obstacle(self, canvas: Canvas) -> None:
         """Outline the selected obstacle; it is drawn apart from the cached layers."""
@@ -655,8 +678,17 @@ class SceneDraw:
             self._draw_trails(canvas, alpha("trails"))
         if alpha("rays") > 0.001:
             self._draw_rays(canvas, alpha("rays"))
+        if alpha("routes") > 0.001:
+            self._draw_routes(canvas, alpha("routes"))
         if alpha("actors") > 0.001:
             self._draw_actors(canvas, alpha("actors"))
+
+
+def route_of(spec) -> np.ndarray:
+    """The start and then the waypoints of an actor, as rows of (x, y)."""
+    start = [float(v) for v in spec.pose.xyt[:2]]
+    points = spec.motion_params.get("points", []) if spec.motion else []
+    return np.array([start, *points], dtype=float).reshape(-1, 2)
 
 
 def _actor_reach(shape) -> float:
