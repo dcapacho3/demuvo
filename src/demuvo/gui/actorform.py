@@ -30,6 +30,7 @@ WHAT = (
 # The section that shows the waypoints, and how far a new one is put, in metres.
 FOLD = "waypoints"
 WAYPOINT_STEP = 0.5
+TURN_HINT = "On, it turns to this heading while it stands at the point."
 NO_MOTION_SETTINGS = "This motion has nothing to set here."
 # What each flag means, in the order they are shown.
 FLAGS = (
@@ -137,11 +138,11 @@ class ActorForm(FormBase):
         if not opened:
             return
         bounds = self.session.world.bounds
-        for k, (x, y) in enumerate(points):
+        for k, point in enumerate(points):
             self.column.add(Label(f"Waypoint {k + 1}", 12, look.MUTED))
             for axis, value, low, high in (
-                ("x", x, bounds[0], bounds[2]),
-                ("y", y, bounds[1], bounds[3]),
+                ("x", point[0], bounds[0], bounds[2]),
+                ("y", point[1], bounds[1], bounds[3]),
             ):
                 self.number(
                     f"wp{k}{axis}",
@@ -150,6 +151,7 @@ class ActorForm(FormBase):
                     NumberSpec(low, high, 0.05, 2, " m"),
                     self._points_edited,
                 )
+            self._point_extras(k, point, spec.motion_params.get("wait", 0.0))
             if len(points) > 1:
                 self.button(
                     f"wp{k}remove",
@@ -160,19 +162,48 @@ class ActorForm(FormBase):
         step = [min(max(last[0] + WAYPOINT_STEP, bounds[0]), bounds[2]), last[1]]
         self.button("wp_add", "Add waypoint", lambda: self._points_set([*points, step]))
 
+    def _point_extras(self, k: int, point: list, wait: float) -> None:
+        """The wait at one point, and the way it faces there if it turns."""
+        self.number(
+            f"wp{k}wait",
+            "wait",
+            point[2] if len(point) > 2 else wait,
+            NumberSpec(0.0, SETTING_MAX, 0.5, 2, " s"),
+            self._points_edited,
+        )
+        turns = len(point) > 3
+        self.switch(f"wp{k}turn", "faces", turns, lambda _on: self._points_edited())
+        self.column.add(Label(TURN_HINT, 11, look.MUTED, wrap=True))
+        if turns:
+            self.number(
+                f"wp{k}th",
+                "heading",
+                math.degrees(point[3]),
+                NumberSpec(-180, 180, 5, 2, " °"),
+                self._points_edited,
+            )
+
     def _toggle(self) -> None:
         """Open or close the waypoint fold, and show the form again."""
         self.session.opened ^= {FOLD}
         self.done(None)
 
     def _points_edited(self) -> None:
-        """An x or y field of a waypoint changed."""
+        """A field of a waypoint changed."""
         spec = self.session.world.actors[self.index]
         count = len(spec.motion_params.get("points", []))
+        wait = spec.motion_params.get("wait", 0.0)
+        self._points_set([self._point_read(k, wait) for k in range(count)])
+
+    def _point_read(self, k: int, wait: float) -> list:
+        """The k-th waypoint as its fields show it; the short form if it can be."""
         f = self.fields
-        self._points_set(
-            [[f[f"wp{k}x"].value, f[f"wp{k}y"].value] for k in range(count)]
-        )
+        point = [f[f"wp{k}x"].value, f[f"wp{k}y"].value]
+        own = f[f"wp{k}wait"].value
+        if f[f"wp{k}turn"].checked:
+            heading = f[f"wp{k}th"].value if f"wp{k}th" in f else 0.0
+            return [*point, own, math.radians(heading)]
+        return [*point, own] if own != wait else point
 
     def _points_set(self, points: list) -> None:
         """Give the actor these waypoints."""

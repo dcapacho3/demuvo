@@ -1,5 +1,6 @@
 """Tests for actors in the window: the button, the list, the scene and the inspector."""
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -493,3 +494,30 @@ def test_no_waypoint_is_under_a_pixel_without_an_actor_or_a_route():
     program.select(f"{ACTOR_KEY}0")
     assert program.session.scene.selected_actor == 0
     assert program.session.scene.point_at(100, 100) is None
+
+
+def test_a_waypoint_gets_its_own_wait_and_heading_from_the_fold():
+    """The wait makes it a three-number point, the heading switch a four-number one."""
+    program, window, _ = _selected_actor_with_route()
+    program.inspector.fields["waypoints"].on_click()
+    program.inspector.fields["wp1wait"].set(3.0)
+    assert _points(program)[1] == [7.0, 5.0, 3.0]
+    program.inspector.fields["wp1turn"].activate()
+    assert _points(program)[1] == [7.0, 5.0, 3.0, 0.0]
+    program.inspector.fields["wp1th"].set(90.0)
+    assert _points(program)[1][3] == pytest.approx(math.pi / 2)
+    program.inspector.fields["wp1turn"].activate()
+    assert len(_points(program)[1]) == 3
+    program.inspector.fields["wp1wait"].set(0.0)
+    assert _points(program)[1] == [7.0, 5.0]
+
+
+def test_dragging_a_waypoint_keeps_its_wait_and_heading():
+    """Only the place changes."""
+    program, window, _ = _selected_actor_with_route()
+    program.session.edits.set_actor_motion_params(
+        0, {"points": [[7.0, 1.0], [7.0, 5.0, 2.0, 1.0]]}
+    )
+    program.refresh()
+    _drag(window, program, (7.0, 5.0), (8.0, 4.0))
+    assert _points(program)[1][2:] == [2.0, 1.0]

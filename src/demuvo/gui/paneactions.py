@@ -47,7 +47,9 @@ class PaneActions:
 
     def point_dropped(self, index: int, place: int, x: float, y: float) -> None:
         """A dragged waypoint of an actor was dropped at a place."""
-        self._points(index, lambda points: points.__setitem__(place, [x, y]))
+        self._points(
+            index, lambda points: points.__setitem__(place, [x, y, *points[place][2:]])
+        )
 
     def point_inserted(self, index: int, place: int, x: float, y: float) -> None:
         """A waypoint is put in the actor's route at a place."""

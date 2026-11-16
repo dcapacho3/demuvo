@@ -725,7 +725,7 @@ def route_of(spec) -> np.ndarray:
     """The start and then the waypoints of an actor, as rows of (x, y)."""
     start = [float(v) for v in spec.pose.xyt[:2]]
     points = spec.motion_params.get("points", []) if spec.motion else []
-    return np.array([start, *points], dtype=float).reshape(-1, 2)
+    return np.array([start, *(p[:2] for p in points)], dtype=float).reshape(-1, 2)
 
 
 def _actor_reach(shape) -> float:

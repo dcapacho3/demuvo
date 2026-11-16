@@ -168,7 +168,8 @@ dot at each point and a ring at the start; the selected actor's route is the str
 one. Edit it in the window:
 
 - **Waypoints fold** - "Show waypoints (N)" in the inspector opens an x and y row for
-  each point, a Remove button and an Add waypoint button.
+  each point with its own wait and a switch to turn to a heading there, a Remove
+  button and an Add waypoint button.
 - **Drag a dot** to move that point.
 - **Drag the middle of a leg** to put a new point there.
 - **Shift and click the floor** to add a point at the end.
