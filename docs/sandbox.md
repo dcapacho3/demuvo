@@ -128,7 +128,7 @@ The speed goes from 0.25x to 8x. While a run plays, the status bar shows "real t
 100%": the simulated seconds gained for each real second, as a share of the speed you
 chose. It turns amber below 90%, which means the run is falling behind.
 
-The layers are the global and local costmap, obstacles, actors, trails, paths, goals,
+The layers are the global and local costmap, obstacles, actors, actor routes, trails, paths, goals,
 lidar rays and robots, with an opacity and a palette for the costmaps. The floor is always shown. A
 world with up to ten robots starts with the lidar rays on. The rays appear after the
 first step.
@@ -161,12 +161,24 @@ Picking a motion shows its settings under it. **Waypoints** goes from where the 
 starts through its points at `speed`, facing the way it goes: `mode` is `once` (stay at
 the last point), `loop` (back to the start and round again) or `bounce` (turn round and
 come back), with `wait` at every point it reaches, `delay` before it first moves, and
-`face` off to slide without turning. The points themselves are in the world file; the
-window gives a new motion one point to be going on with. See
+`face` off to slide without turning. A new motion starts with one point.
+
+The route of an actor with waypoints is drawn as a dashed amber line with a numbered
+dot at each point and a ring at the start; the selected actor's route is the strong
+one. Edit it in the window:
+
+- **Waypoints fold** - "Show waypoints (N)" in the inspector opens an x and y row for
+  each point, a Remove button and an Add waypoint button.
+- **Drag a dot** to move that point.
+- **Drag the middle of a leg** to put a new point there.
+- **Shift and click the floor** to add a point at the end.
+
+See
 [the world file](world-file.md#actors) for every key, and
 [your own algorithms](plugins.md) to write a motion of your own.
 
-An actor that is not solid is drawn hollow. Actors have a layer switch of their own.
+An actor that is not solid is drawn hollow. Actors and their routes each have a layer
+switch, so the routes can be hidden.
 
 ## The log
 
