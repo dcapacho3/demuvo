@@ -71,10 +71,14 @@ def _replace_robot(world: World, spec: RobotSpec) -> World:
 def _no_overlap(world: World, mover: str) -> None:
     """Raise unless every robot is clear of the obstacles, the border and the others.
 
-    A pair is named with the robot being edited, `mover`, first.
+    A pair is named with the robot being edited, `mover`, first. An actor counts
+    where it starts, so a robot is never put inside a solid one.
     """
     poses = {r.name: r.pose for r in world.robots}
-    for contact in Checker(world).check(poses):
+    actors = Actors(world).poses_at(0.0)
+    for contact in Checker(world).check(poses, actors=actors):
+        if not contact.pushes:
+            continue
         first, second = contact.a, contact.b
         if contact.b_moves and second == mover:
             first, second = second, first

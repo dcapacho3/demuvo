@@ -127,3 +127,20 @@ def test_a_place_that_is_not_an_actor_is_refused(world):
 def test_every_name_in_use_is_listed(world):
     """A window asks for it to pick a free name."""
     assert edit.actor_names(world) == {"r1", "w"}
+
+
+def test_a_free_place_is_never_inside_a_solid_actor():
+    """Actors and robots added one after another all get a place of their own."""
+    world = edit.new_world()
+    for k in range(3):
+        pose = edit.free_pose(world, radius=edit.ACTOR_RADIUS)
+        world = edit.add_actor(world, f"a{k}", pose)
+    for k in range(4):
+        world = edit.add_robot(world, f"n{k}", edit.free_pose(world))
+    assert len({tuple(a.pose.xyt[:2]) for a in world.actors}) == 3
+
+
+def test_a_robot_cannot_be_put_inside_a_solid_actor(world):
+    """The refusal names the actor."""
+    with pytest.raises(WorldError, match="overlap w"):
+        edit.add_robot(world, "n", (3.0, 3.0, 0.0))
