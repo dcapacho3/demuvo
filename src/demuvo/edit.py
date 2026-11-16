@@ -179,9 +179,18 @@ def free_pose(world: World, radius: float = 0.2) -> tuple[float, float, float]:
     centres.sort(key=lambda c: math.dist(c, middle))
     taken = {r.name for r in world.robots}
     probe = next(f"probe {k}" for k in itertools.count() if f"probe {k}" not in taken)
+    planner = options.planners()["A*"]
+    controller = options.controllers()["Pure pursuit"]
     for x, y in centres:
         try:
-            add_robot(world, probe, (x, y, 0.0), radius=radius)
+            add_robot(
+                world,
+                probe,
+                (x, y, 0.0),
+                radius=radius,
+                planner=planner,
+                controller=controller,
+            )
         except WorldError:
             continue
         return x, y, 0.0
