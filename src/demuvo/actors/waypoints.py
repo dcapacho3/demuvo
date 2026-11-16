@@ -26,14 +26,17 @@ class Waypoints:
     it keeps facing the way it came.
 
     Attributes:
-        points: the places it goes to after the start, as [x, y] pairs, in order.
-            At least one, and no two in a row the same.
+        points: the places it goes to after the start, in order, each [x, y],
+            [x, y, wait] or [x, y, wait, heading]. At least one, and no two in a
+            row the same. A point's own `wait` replaces the setting `wait` there,
+            and its `heading` (radians) is the way the actor faces while it
+            stands there; without one it faces the way it came.
         speed: metres per second along every leg.
         mode: what it does after the last point. "once" stays there; "loop" goes
             straight back to the start and does it all again; "bounce" turns
             round and goes back through the points to the start, and again.
-        wait: seconds it stands at every point it arrives at, the start included
-            when it comes back to it. 0 passes straight through.
+        wait: seconds it stands at every point that has no wait of its own, the
+            start included when it comes back to it. 0 passes straight through.
         delay: seconds it stands at the start before it first moves.
         face: True to face the way it moves; False to keep the start angle.
 
@@ -66,7 +69,7 @@ class Waypoints:
         for point in self.points:
             if (
                 not isinstance(point, list | tuple)
-                or len(point) != 2
+                or not 2 <= len(point) <= 4
                 or not all(
                     isinstance(v, int | float)
                     and not isinstance(v, bool)
@@ -74,30 +77,41 @@ class Waypoints:
                     for v in point
                 )
             ):
-                raise ValueError(f"points: each must be [x, y], got {point!r}")
+                raise ValueError(
+                    "points: each must be [x, y], [x, y, wait] or "
+                    f"[x, y, wait, heading], got {point!r}"
+                )
+            if len(point) > 2 and point[2] < 0:
+                raise ValueError(f"points: a wait must be 0 or more, got {point!r}")
 
     def configure(self, start: Transform2D, rng: np.random.Generator) -> None:
         """Lay out the legs from the start pose; this motion draws no random number."""
         x, y, angle = (float(v) for v in start.xyt)
-        stops = [(x, y), *((float(a), float(b)) for a, b in self.points)]
+        # Each stop is its place, how long it holds the actor and which way it
+        # faces there (None for the way it came); the start is the first.
+        stops = [((x, y), self.wait, None)]
+        for point in self.points:
+            wait = float(point[2]) if len(point) > 2 else self.wait
+            heading = float(point[3]) if len(point) > 3 else None
+            stops.append(((float(point[0]), float(point[1])), wait, heading))
         if self.mode == "loop":
             stops.append(stops[0])
         elif self.mode == "bounce":
             stops += stops[-2::-1]
-        for a, b in zip(stops, stops[1:]):
+        for (a, _, _), (b, _, _) in zip(stops, stops[1:]):
             if a == b:
                 raise ValueError(f"points: two in a row are the same place, {list(a)}")
         # One lap: from leaving the start to standing again where the lap ends.
         # The first entry of `times` is when each leg starts, the stops follow.
         times, legs = [], []
         clock = 0.0
-        for a, b in zip(stops, stops[1:]):
+        for (a, _, _), (b, wait, heading) in zip(stops, stops[1:]):
             length = math.hypot(b[0] - a[0], b[1] - a[1])
             times.append(clock)
-            legs.append((a, b, length / self.speed))
-            clock += length / self.speed + self.wait
+            legs.append((a, b, length / self.speed, heading))
+            clock += length / self.speed + wait
         if self.mode == "once":
-            clock -= self.wait  # the last stop is for good, not a wait
+            clock -= stops[-1][1]  # the last stop is for good, not a wait
         object.__setattr__(self, "_angle", angle)
         object.__setattr__(self, "_times", times)
         object.__setattr__(self, "_legs", legs)
@@ -114,12 +128,14 @@ class Waypoints:
         else:
             t %= self._lap
         k = bisect_right(self._times, t) - 1
-        (ax, ay), (bx, by), duration = legs[k]
+        (ax, ay), (bx, by), duration, turn = legs[k]
         if t == 0.0 and time - self.delay <= 0.0:
             # Still waiting to leave: the start pose, as the file gave it.
             return Transform2D.from_xyt(np.array([ax, ay, self._angle]))
         heading = math.atan2(by - ay, bx - ax) if self.face else self._angle
         s = min(1.0, (t - self._times[k]) / duration)
+        if turn is not None and s == 1.0:
+            heading = turn
         return Transform2D.from_xyt(
             np.array([ax + (bx - ax) * s, ay + (by - ay) * s, heading])
         )

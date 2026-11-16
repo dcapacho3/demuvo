@@ -103,7 +103,9 @@ says what happens after the last point: `"once"` stays there, `"loop"` (the defa
 goes straight back to the start and round again, `"bounce"` turns round and comes back
 through the points. `wait` is the seconds it stands at every point it arrives at, `delay`
 the seconds before it first moves, and `face = false` keeps the start angle while it
-moves. One point and `"bounce"` is an actor going back and forth between two places. A
+moves. A point may carry more numbers: `[x, y, wait]` stands there for `wait` seconds
+instead of the setting `wait`, and `[x, y, wait, heading]` also turns to `heading`
+(radians) while it stands, then leaves facing the way it goes. One point and `"bounce"` is an actor going back and forth between two places. A
 motion of your own is a class with `configure(start, rng)` and `pose_at(time)`; see
 [your own algorithms](plugins.md).
 

@@ -145,3 +145,38 @@ def test_two_points_in_a_row_at_the_same_place_are_refused():
         motion(points=[[1.0, 1.0]])
     with pytest.raises(ValueError, match="same place"):
         motion(points=[[2.0, 1.0], [2.0, 1.0]])
+
+
+def test_a_point_with_its_own_wait_holds_the_actor_for_that_long():
+    """The setting `wait` is 2 s, this point says 1 s; the start still waits 2 s."""
+    m = motion(points=[[2.0, 1.0, 1.0]], speed=1.0, mode="loop", wait=2.0)
+    assert xyt(m, 1.5) == pytest.approx((2.0, 1.0, 0.0))
+    assert xyt(m, 2.5) == pytest.approx((1.5, 1.0, math.pi))  # already on its way back
+    assert xyt(m, 4.5) == pytest.approx((1.0, 1.0, math.pi))  # held at the start 2 s
+
+
+def test_a_point_with_a_heading_is_faced_while_standing_there():
+    """It turns on arrival and keeps the heading until it leaves."""
+    m = motion(points=[[2.0, 1.0, 2.0, 1.5]], speed=1.0, mode="once")
+    assert xyt(m, 0.5) == pytest.approx((1.5, 1.0, 0.0))
+    assert xyt(m, 1.0) == pytest.approx((2.0, 1.0, 1.5))
+    assert xyt(m, 100.0) == pytest.approx((2.0, 1.0, 1.5))
+
+
+def test_a_once_route_ends_at_the_last_point_without_its_wait():
+    """The last stop is for good, so a wait there is not added to the lap."""
+    m = motion(points=[[2.0, 1.0, 5.0]], speed=1.0, mode="once")
+    assert xyt(m, 1.0) == xyt(m, 50.0)
+
+
+@pytest.mark.parametrize(
+    "point, message",
+    [
+        ([1.0, 2.0, 3.0, 4.0, 5.0], r"each must be \[x, y\]"),
+        ([1.0, 2.0, -1.0], "a wait must be 0 or more"),
+    ],
+)
+def test_a_point_with_a_bad_wait_or_too_many_numbers_is_refused(point, message):
+    """Two to four numbers, and a wait that is not negative."""
+    with pytest.raises(ValueError, match=message):
+        Waypoints(points=[point])
