@@ -29,7 +29,7 @@ shape = { name = "linestring", vertices = [[2.0, 5.0], [2.0, 3.5]] }
 
 [[robot]]
 name = "r1"
-model = "diff_drive"
+model = "diff_drive"      # or "ackermann", a car; see Robots
 shape = { name = "circle", radius = 0.2 }     # or a box or a polygon
 pose = [1.0, 1.0, 0.0]    # where it starts: x, y, angle
 # params = { max_v = 0.8, max_w = 2.0 }       # optional: model values to replace
@@ -53,10 +53,17 @@ cross) or a `linestring` (a wall: points joined in order, with no area). Every o
 robot start and goal must lie inside the world. A robot's body is a `circle`, a `box` or
 a `polygon`. Obstacle names are for people: two obstacles cannot share one.
 
-The robot model available now is `diff_drive`, a differential drive moved by a ROS-style
-`Twist`; more models are on the roadmap. Its `params` are `max_v` and `max_w` (the speed
-and turn-rate limits, 1.0 m/s and 1.0 rad/s), and `wheel_radius` and `track` (0.05 m and
-0.3 m), which the encoders read. A robot that would enter an obstacle, the border or
+A robot's `model` is the name of a kinematic model, moved by a ROS-style `Twist`.
+There are two. `diff_drive` is a differential drive, two wheels on one axle, which can
+turn in place. Its `params` are `max_v` and `max_w` (the speed and turn-rate limits,
+1.0 m/s and 1.0 rad/s), and `wheel_radius` and `track` (0.05 m and 0.3 m), which the
+encoders read. `ackermann` is a car: the front wheels steer and the rear wheels drive, so
+it has a least turning radius and cannot turn in place. Its pose is the centre of the
+rear axle. Its `params` are `max_v` (1.0 m/s), `max_steer` (the largest steering angle,
+0.5 rad), `wheelbase` (rear axle to front axle, 0.3 m), and `wheel_radius` and `track`
+(0.05 m and 0.25 m, the rear wheels) for the encoders. A turn rate the steering cannot
+reach at the commanded speed is cut to the one it can, so a controller that spins in
+place gets nowhere with this model. A robot that would enter an obstacle, the border or
 another robot is pushed back out and slides along it, and the run counts a collision.
 
 Wheel encoders have a `noise` and `ticks_per_rev`. The `dead_reckoning` estimator adds

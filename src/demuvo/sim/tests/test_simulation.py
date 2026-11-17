@@ -164,3 +164,16 @@ def test_a_failed_step_does_not_change_driven(world):
     with pytest.raises(ValueError, match="no robot named"):
         sim.step({"ghost": Twist(vx=1.0)})
     assert sim.driven == before
+
+
+def test_an_ackermann_robot_arcs_and_cannot_spin(world):
+    """An ackermann robot arcs under its clipped command and cannot spin in place."""
+    sim = Simulation(edit.set_model(world, "r1", "ackermann"), dt=0.1)
+    for _ in range(10):
+        sim.step({"r1": Twist(wz=1.0)})
+    assert tuple(sim.poses["r1"].xyt) == pytest.approx((1.0, 1.0, 0.0))
+    for _ in range(10):
+        sim.step({"r1": Twist(vx=0.5, wz=0.2)})
+    x, y, angle = sim.poses["r1"].xyt
+    assert (x, y) != pytest.approx((1.0, 1.0))
+    assert angle == pytest.approx(0.2)

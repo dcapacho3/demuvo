@@ -304,6 +304,27 @@ def test_an_unknown_model_is_named(tmp_path):
         load(tmp_path, GOOD.replace('"diff_drive"', '"hovercraft"'))
 
 
+def test_an_ackermann_robot_loads_with_its_params(tmp_path):
+    """The key "ackermann" selects the car model and takes its own params."""
+    text = GOOD.replace('model = "diff_drive"', 'model = "ackermann"').replace(
+        "pose = [1.0, 1.0, 0.0]",
+        "pose = [1.0, 1.0, 0.0]\nparams = { max_steer = 0.6, wheelbase = 0.4 }",
+    )
+    robot = load_world(write(tmp_path, text)).robots[0]
+    assert robot.model == "ackermann"
+    assert robot.params == {"max_steer": 0.6, "wheelbase": 0.4}
+
+
+def test_a_diff_drive_param_is_refused_on_an_ackermann(tmp_path):
+    """Max_w belongs to diff_drive; an ackermann robot's params refuse it."""
+    text = GOOD.replace('model = "diff_drive"', 'model = "ackermann"').replace(
+        "pose = [1.0, 1.0, 0.0]",
+        "pose = [1.0, 1.0, 0.0]\nparams = { max_w = 2.0 }",
+    )
+    with pytest.raises(WorldError, match="max_w"):
+        load_world(write(tmp_path, text))
+
+
 def test_params_replace_the_model_defaults(tmp_path):
     """The values in `params` come back on the robot."""
     text = GOOD.replace(

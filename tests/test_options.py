@@ -52,7 +52,7 @@ class Mixed:
 
 def test_the_lists_hold_the_built_in_parts():
     """Each list starts with what demuvo ships."""
-    assert options.models() == ("diff_drive",)
+    assert options.models() == ("diff_drive", "ackermann")
     assert options.planners()["A*"] == "demuvo.planners:AStar"
     assert options.planners()["Straight line"] == options.DEFAULT_PLANNER
     assert options.smoothers()[options.NO_SMOOTHER] is None
