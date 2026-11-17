@@ -10,7 +10,7 @@ import numpy as np
 from robomath import Transform2D
 
 from ..plugins import check_positive
-from .base import FIELDS, Twist
+from .base import FIELDS, Limits, Twist
 
 _USES = ("vx", "wz")
 _UNUSED = tuple(name for name in FIELDS if name not in _USES)
@@ -48,6 +48,10 @@ class DiffDrive:
         """Refuse a wheel size that is not a positive number."""
         check_positive(self, "wheel_radius", "track")
 
+    def limits(self) -> Limits:
+        """The feasible commands: a flat bound, the same max_w at every speed."""
+        return Limits(max_v=self.max_v, cap=self.max_w)
+
     def clip(self, command: Twist) -> Twist:
         """Limit a command to the speeds this robot can reach.
 
@@ -56,10 +60,7 @@ class DiffDrive:
         ignored = [name for name in _UNUSED if getattr(command, name) != 0.0]
         if ignored:
             warnings.warn(f"{self.name} ignores {', '.join(ignored)}")
-        return Twist(
-            vx=max(-self.max_v, min(self.max_v, command.vx)),
-            wz=max(-self.max_w, min(self.max_w, command.wz)),
-        )
+        return self.limits().clip(command)
 
     def step(self, pose: Transform2D, command: Twist, dt: float) -> Transform2D:
         """The pose after dt seconds of command."""

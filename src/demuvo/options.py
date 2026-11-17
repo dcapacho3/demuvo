@@ -34,7 +34,12 @@ NO_SMOOTHER = "none"
 NO_MOTION = "stands still"
 NO_CONTROLLER = "none (driven from outside)"
 
-_PLANNERS = {"Straight line": DEFAULT_PLANNER, "A*": "demuvo.planners:AStar"}
+_PLANNERS = {
+    "Straight line": DEFAULT_PLANNER,
+    "A*": "demuvo.planners:AStar",
+    "Dubins": "demuvo.planners:Dubins",
+    "Reeds-Shepp": "demuvo.planners:ReedsShepp",
+}
 _SMOOTHERS = {
     NO_SMOOTHER: None,
     "Line of sight": "demuvo.smoothers.line_of_sight:LineOfSight",

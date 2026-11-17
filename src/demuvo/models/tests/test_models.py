@@ -5,7 +5,7 @@ import math
 import pytest
 from robomath import Transform2D
 
-from demuvo import MODELS, Ackermann, DiffDrive, Twist
+from demuvo import MODELS, Ackermann, DiffDrive, Limits, Twist
 
 TURN = 2 * math.pi
 
@@ -255,3 +255,47 @@ def test_an_ackermann_odometry_reproduces_the_step():
     dt = 0.01
     body = model.from_encoders(model.encoders(command, dt))
     assert body == pytest.approx([command.vx * dt, 0.0, command.wz * dt])
+
+
+def test_a_diff_drive_limit_is_flat_and_turns_in_place():
+    """Its max_w holds at every speed, standing still included."""
+    limits = DiffDrive(max_v=2.0, max_w=0.5).limits()
+    assert limits.turns_in_place
+    assert limits.max_v == 2.0
+    assert [limits.max_w(v) for v in (0.0, 0.1, 2.0)] == [0.5, 0.5, 0.5]
+
+
+def test_an_ackermann_limit_is_a_wedge_and_cannot_turn_in_place():
+    """Its turn-rate bound grows with speed from zero at standstill."""
+    model = Ackermann(max_steer=math.pi / 4, wheelbase=0.5)
+    limits = model.limits()
+    assert not limits.turns_in_place
+    assert limits.max_w(0.0) == 0.0
+    assert limits.max_w(1.0) == pytest.approx(2.0)  # tan(pi/4) / 0.5
+    assert limits.max_w(-1.0) == pytest.approx(2.0)
+
+
+@pytest.mark.parametrize("model", [DiffDrive(), Ackermann(), DiffDrive(max_w=0.3)])
+@pytest.mark.parametrize(
+    "command",
+    [Twist(), Twist(vx=5.0, wz=-5.0), Twist(vx=-0.4, wz=2.0), Twist(wz=1.0)],
+)
+def test_the_limits_clip_as_the_model_does(model, command):
+    """Limits.clip is the model's clip, so there is one source of truth."""
+    assert model.limits().clip(command) == model.clip(command)
+
+
+def test_the_limits_refuse_a_cone_with_no_bound():
+    """Cap and slope cannot both be infinite, or every turn rate would pass."""
+    with pytest.raises(ValueError, match="cap and slope"):
+        Limits(max_v=1.0)
+
+
+@pytest.mark.parametrize("name", ["max_v", "cap", "slope"])
+@pytest.mark.parametrize("bad", [0.0, -1.0, math.nan])
+def test_a_limit_bound_must_be_above_zero(name, bad):
+    """A bound of zero or less, or nan, is refused by name."""
+    values = {"max_v": 1.0, "cap": 1.0}
+    values[name] = bad
+    with pytest.raises(ValueError, match=name):
+        Limits(**values)

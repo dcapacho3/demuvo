@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 from robomath import Transform2D
 
-from demuvo import DWB, DiffDrive, Observation, Run, StraightLine, Twist
+from demuvo import DWB, Ackermann, DiffDrive, Observation, Run, StraightLine, Twist
 from demuvo.controllers import dwb
 from demuvo.costmap import LETHAL, Costmap
 from demuvo.costmap.layers import inflate
@@ -258,3 +258,107 @@ def test_the_example_world_goes_round_what_only_the_lidar_sees():
     again = Run(EXAMPLE)
     again.until_done(60.0)
     assert again.result() == lines  # the same seed gives the same run
+
+
+def see(pose, goal, limits, **kwargs):
+    """`look`, with the robot's limits in the observation."""
+    obs = look(pose, goal, **kwargs)
+    return Observation(
+        obs.time,
+        obs.dt,
+        obs.pose,
+        obs.path,
+        obs.goal,
+        obs.goal_tolerance,
+        obs.path_changes,
+        costmap=obs.costmap,
+        limits=limits,
+    )
+
+
+def steer(controller, obs, model, runs):
+    """Run the controller `runs` times on `model`, returning the poses and commands."""
+    pose, poses, commands = obs.pose, [], []
+    for _ in range(runs):
+        obs = Observation(
+            obs.time + obs.dt,
+            obs.dt,
+            pose,
+            obs.path,
+            obs.goal,
+            obs.goal_tolerance,
+            obs.path_changes,
+            costmap=obs.costmap,
+            limits=obs.limits,
+        )
+        command = controller.command(obs)
+        commands.append(command)
+        pose = model.step(pose, command, obs.dt)
+        poses.append(pose)
+    return poses, commands
+
+
+@pytest.mark.parametrize(
+    ("pose", "goal"),
+    [
+        ((1.0, 1.0, 0.0), (5.0, 1.0, 0.0)),  # straight ahead
+        ((1.0, 1.0, 0.0), (1.0, 4.0, 1.57)),  # 90 degrees off
+        ((1.0, 1.0, 0.0), (0.3, 1.0, 3.14)),  # behind
+        ((5.0, 1.0, 0.0), (5.0, 1.0, 1.0)),  # at the goal, wrong angle
+    ],
+)
+def test_a_diff_drive_is_driven_exactly_as_without_limits(pose, goal):
+    """Limits that turn in place change nothing, so a diff drive keeps its behaviour."""
+    plain = [c for c in steer(DWB(), look(pose, goal), DiffDrive(), 20)[1]]
+    limited = steer(DWB(), see(pose, goal, DiffDrive().limits()), DiffDrive(), 20)[1]
+    assert limited == plain
+
+
+def test_a_car_is_only_given_commands_it_will_drive():
+    """Every command lies in the steering cone, so the scored arc is the driven arc."""
+    model = Ackermann()
+    _, commands = steer(
+        DWB(), see((1.0, 1.0, 0.0), (1.0, 4.0, 1.57), model.limits()), model, 40
+    )
+    assert all(model.clip(c) == c for c in commands)
+    assert all(c.vx >= 0.0 for c in commands)
+
+
+def test_a_car_swings_toward_a_path_at_its_side_instead_of_inching():
+    """Goal 90 degrees to the left: within 2 s the car has turned well to the left."""
+    model = Ackermann()
+    poses, commands = steer(
+        DWB(), see((1.0, 1.0, 0.0), (1.0, 4.0, 1.57), model.limits()), model, 40
+    )
+    assert poses[-1].xyt[2] > 0.5
+    assert all(c.vx >= DWB().car_min_vel_x - 1e-9 for c in commands[3:])
+
+
+def test_a_car_with_the_path_behind_turns_rather_than_driving_off():
+    """Goal straight behind: the heading error to it shrinks, it does not drive away."""
+    model = Ackermann()
+    poses, _ = steer(
+        DWB(), see((1.0, 1.0, 0.0), (0.3, 1.0, 3.14), model.limits()), model, 60
+    )
+    assert abs(poses[-1].xyt[2]) > 1.0
+    assert poses[-1].xyt[0] < 2.0
+
+
+def test_a_car_at_the_goal_stops_and_leaves_its_angle():
+    """It cannot turn on the spot to the goal's angle, so it stands still."""
+    command = DWB().command(see((5.0, 1.0, 0.0), (5.0, 1.0, 1.0), Ackermann().limits()))
+    assert command == Twist()
+
+
+def test_a_reversing_car_backs_toward_a_goal_behind():
+    """With min_vel_x below 0 a car backs up instead of looping round forwards."""
+    model = Ackermann()
+    poses, commands = steer(
+        DWB(min_vel_x=-0.5),
+        see((1.0, 1.0, 0.0), (0.3, 1.0, 3.14), model.limits()),
+        model,
+        60,
+    )
+    assert any(c.vx < 0.0 for c in commands)
+    assert all(model.clip(c) == c for c in commands)
+    assert poses[-1].xyt[0] < 1.0  # it went backwards, toward the goal

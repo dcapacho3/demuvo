@@ -14,7 +14,7 @@ from robomath import Transform2D
 from ..controllers import Controller, Observation
 from ..costmap import Costmap, overlay
 from ..evaluation.judge import Judge
-from ..models import Twist
+from ..models import MODELS, Twist
 from ..planners import Planner
 from ..plugins import load_class
 from ..sim.simulation import Simulation
@@ -129,6 +129,16 @@ class Navigation:
                 "planner",
                 ("configure", "plan"),
             )
+            limits = MODELS[robot.model](**robot.params).limits()
+            if not limits.turns_in_place and not getattr(
+                self._planners[robot.name], "curvature_bounded", False
+            ):
+                LOGGER.warning(
+                    "robot '%s': it cannot turn in place, but its planner does "
+                    "not bound the path's curvature; it may not track the path "
+                    "or reach a goal's angle. The Dubins planner does.",
+                    robot.name,
+                )
             if robot.smoother is not None:
                 self._smoothers[robot.name] = load_class(
                     robot.smoother,
@@ -298,6 +308,7 @@ class Navigation:
                     path_changes=self._path_changes[name],
                     scans=sim.robots[name].scans(),
                     costmap=sim.robots[name].local_costmap,
+                    limits=sim.robots[name].model.limits(),
                 )
             )
             self._runs[name] += 1

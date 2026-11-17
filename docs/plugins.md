@@ -52,10 +52,13 @@ which returns a better path of the same shape.
 **A controller** has `command(obs)` and returns a `Twist`. It runs every `control_period`
 seconds, and its last command stays in force between runs. It sees only the observation:
 `obs.pose`, `obs.path`, `obs.goal`, `obs.goal_tolerance`, `obs.dt`, `obs.scans` (the
-latest scan of each lidar), `obs.costmap` (the local costmap) and `obs.path_changes`
+latest scan of each lidar), `obs.costmap` (the local costmap), `obs.path_changes`
 (a count that grows when the path is replaced, by a new task, `set_path` or a
 [replan](world-file.md#replanning), so a controller that keeps state knows to start
-over). It does not see the simulation.
+over) and `obs.limits` (what commands the robot's model can follow: `max_v`,
+`max_w(vx)` and `turns_in_place`; an `ackermann` robot's turn rate is bounded in
+proportion to its speed, so a controller that ignores the limits may command a turn
+the robot cannot make). It does not see the simulation.
 
 **A motion** moves an [actor](world-file.md#actors), not a robot, and is named as
 `motion = "module:Class"` with `motion_params`. It has `configure(start, rng)`, called once

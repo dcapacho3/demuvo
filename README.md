@@ -203,13 +203,15 @@ how a class is listed in the window.
   package for the window.
 - **A flat 2D world** with no physics engine: obstacles (box, circle, polygon, wall), solid
   to robots, and maps read from a `map.yaml`.
-- **Robots** with a differential-drive model driven by a ROS-style `Twist`, wheel encoders
-  with noise, and a dead-reckoning estimator.
+- **Robots** with a differential-drive model and a car-like (Ackermann) model, both driven
+  by a ROS-style `Twist`, wheel encoders with noise, and a dead-reckoning estimator. A
+  controller is told what its robot can do, so a car is driven within its steering.
 - **Sensing:** any number of lidars on a robot, each with its mount, noise and scan rate,
   and a local costmap that the robot builds from their scans.
 - **Planning and control:** `StraightLine` and `AStar` planners and a `LineOfSight` smoother
-  on a global costmap, a `PurePursuit` controller, and a `DWB` controller, a local planner
-  that steers round what the lidar sees in the local costmap. A robot can plan again
+  on a global costmap, `Dubins` and `ReedsShepp` planners for a car, a `PurePursuit`
+  controller that can reverse, and a `DWB` controller, a local planner that steers round
+  what the lidar sees in the local costmap. A robot can plan again
   while it drives, on the global costmap with the local one laid over it, when its path
   is blocked, it is off the path, it is stuck, or a timer runs out.
 - **Exact time:** a step length and a controller rate that you set apart, and results that
@@ -219,8 +221,13 @@ how a class is listed in the window.
 
 ## To do
 
-- [ ] More robot models, each with the controller and the encoders that suit it: car-like
-  (Ackermann), mecanum, skid-steer and forklift.
+- [x] A car-like (Ackermann) model, with the controllers and planners that suit it.
+- [ ] For the car: a Hybrid A* planner, so it plans round obstacles on the costmap with a
+  bounded curvature, as `AStar` does for a diff drive; and a parking controller that
+  reaches a goal's angle exactly under obstacle avoidance, where `DWB` today arrives
+  within 0.3 rad or so.
+- [ ] More robot models, each with the controller and the encoders that suit it: mecanum,
+  skid-steer and forklift.
 - [ ] An extended Kalman filter (EKF), written from scratch, as a robot's estimator.
 - [ ] SLAM, written from scratch, so a robot builds a map and finds itself in it.
 - [ ] A map generator: a seeded Gaussian random field turned into obstacles, so each seed

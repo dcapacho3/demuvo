@@ -2,7 +2,7 @@
 
 from .controllers import DWB, Controller, Observation, PurePursuit
 from .costmap import Costmap
-from .models import MODELS, Ackermann, DiffDrive, Twist
+from .models import MODELS, Ackermann, DiffDrive, Limits, Twist
 from .nav import Navigation
 from .planners import AStar, Planner, StraightLine
 from .runner import Run
@@ -25,6 +25,7 @@ __all__ = [
     "DiffDrive",
     "Estimate",
     "Estimator",
+    "Limits",
     "LineString",
     "Observation",
     "Obstacle",

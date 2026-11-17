@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 from robomath import Transform2D
 
-from demuvo import Observation, PurePursuit, StraightLine, Twist
+from demuvo import Ackermann, DiffDrive, Observation, PurePursuit, StraightLine, Twist
 
 
 def look(pose, goal, tolerance=(0.1, 0.1), path=None):
@@ -116,3 +116,122 @@ def test_a_bad_number_is_refused_when_the_controller_is_built(name, bad):
     """Every tunable number must be positive and finite."""
     with pytest.raises(ValueError, match=name):
         PurePursuit(**{name: bad})
+
+
+# A car's limits: the default Ackermann, which cannot turn in place.
+CAR = Ackermann().limits()
+
+
+def see(pose, goal, limits, **kwargs):
+    """`look`, with the robot's limits in the observation."""
+    obs = look(pose, goal, **kwargs)
+    return Observation(
+        obs.time,
+        obs.dt,
+        obs.pose,
+        obs.path,
+        obs.goal,
+        obs.goal_tolerance,
+        limits=limits,
+    )
+
+
+@pytest.mark.parametrize(
+    ("pose", "goal"),
+    [
+        ((1.0, 1.0, 0.0), (5.0, 1.0, 0.0)),  # straight ahead
+        ((3.0, 3.0, 0.0), (6.0, 4.0, 0.0)),  # a bend to the left
+        ((1.0, 1.0, 0.0), (1.0, 4.0, 1.57)),  # 90 degrees off: a turn on the spot
+        ((1.0, 1.0, 0.0), (0.3, 1.0, 3.14)),  # behind
+        ((5.0, 1.0, 0.0), (5.0, 1.0, 1.0)),  # at the goal, wrong angle
+    ],
+)
+def test_a_diff_drive_is_driven_exactly_as_without_limits(pose, goal):
+    """Limits that turn in place change nothing, so a diff drive keeps its behaviour."""
+    plain = PurePursuit().command(look(pose, goal))
+    with_limits = PurePursuit().command(see(pose, goal, DiffDrive().limits()))
+    assert with_limits == plain
+
+
+def test_a_car_keeps_its_turn_rate_inside_the_steering():
+    """A bend too sharp for the steering is cut to the cone at that speed.
+
+    The goal lies at a bearing of 0.7 rad, inside `turn_in_place_angle`, so both
+    drive; but the pure pursuit curvature, 2 sin(0.7) / 0.6, is 2.15 /m where
+    the car's steering allows 1.82 /m.
+    """
+    goal = (3.0 + 2.0 * math.cos(0.7), 3.0 + 2.0 * math.sin(0.7), 0.7)
+    plain = PurePursuit().command(look((3.0, 3.0, 0.0), goal))
+    tight = PurePursuit().command(see((3.0, 3.0, 0.0), goal, CAR))
+    assert plain.vx > 0.0
+    assert plain.wz > CAR.max_w(plain.vx)  # the diff drive would turn tighter
+    assert tight.vx == plain.vx
+    assert tight.wz == pytest.approx(CAR.max_w(tight.vx))
+
+
+def test_a_car_swings_on_full_lock_instead_of_turning_on_the_spot():
+    """A goal 90 degrees to the left: drive forward on full lock to the left."""
+    command = PurePursuit().command(see((1.0, 1.0, 0.0), (1.0, 4.0, 1.57), CAR))
+    assert command.vx > 0.0
+    assert command.wz == pytest.approx(CAR.max_w(command.vx))
+    assert command == Ackermann().clip(command)  # the model drives exactly this
+
+
+def test_a_car_with_the_goal_behind_goes_round_to_the_left():
+    """Straight behind is bearing pi, so it swings to the left, not stands still."""
+    command = PurePursuit().command(see((1.0, 1.0, 0.0), (0.3, 1.0, 3.14), CAR))
+    assert command.vx > 0.0
+    assert command.wz > 0.0
+
+
+def test_a_car_at_the_goal_stops_and_leaves_its_angle():
+    """It cannot turn on the spot to the goal's angle, so it stands still."""
+    command = PurePursuit().command(see((5.0, 1.0, 0.0), (5.0, 1.0, 1.0), CAR))
+    assert command == Twist()
+
+
+def test_a_reversing_car_backs_toward_a_target_behind():
+    """With allow_reversing, a goal behind is backed to, inside the steering."""
+    command = PurePursuit(allow_reversing=True).command(
+        see((1.0, 1.0, 0.0), (0.3, 1.0, 3.14), CAR)
+    )
+    assert command.vx < 0.0
+    assert abs(command.wz) <= CAR.max_w(command.vx) + 1e-12
+    assert command == Ackermann().clip(command)
+
+
+def test_without_allow_reversing_a_car_never_backs_up():
+    """The default swings round forwards instead, as before."""
+    command = PurePursuit().command(see((1.0, 1.0, 0.0), (0.3, 1.0, 3.14), CAR))
+    assert command.vx > 0.0
+
+
+def test_allow_reversing_changes_nothing_for_a_diff_drive():
+    """A robot that turns in place turns toward a goal behind, as always."""
+    plain = PurePursuit().command(look((1.0, 1.0, 0.0), (0.3, 1.0, 3.14)))
+    flagged = PurePursuit(allow_reversing=True).command(
+        see((1.0, 1.0, 0.0), (0.3, 1.0, 3.14), DiffDrive().limits())
+    )
+    assert flagged == plain
+
+
+def test_a_reversing_car_arrives_without_going_round():
+    """Backing 0.7 m beats a 3 m forward loop: the robot gets there directly."""
+    model, controller = Ackermann(), PurePursuit(allow_reversing=True)
+    obs = see((1.0, 1.0, 0.0), (0.3, 1.0, 3.14), CAR)
+    pose, driven = obs.pose, 0.0
+    for _ in range(60):
+        obs = Observation(
+            obs.time + obs.dt,
+            obs.dt,
+            pose,
+            obs.path,
+            obs.goal,
+            obs.goal_tolerance,
+            limits=CAR,
+        )
+        command = controller.command(obs)
+        pose = model.step(pose, command, obs.dt)
+        driven += abs(command.vx) * obs.dt
+    assert float(np.hypot(*(pose.translation - obs.goal.translation))) <= 0.15
+    assert driven < 1.0

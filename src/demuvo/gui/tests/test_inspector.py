@@ -246,7 +246,12 @@ def test_a_combo_that_is_a_choice_lists_the_friendly_names():
     """The planner box lists the names, not the paths."""
     inspector, _, _, _ = build()
     box = inspector.fields["planner"]
-    assert isinstance(box, Combo) and box.items == ["Straight line", "A*"]
+    assert isinstance(box, Combo) and box.items == [
+        "Straight line",
+        "A*",
+        "Dubins",
+        "Reeds-Shepp",
+    ]
 
 
 def test_the_world_form_changes_the_size_seed_and_step():

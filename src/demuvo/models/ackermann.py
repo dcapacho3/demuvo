@@ -82,7 +82,7 @@ import numpy as np
 from robomath import Transform2D
 
 from ..plugins import check_positive
-from .base import FIELDS, Twist
+from .base import FIELDS, Limits, Twist
 
 _USES = ("vx", "wz")
 _UNUSED = tuple(name for name in FIELDS if name not in _USES)
@@ -121,6 +121,10 @@ class Ackermann:
         if not 0.0 < self.max_steer < math.pi / 2:
             raise ValueError(f"max_steer must be in (0, pi/2), got {self.max_steer}")
 
+    def limits(self) -> Limits:
+        """The feasible commands: a wedge, |wz| in proportion to |vx|."""
+        return Limits(max_v=self.max_v, slope=math.tan(self.max_steer) / self.wheelbase)
+
     def clip(self, command: Twist) -> Twist:
         """Limit a command to the speeds and turning radius this robot has.
 
@@ -132,9 +136,7 @@ class Ackermann:
         ignored = [name for name in _UNUSED if getattr(command, name) != 0.0]
         if ignored:
             warnings.warn(f"{self.name} ignores {', '.join(ignored)}")
-        vx = max(-self.max_v, min(self.max_v, command.vx))
-        reach = abs(vx) * math.tan(self.max_steer) / self.wheelbase
-        return Twist(vx=vx, wz=max(-reach, min(reach, command.wz)))
+        return self.limits().clip(command)
 
     def _check_steerable(self, command: Twist) -> None:
         """Refuse a command whose constant steering angle this car cannot hold.
@@ -152,7 +154,7 @@ class Ackermann:
         Raises:
             ValueError: if the command turns tighter than the steering allows.
         """
-        bound = abs(command.vx) * math.tan(self.max_steer) / self.wheelbase
+        bound = self.limits().max_w(command.vx)
         if abs(command.wz) > bound * (1 + 1e-9) + 1e-12:
             raise ValueError(
                 f"{self.name} cannot hold wz={command.wz} at vx={command.vx}: "

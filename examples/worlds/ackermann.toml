@@ -1,0 +1,33 @@
+version = 1
+
+# A car. The ackermann robot cannot turn in place, so its goals lie on Dubins
+# paths: the shortest ways that bend no tighter than the car can steer, each
+# arriving at the goal's angle. It drives a lap of three waypoints and comes
+# back to where it started, facing the other way.
+
+[world]
+size = [8.0, 6.0]
+seed = 11
+
+[[robot]]
+name = "car"
+model = "ackermann"
+shape = { name = "box", size = [0.5, 0.3] }
+pose = [1.5, 1.5, 0.0]
+params = { max_v = 0.8, max_steer = 0.6, wheelbase = 0.4 }
+planner = "demuvo.planners:Dubins"
+planner_params = { turning_radius = 1.0 }
+controller = "demuvo.controllers:PurePursuit"
+controller_params = { lookahead = 0.2 }   # short, to track the arcs to their end
+
+[[task]]
+robot = "car"
+goal = [6.5, 1.5, 1.57]
+
+[[task]]
+robot = "car"
+goal = [6.5, 4.5, 3.14]
+
+[[task]]
+robot = "car"
+goal = [1.5, 1.5, 3.14]

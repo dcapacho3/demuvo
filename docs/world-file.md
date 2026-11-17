@@ -160,6 +160,18 @@ settings go in `planner_params`:
 - `tolerance`: 0 by default, in metres. A blocked goal then gives no path. A larger
   value lets the path end at the nearest free cell within that distance of the goal.
 
+`Dubins` (`demuvo.planners:Dubins`) is the straight-line planner for a car: the
+shortest path that bends no tighter than `turning_radius` (0.6 m; set it no lower than
+the robot's least turning radius) and arrives at the goal's angle exactly, so an
+`ackermann` robot can track it and finishes aligned. Like the straight line it ignores
+the costmap. `ReedsShepp` (`demuvo.planners:ReedsShepp`) is Dubins for a car that may
+back up: the shortest such path when the car can also drive in reverse, so a goal just
+behind it is reached by backing up instead of by a loop. It has the same settings. The
+path changes direction at its cusps, so the robot needs a controller that reverses:
+`PurePursuit` with `allow_reversing`, or `DWB` with `min_vel_x` below 0. A robot that
+cannot turn in place warns at the start of a run if its planner does not bound curvature,
+as `StraightLine` and `AStar` do not.
+
 When there is no path, the robot stays still and the run says why in plain words, once
 for the task, for example `AStar: the goal cell (90, 80) is blocked (cost 254), so the
 robot's centre cannot be there` and `robot 'r1': no path for task 1, from (1.00, 1.00)
@@ -178,7 +190,12 @@ going round two boxes: 8-neighbour A* with a smoother, and 4-neighbour A* withou
 ## Controllers
 
 The controller turns the path into a command at each run. `PurePursuit` steers toward a
-point of the path `lookahead` metres ahead and does not look at the lidar. `DWB`
+point of the path `lookahead` metres ahead and does not look at the lidar. On an
+`ackermann` robot, which cannot turn in place, it keeps the turn rate inside the
+steering, drives out of a large bearing error on full lock instead of turning on the
+spot, and does not turn to the goal's angle; with `allow_reversing` it backs toward a
+target behind it instead of going round forwards, a real car's way out of a tight
+spot. `DWB`
 (`demuvo.controllers:DWB`), the Dynamic Window Approach as Nav2's DWB controller does it,
 is a local planner: it steers round what the robot's lidar sees, even what the planner's
 map does not show.
@@ -207,7 +224,17 @@ Distances to the path are counted through free cells, and cost more near obstacl
 sees, the robot leaves it: it heads, through free cells, for the last free point of the
 path in the local costmap, then follows the path again. At the goal it turns to the
 goal's angle (`rotate_to_goal`, `rotate_speed`, `turn_gain`). `min_vel_x` below 0 lets
-it back up. A trajectory that leaves the local costmap is thrown out, so the window
+it back up. An `ackermann` robot cannot turn in place, so for one the window is shaped
+like its steering, trajectories slower than `car_min_vel_x` are thrown out so it turns on
+its least circle rather than inching, a path angle critic (`path_angle_scale`) makes it
+swing toward the path, and it does not turn to the goal's angle. DWB tracks a path more
+loosely than pure pursuit, so a car it drives meets a goal angle only within 0.3 rad or
+so; give such a goal a tolerance to match, or the car `PurePursuit` with a short
+`lookahead`, as `examples/worlds/ackermann.toml` does. `min_vel_x` below 0 lets a car
+back up too: the path angle critic then counts facing away from its aim as good as
+facing it, so backing toward the path costs nothing extra. DWB does not follow a
+change of direction along the path, so a `ReedsShepp` path with a cusp needs
+`PurePursuit` with `allow_reversing`, which follows the path run by run. A trajectory that leaves the local costmap is thrown out, so the window
 should hold `max_vel_x * sim_time + forward_point_distance` each way: 0.825 m with the
 defaults, inside the default 1.5 m. A robot with no lidar follows its path with no
 obstacle check. If no trajectory that moves is free, the robot stops until one is, and

@@ -14,6 +14,7 @@ radius and cannot turn in place).
 Each model class includes:
     name: the word used in the world file
     uses: the Twist fields it follows
+    limits: the commands it can follow, as a `Limits` a controller reads
     clip: the command limited to what the robot can do
     step: the pose after `dt` seconds of a constant command.
 
@@ -22,7 +23,7 @@ A model that can also give its wheel increments has `encoders` and
 """
 
 from .ackermann import Ackermann
-from .base import Model, Twist, WheeledModel
+from .base import Limits, Model, Twist, WheeledModel
 from .diff_drive import DiffDrive
 from .registry import MODELS, parse_params
 
@@ -30,6 +31,7 @@ __all__ = [
     "MODELS",
     "Ackermann",
     "DiffDrive",
+    "Limits",
     "Model",
     "Twist",
     "WheeledModel",

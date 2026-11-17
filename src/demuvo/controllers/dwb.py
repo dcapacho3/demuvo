@@ -28,6 +28,16 @@ the lidar shows the way ahead clear. Both distances cost more near obstacles, as
 At the goal it turns on the spot to the goal's angle, as Nav2's RotateToGoal
 critic makes it do. There are no recovery behaviours: a robot that no trajectory
 can move stays still until one can.
+
+A robot that cannot turn in place (`Observation.limits` says so, as an ackermann
+robot's do) gets a window shaped like its steering: every sampled turn rate is
+pulled inside what the model allows at that sample's speed, so the trajectory
+that is scored is the one the robot will drive, trajectories slower than
+`car_min_vel_x` are thrown out so it turns on its least circle rather than inching,
+and the turn on the spot at the goal is skipped. With `min_vel_x` below 0 such a
+robot may also back up, and the path angle critic then counts facing away from its
+aim as good as facing it, so a reverse trajectory toward the path is not punished.
+A robot that can turn in place is driven as before.
 """
 
 from __future__ import annotations
@@ -45,7 +55,7 @@ from ..costmap import INSCRIBED, MAX_NON_OBSTACLE, Costmap
 from ..models import Twist
 from ..paths import along_path
 from ..plugins import check_not_negative, check_positive
-from .base import Observation
+from .base import Observation, car_limits
 
 LOGGER = logging.getLogger(__name__)
 # Extra metres round the path of the blank grid a robot with no local costmap uses.
@@ -115,6 +125,20 @@ class DWB:
         rotate_speed: largest turn rate in rad/s when turning to the goal's angle.
         turn_gain: turn rate per radian of error when turning to the goal's angle.
         rotate_to_goal: turn to the goal's angle once at the goal.
+        path_angle_scale: weight per radian between a trajectory's end heading
+            and the direction from there to the path point `max_vel_x * sim_time
+            + forward_point_distance` ahead of the robot, beyond the end of any
+            trajectory, for a robot that cannot turn in place. The
+            distance critics cannot tell a small arc to the left from one to the
+            right when the path lies behind; this one can, as MPPI's PathAngle
+            critic does for a car, so the robot swings round on its least
+            circle toward the path. Not used for a robot that turns in place.
+        car_min_vel_x: the least |vx| of a trajectory for a robot that cannot
+            turn in place, in m/s; 0 for none. Such a robot can only turn by
+            driving, and every move away from a path that lies to its side
+            scores worse than a smaller one, so without a floor it inches.
+            With one it turns on its least circle at this speed instead. The
+            floor is never above the fastest speed the window reaches.
     """
 
     max_vel_x: float = 0.5
@@ -136,6 +160,8 @@ class DWB:
     rotate_speed: float = 1.0
     turn_gain: float = 2.0
     rotate_to_goal: bool = True
+    path_angle_scale: float = 2.0
+    car_min_vel_x: float = 0.1
     _last: Twist = field(default_factory=Twist, init=False, repr=False, compare=False)
     _maps: tuple[tuple, _Maps] | None = field(
         default=None, init=False, repr=False, compare=False
@@ -164,6 +190,8 @@ class DWB:
             "goal_align_scale",
             "forward_point_distance",
             "cost_weight",
+            "path_angle_scale",
+            "car_min_vel_x",
         )
         if not math.isfinite(self.min_vel_x) or self.min_vel_x > self.max_vel_x:
             raise ValueError(
@@ -189,14 +217,32 @@ class DWB:
         gx, gy, gyaw = obs.goal.xyt
         xy_tolerance, yaw_tolerance = obs.goal_tolerance
         to_goal = math.hypot(gx - x, gy - y)
+        car = car_limits(obs)
         if to_goal <= xy_tolerance:
-            return self._keep(self._turn_to_goal(gyaw - yaw, yaw_tolerance))
+            if car is None:
+                return self._keep(self._turn_to_goal(gyaw - yaw, yaw_tolerance))
+            # A car arrives at the goal's angle or not at all, so it finishes
+            # its path instead of stopping at the first touch of the tolerance,
+            # which on an arc would leave the last of the turn undriven. Once
+            # the angle is met, or the goal is behind it, it stops where it is.
+            behind = (gx - x) * math.cos(yaw) + (gy - y) * math.sin(yaw) <= 0.0
+            if abs(float(wrap_angle(gyaw - yaw))) <= yaw_tolerance or behind:
+                return self._keep(Twist())
         vx, wz = self._window(obs.dt)
+        if car is not None:
+            # Project the window onto the steering cone: a sample the model would
+            # clip is scored as what the model would drive instead.
+            bound = np.array([car.max_w(float(v)) for v in vx])
+            wz = np.clip(wz, -bound, bound)
         poses = rollout(obs.pose.xyt, vx, wz, self.sim_time, self.time_granularity)
         reach = self.max_vel_x * self.sim_time + self.forward_point_distance
-        scores = self._score(poses, obs, align=to_goal > reach)
+        scores = self._score(poses, obs, align=to_goal > reach, car=car is not None)
         still = (np.abs(vx) < 1e-9) & (np.abs(wz) < 1e-9)
         scores[still] = np.inf  # standing still gets nowhere
+        if car is not None:
+            # Inching gets nowhere either: a car turns by driving, so it must.
+            floor = min(self.car_min_vel_x, float(np.abs(vx).max()))
+            scores[np.abs(vx) < floor - 1e-9] = np.inf
         best = int(np.argmin(scores))
         if not np.isfinite(scores[best]):
             if self._stuck_on != obs.path_changes:
@@ -263,11 +309,27 @@ class DWB:
         self._maps = ((obs.costmap, obs.path_changes), maps)
         return maps
 
-    def _score(self, poses: np.ndarray, obs: Observation, align: bool) -> np.ndarray:
-        """The total of the critics for each trajectory; inf if it is thrown out."""
+    def _score(
+        self, poses: np.ndarray, obs: Observation, align: bool, car: bool = False
+    ) -> np.ndarray:
+        """The total of the critics for each trajectory; inf if it is thrown out.
+
+        `car` adds the path angle critic, for a robot that cannot turn in place.
+        """
         maps = self._grids(obs)
         nearest = int(np.argmin(np.hypot(*(maps.points - obs.pose.translation).T)))
         end = poses[:, -1, :2]
+        total = 0.0
+        if car and self.path_angle_scale > 0.0:
+            reach = self.max_vel_x * self.sim_time + self.forward_point_distance
+            aim = self._aim(maps, nearest, reach)
+            to_aim = np.arctan2(aim[1] - end[:, 1], aim[0] - end[:, 0])
+            error = np.abs(wrap_angle(to_aim - poses[:, -1, 2]))
+            if self.min_vel_x < 0.0:
+                # The robot may back up, so facing away from the aim is as
+                # good as facing it, as MPPI's PathAngle critic allows a car.
+                error = np.minimum(error, math.pi - error)
+            total = self.path_angle_scale * error
         ahead = end + self.forward_point_distance * np.column_stack(
             [np.cos(poses[:, -1, 2]), np.sin(poses[:, -1, 2])]
         )
@@ -275,7 +337,7 @@ class DWB:
             # The path ahead runs through what the lidar sees: leave it, and let
             # the distance to the local goal, which flows round, lead.
             goal_end = lookup(maps.grid, maps.to_goal, end)
-            total = self.goal_dist_scale * goal_end
+            total = total + self.goal_dist_scale * goal_end
             if align:
                 total += self.goal_align_scale * _ahead(
                     maps.grid,
@@ -290,7 +352,7 @@ class DWB:
             ahead_of_robot = maps.inside.copy()
             ahead_of_robot[:nearest] = False
             path_end = lookup(maps.grid, maps.to_path, end)
-            total = self.path_dist_scale * path_end
+            total = total + self.path_dist_scale * path_end
             total += self.goal_dist_scale * left_along(end, maps, ahead_of_robot)
             if align:
                 total += self.path_align_scale * _ahead(
@@ -304,6 +366,22 @@ class DWB:
                 total += self.goal_align_scale * left_along(ahead, maps, ahead_of_robot)
         total += self.obstacle_scale * obstacle_cost(poses, maps.grid, maps.free)
         return np.nan_to_num(total, nan=np.inf, posinf=np.inf)
+
+    def _aim(self, maps: _Maps, nearest: int, reach: float) -> np.ndarray:
+        """The path point the path angle critic points at.
+
+        The first point at least `reach` along the path from the one nearest
+        the robot, so no trajectory of this window passes it, or the path's
+        end; while the path ahead is blocked, the local goal, its last free
+        point in the grid.
+        """
+        if maps.blocked[nearest:].any():
+            open_ = np.flatnonzero(maps.inside & ~maps.blocked)
+            if open_.size:
+                return maps.points[open_[-1]]
+        along = maps.arc[nearest:] - maps.arc[nearest]
+        ahead = np.flatnonzero(along >= reach)
+        return maps.points[nearest + int(ahead[0]) if ahead.size else -1]
 
     def _turn_to_goal(self, error: float, tolerance: float) -> Twist:
         """Stop, or turn on the spot toward the goal's angle."""
