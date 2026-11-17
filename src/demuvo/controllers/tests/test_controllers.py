@@ -215,6 +215,29 @@ def test_allow_reversing_changes_nothing_for_a_diff_drive():
     assert flagged == plain
 
 
+def test_a_reversing_car_swings_toward_a_target_beside_it():
+    """A target to the side, not behind, is swung to on full lock, not backed to."""
+    command = PurePursuit(allow_reversing=True).command(
+        see((1.0, 1.0, 0.0), (1.0, 4.0, 1.57), CAR)
+    )
+    assert command.vx > 0.0
+    assert command.wz == pytest.approx(CAR.max_w(command.vx))
+
+
+def test_a_reversing_car_with_a_one_point_path_drives_to_the_point():
+    """A path of one point is one forward run."""
+    obs = see((1.0, 1.0, 0.0), (5.0, 1.0, 0.0), CAR, path=np.array([[5.0, 1.0, 0.0]]))
+    command = PurePursuit(allow_reversing=True).command(obs)
+    assert command.vx > 0.0
+    assert command.wz == pytest.approx(0.0)
+
+
+def test_a_reversing_car_on_the_last_path_point_short_of_the_goal_stands_still():
+    """With no direction left to steer, it stops instead of dividing by zero."""
+    obs = see((1.0, 1.0, 0.0), (5.0, 1.0, 0.0), CAR, path=np.array([[1.0, 1.0, 0.0]]))
+    assert PurePursuit(allow_reversing=True).command(obs) == Twist()
+
+
 def test_a_reversing_car_arrives_without_going_round():
     """Backing 0.7 m beats a 3 m forward loop: the robot gets there directly."""
     model, controller = Ackermann(), PurePursuit(allow_reversing=True)

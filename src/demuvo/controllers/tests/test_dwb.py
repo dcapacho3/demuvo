@@ -205,6 +205,23 @@ def test_no_usable_path_point_leaves_infinite_path_to_the_goal():
     assert np.isinf(left).all()
 
 
+def test_a_blocked_path_aims_at_its_last_free_point():
+    """While the path ahead is blocked, the angle critics aim at the local goal."""
+    grid = window()
+    free = ~dwb.grow(grid.data >= dwb.INSCRIBED)
+    maps = dwb._Maps(
+        grid=grid,
+        free=free,
+        to_path=np.zeros(free.shape),
+        to_goal=np.zeros(free.shape),
+        points=np.array([[3.0, 3.0], [3.1, 3.0], [3.2, 3.0]]),
+        arc=np.array([0.0, 0.1, 0.2]),
+        inside=np.array([True, True, True]),
+        blocked=np.array([False, True, False]),
+    )
+    assert DWB()._aim(maps, 0, 0.05) == pytest.approx([3.2, 3.0])
+
+
 def test_blocked_cells_grow_by_one_cell_all_round():
     """The footprint margin: a lone blocked cell becomes a block of nine."""
     blocked = np.zeros((5, 5), bool)
