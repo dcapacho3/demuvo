@@ -8,6 +8,7 @@ from demuvo.gui.widgets import (
     Checkbox,
     Column,
     Event,
+    Folds,
     IconButton,
     Label,
     Panel,
@@ -305,6 +306,50 @@ def test_a_checkbox_with_states_names_its_state_as_it_flips():
     box.set(True, notify=False)
     assert label_ink(box) != off
     assert label_ink(Checkbox("", False)) == 0.0
+
+
+def test_a_heading_folds_what_follows_it_until_the_next_heading():
+    """A click or Enter on a heading hides its group; the pinned widget stays."""
+    column = Column()
+    column.set_rect(0, 0, 300, 400)
+    column.adopt(FakeHost())
+    one, two, rows = (
+        Section("One"),
+        Section("Two"),
+        [Label("a"), Label("b"), Label("c")],
+    )
+    pinned = Label("footer")
+    column.add(one, rows[0], two, rows[1], rows[2], pinned)
+    folds = Folds({"Two"})
+    folds.attach(column, pinned=[pinned])
+    assert [c.visible for c in (rows[0], rows[1], rows[2], pinned)] == [
+        True,
+        False,
+        False,
+        True,
+    ]
+    column.layout()
+    click(one)
+    assert not rows[0].visible and rows[1].visible is False
+    two.activate()
+    assert (
+        rows[1].visible
+        and rows[2].visible
+        and folds.state == {"One": True, "Two": False}
+    )
+    again = Folds({"Two"})
+    again.state = folds.state
+    column.clear()
+    one2, other = Section("One"), Label("x")
+    column.add(one2, other)
+    again.attach(column)
+    assert one2.collapsed and not other.visible
+    plain = Section("Plain")
+    plain.activate()  # not foldable: nothing happens
+    assert not plain.collapsed
+    canvas = Canvas(300, 400)
+    column.layout()
+    column.draw(canvas)
 
 
 def test_a_slider_sets_its_value_from_the_pointer_and_clamps_at_the_ends():

@@ -10,7 +10,7 @@ from demuvo.gui.inputs import Combo, Spin
 from demuvo.gui.inspector import HINT, Inspector
 from demuvo.gui.robotform import NO_GOAL
 from demuvo.gui.session import Session
-from demuvo.gui.widgets import Checkbox, Column, Label
+from demuvo.gui.widgets import Checkbox, Column, Label, Section
 from demuvo.gui.worldform import NO_SIZE
 from demuvo.world import ReplanSpec
 from demuvo.world.shapes import Polygon
@@ -139,6 +139,22 @@ def test_editing_a_setting_keeps_the_value_of_one_that_is_hidden():
     inspector.settings["controller"]["lookahead"].set(0.9)
     kept = edit.settings_of_robot(session.world, "r1", "controller")
     assert kept["allow_reversing"] is True and kept["lookahead"] == 0.9
+
+
+def test_the_advanced_sections_start_closed_and_stay_as_the_user_left_them():
+    """Pose, goal and the choices show; a click opens a section, and it stays open."""
+    inspector, _, _, _ = build()
+    heads = {c.title: c for c in inspector.column.children if isinstance(c, Section)}
+    assert not heads["Pose"].collapsed and not heads["Robot"].collapsed
+    assert heads["controller settings"].collapsed and heads["Replanning"].collapsed
+    assert inspector.fields["x"].parent.visible
+    assert not inspector.fields["period"].parent.visible
+    heads["Replanning"].activate()
+    assert inspector.fields["replan"].parent.visible
+    inspector.show("r1")
+    assert inspector.fields["replan"].parent.visible
+    assert inspector.column.children[-1] is inspector.footer[0]
+    assert inspector.footer[0].visible
 
 
 def test_editing_the_pose_moves_the_robot_and_refreshes():

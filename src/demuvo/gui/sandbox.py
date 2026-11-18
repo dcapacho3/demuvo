@@ -27,7 +27,7 @@ from .scenedraw import LAYERS, STATIC
 from .scenepane import ScenePane
 from .session import Session
 from .shell import MENU_H, TOOL_H, Shell
-from .widgets import Checkbox, IconButton, Section, Slider
+from .widgets import Checkbox, Folds, IconButton, Section, Slider
 
 DEFAULT_MESSAGE = "Drag a robot to move it. Ctrl+1 and Ctrl+2 show or hide the panels."
 GOAL_MESSAGE = (
@@ -124,6 +124,7 @@ class Sandbox:
         layers = [Section("Layers"), *self.layer_boxes.values()]
         layers += [FormRow("opacity", self.alpha), FormRow("palette", self.palette)]
         chrome.left.add(Section("Scene"), self.tree, *layers)
+        Folds().attach(chrome.left)
         self.inspector = Inspector(
             chrome.right, self.session, self.message, self.refresh
         )

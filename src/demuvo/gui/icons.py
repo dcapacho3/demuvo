@@ -94,6 +94,7 @@ ICONS = {
         ("fill", [(16.5, 5.5), (19.5, 5.5), (19.5, 18.5), (16.5, 18.5)]),
     ],
     "chevron_down": [("line", [(7, 10), (12, 15), (17, 10)])],
+    "chevron_right": [("line", [(10, 7), (15, 12), (10, 17)])],
     "check": [("line", [(6, 12.5), (10.5, 17), (18, 8)])],
 }
 # The reset icon is an arc with an arrowhead, so it is worked out and not listed.

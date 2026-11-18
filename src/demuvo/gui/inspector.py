@@ -19,10 +19,29 @@ from .inputs import NumberSpec, Spin
 from .panels import FormRow, Note, TitleRow
 from .robotform import RobotForm
 from .session import Session
-from .widgets import Checkbox, Column, Label, Section, Widget
+from .widgets import Checkbox, Column, Folds, Label, Section, Widget
 from .worldform import OUTLINES, WorldForm
 
 HINT = "Select a robot, an actor or an obstacle to see and edit it."
+# The sections that start closed, so the form opens on what is used most; a click
+# on a heading opens or closes one, and the choice is kept from one form to the next.
+CLOSED = frozenset(
+    {
+        "Body",
+        "Meets",
+        "model settings",
+        "planner settings",
+        "smoother settings",
+        "controller settings",
+        "Control timing",
+        "Replanning",
+        "Pose source",
+        "Sensors",
+        "Default sensors",
+        "Global costmap",
+        "Local costmap",
+    }
+)
 # Largest value a setting field accepts.
 SETTING_MAX = 1000.0
 
@@ -58,6 +77,7 @@ class Inspector:
             "controller": options.controllers(),
         }
         self.fields: dict[str, Widget] = {}
+        self.folds = Folds(CLOSED)
         self.settings: dict[str, dict[str, Widget]] = {}
         self.motion: dict[str, Widget] = {}
 
@@ -71,6 +91,7 @@ class Inspector:
         col = self.column
         col.clear()
         col.add(Section("Inspector"), self.note)
+        hints: list[Widget] = []
         self.fields, self.settings, self.motion = {}, {}, {}
         forms = WorldForm(col, self.session, self.fields, self._done)
         obstacle = self.session.scene.selected_obstacle
@@ -85,8 +106,10 @@ class Inspector:
             forms.obstacle(obstacle)
         else:
             forms.world()
-            col.add(Label(HINT, 13, look.MUTED, wrap=True))
+            hints = [Label(HINT, 13, look.MUTED, wrap=True)]
+            col.add(*hints)
         col.add(*self.footer)
+        self.folds.attach(col, skip=1, pinned=[*self.footer, *hints])
         col.layout()
         self.lock()
 

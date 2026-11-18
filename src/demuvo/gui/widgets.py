@@ -324,12 +324,95 @@ class Label(Widget):
 
 
 class Section(Label):
-    """A small upper-case heading that opens a group in a panel."""
+    """A small upper-case heading that opens a group in a panel.
+
+    After `make_foldable` a click on it, or Enter, opens and closes the group, and
+    a chevron shows which.
+    """
 
     def __init__(self, text: str) -> None:
         """Make a heading."""
         super().__init__(text.upper(), 11, look.MUTED, bold=True)
+        self.title, self.on_toggle, self.collapsed = text, None, False
         self.preferred_height = 30.0
+
+    def make_foldable(self, collapsed: bool, on_toggle) -> None:
+        """Let it fold its group; `on_toggle` is called with the new state."""
+        self.collapsed, self.on_toggle = collapsed, on_toggle
+        self.interactive = self.focusable = True
+
+    def activate(self) -> None:
+        """Enter or Space flips it."""
+        if self.on_toggle is not None:
+            self.collapsed = not self.collapsed
+            self.on_toggle(self.collapsed)
+
+    def on_release(self, event: Event) -> None:
+        """A click flips it."""
+        if self._clicked_up(event):
+            self.activate()
+
+    def draw(self, canvas: Canvas) -> None:
+        """Draw the heading, with a chevron if it folds."""
+        if self.on_toggle is None:
+            super().draw(canvas)
+            return
+        self.ring(canvas)
+        icon = "chevron_right" if self.collapsed else "chevron_down"
+        draw_icon(canvas, icon, (self.x + 8, self.y + self.height / 2), 16, look.MUTED)
+        baseline = text_baseline(self.y, self.height, self.size)
+        canvas.text(
+            self._face(),
+            self.text,
+            (self.x + 22, baseline),
+            size=self.size,
+            color=rgba(self.color, fade(self.enabled)),
+        )
+
+
+class Folds:
+    """Which headings of a column are folded, kept from one fill of it to the next.
+
+    Args:
+        closed: the titles that start folded.
+    """
+
+    def __init__(self, closed=frozenset()) -> None:
+        """Start with the given titles folded."""
+        self.closed, self.state = closed, {}
+        self.column, self.pinned = None, []
+
+    def attach(self, column, skip: int = 0, pinned=()) -> None:
+        """Let each heading of a freshly filled column fold what follows it.
+
+        Args:
+            column: the column.
+            skip: how many of its first headings stay open and fixed.
+            pinned: widgets that stay shown whatever is folded, such as a footer.
+        """
+        self.column, self.pinned = column, list(pinned)
+        for head in [c for c in column.children if isinstance(c, Section)][skip:]:
+            head.make_foldable(
+                self.state.setdefault(head.title, head.title in self.closed),
+                lambda closed, h=head: self._toggled(h, closed),
+            )
+        self._show()
+
+    def _show(self) -> None:
+        """Hide what follows each folded heading."""
+        closed, started = False, False
+        for child in self.column.children:
+            if isinstance(child, Section) and child.on_toggle is not None:
+                closed, started = child.collapsed, True
+            elif started and child not in self.pinned:
+                child.visible = not closed
+
+    def _toggled(self, head: Section, closed: bool) -> None:
+        """A heading was clicked: remember it, and fold or unfold its group."""
+        self.state[head.title] = closed
+        self._show()
+        self.column.layout()
+        self.column.invalidate()
 
 
 class IconButton(Widget):
