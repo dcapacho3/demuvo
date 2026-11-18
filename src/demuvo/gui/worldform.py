@@ -47,17 +47,27 @@ class WorldForm(FormBase):
             ("height", "height", world.size[1]),
         ):
             spec = NumberSpec(1.0, MAX_SIZE, 0.5, 2, " m")
-            self.number(key, label, value, spec, self._size_edited, SIZE_HINT)
+            self.number(key, label, value, spec, self._size_edited, hint=SIZE_HINT)
         spec = NumberSpec(0, 2**31 - 1, 1, 0, "", True)
-        self.number("seed", "seed", world.seed, spec, self._seed_edited, SEED_HINT)
+        self.number("seed", "seed", world.seed, spec, self._seed_edited, hint=SEED_HINT)
         spec = NumberSpec(*STEP_RANGE, 0.001, 4, " s")
-        self.number("dt", "step", world.dt, spec, self._step_edited, STEP_HINT)
+        self.number("dt", "step", world.dt, spec, self._step_edited, hint=STEP_HINT)
         corner = NumberSpec(-1000.0, 1000.0, 0.5, 2, " m")
         self.number(
-            "ox0", "corner x", world.origin[0], corner, self._origin_edited, CORNER_HINT
+            "ox0",
+            "corner x",
+            world.origin[0],
+            corner,
+            self._origin_edited,
+            hint=CORNER_HINT,
         )
         self.number(
-            "oy0", "corner y", world.origin[1], corner, self._origin_edited, CORNER_HINT
+            "oy0",
+            "corner y",
+            world.origin[1],
+            corner,
+            self._origin_edited,
+            hint=CORNER_HINT,
         )
         self._sensors()
         costmaps = CostmapForm(self.column, self.session, self.fields, self.done)

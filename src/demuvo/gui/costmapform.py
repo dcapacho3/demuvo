@@ -56,7 +56,7 @@ class CostmapForm(FormBase):
             "enabled",
             spec.enabled,
             lambda on: self._set(which, {"enabled": on}),
-            HELP[which].get("enabled"),
+            hint=HELP[which].get("enabled"),
         )
         for key, label, shape in NUMBERS[which]:
             self.number(
@@ -65,7 +65,7 @@ class CostmapForm(FormBase):
                 getattr(spec, key),
                 shape,
                 lambda k=key: self._set(which, {k: self.fields[f"{prefix}.{k}"].value}),
-                HELP[which].get(key),
+                hint=HELP[which].get(key),
             )
         for layer in PLUGINS[which]:
             self.switch(
@@ -88,7 +88,7 @@ class CostmapForm(FormBase):
                 ["free", "blocked"],
                 spec.unknown,
                 lambda t: self._set(which, {"unknown": t}),
-                HELP[which].get("unknown"),
+                hint=HELP[which].get("unknown"),
             )
 
     def _layers(self, which: str, prefix: str) -> None:

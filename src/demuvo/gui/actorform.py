@@ -96,14 +96,29 @@ class ActorForm(FormBase):
         spec = NumberSpec(0.05, MAX_SIZE, 0.05, 2, " m")
         if isinstance(shape, Circle):
             self.number(
-                "asize0", "radius", shape.radius, spec, self._size_edited, SIZE_HINT
+                "asize0",
+                "radius",
+                shape.radius,
+                spec,
+                self._size_edited,
+                hint=SIZE_HINT,
             )
         else:
             self.number(
-                "asize0", "length", shape.size[0], spec, self._size_edited, SIZE_HINT
+                "asize0",
+                "length",
+                shape.size[0],
+                spec,
+                self._size_edited,
+                hint=SIZE_HINT,
             )
             self.number(
-                "asize1", "width", shape.size[1], spec, self._size_edited, SIZE_HINT
+                "asize1",
+                "width",
+                shape.size[1],
+                spec,
+                self._size_edited,
+                hint=SIZE_HINT,
             )
 
     def _motion(self, spec) -> None:
@@ -116,7 +131,7 @@ class ActorForm(FormBase):
             list(table),
             options.label_of(table, spec.motion),
             lambda text: self._motion_chosen(table, text),
-            options.summary(spec.motion) or "How the actor moves, if it does.",
+            hint=options.summary(spec.motion) or "How the actor moves, if it does.",
         )
         if spec.motion is None:
             return
@@ -134,7 +149,7 @@ class ActorForm(FormBase):
                 list(words),
                 current,
                 lambda text, k=name: self._word_edited(k, text),
-                notes.get(name),
+                hint=notes.get(name),
             )
         for setting in known:
             value = spec.motion_params.get(setting.name, setting.default)
@@ -235,15 +250,17 @@ class ActorForm(FormBase):
         hint = setting.help or None
         if setting.kind is bool:
             self.switch(
-                key, label, bool(value), lambda _on: self._settings_edited(), hint
+                key, label, bool(value), lambda _on: self._settings_edited(), hint=hint
             )
         elif setting.kind is int:
             spec = NumberSpec(0, SETTING_MAX, 1, 0, "", True)
-            self.number(key, label, int(value), spec, self._settings_edited, hint)
+            self.number(key, label, int(value), spec, self._settings_edited, hint=hint)
         else:
             step = max(0.01, round(abs(float(setting.default)) / 10, 3))
             spec = NumberSpec(0.0, SETTING_MAX, step, 3)
-            self.number(key, label, float(value), spec, self._settings_edited, hint)
+            self.number(
+                key, label, float(value), spec, self._settings_edited, hint=hint
+            )
         self.settings[setting.name] = self.fields[key]
 
     # -- edits --

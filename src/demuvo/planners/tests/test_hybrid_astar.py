@@ -181,6 +181,8 @@ def test_the_costs_of_a_step_follow_the_costmap_and_a_turn_or_cusp_costs_more():
     """Walls raise the price of an arc; changing direction or steering adds to it."""
     from demuvo.planners import hybrid_astar  # pylint: disable=import-outside-toplevel
 
+    # pylint: disable=protected-access
+
     assert hybrid_astar._change(None, (1, 0.0)) == 0.0
     assert hybrid_astar._change((1, 0.0), (1, 0.0)) == 0.0
     assert hybrid_astar._change((1, 0.0), (1, 1.0)) == hybrid_astar.TURN

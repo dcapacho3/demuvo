@@ -20,6 +20,7 @@ cost along it, so the path keeps off walls.
 from __future__ import annotations
 
 import heapq
+import itertools
 import logging
 import math
 from dataclasses import dataclass, field
@@ -83,6 +84,9 @@ class HybridAStar:
     max_expansions: int = 20000
     _costmap: Costmap | None = field(
         default=None, init=False, repr=False, compare=False
+    )
+    _order: itertools.count = field(
+        default_factory=itertools.count, init=False, repr=False, compare=False
     )
 
     curvature_bounded: ClassVar[bool] = True
@@ -152,43 +156,47 @@ class HybridAStar:
         shot = (ReedsShepp if self.allow_reversing else Dubins)(
             self.turning_radius, self.spacing
         )
-        kappas = (-1.0 / self.turning_radius, 0.0, 1.0 / self.turning_radius)
-        moves = [(+1, k) for k in kappas]
-        if self.allow_reversing:
-            moves += [(-1, k) for k in kappas]
-        price = 1.0 + self.cost_weight * costmap.data / MAX_NON_OBSTACLE
         first = tuple(float(v) for v in start)
         key0 = _key(costmap, first)
         # best[key] = (cost so far, parent key, the pose, the move that led to it)
         best = {key0: (0.0, None, first, None)}
         heap = [(far[key0[:2]] * CELL, 0, key0)]
-        count = 0
         opened = 0
         while opened < self.max_expansions:
             if not heap:
                 return None, opened
             opened += 1
-            _, _, key = heapq.heappop(heap)
-            cost, _, pose, last = best[key]
-            if opened % EVERY == 1 or far[key[:2]] * CELL < NEAR * self.turning_radius:
-                closing = self._close(shot, pose, goal)
+            key = heapq.heappop(heap)[2]
+            near = far[key[:2]] * CELL < NEAR * self.turning_radius
+            if opened % EVERY == 1 or near:
+                closing = self._close(shot, best[key][2], goal)
                 if closing is not None:
                     return self._assemble(best, key, closing, goal), opened
-            for move in moves:
-                found = self._arc(pose, move, price)
-                if found is None:
-                    continue
-                new, step_cost = found
-                new_key = _key(costmap, new)
-                ahead = far[new_key[:2]]
-                if not math.isfinite(ahead):
-                    continue
-                total = cost + step_cost + _change(last, move)
-                if new_key not in best or total < best[new_key][0]:
-                    best[new_key] = (total, key, new, move)
-                    count += 1
-                    heapq.heappush(heap, (total + ahead * CELL, count, new_key))
+            self._expand(key, best, heap, far)
         return None, opened
+
+    def _expand(self, key, best, heap, far) -> None:
+        """Open a pose: try each arc from it and keep the ones that are cheaper."""
+        costmap = self._costmap
+        kappas = (-1.0 / self.turning_radius, 0.0, 1.0 / self.turning_radius)
+        moves = [(+1, k) for k in kappas]
+        if self.allow_reversing:
+            moves += [(-1, k) for k in kappas]
+        price = 1.0 + self.cost_weight * costmap.data / MAX_NON_OBSTACLE
+        cost, _, pose, last = best[key]
+        for move in moves:
+            found = self._arc(pose, move, price)
+            if found is None:
+                continue
+            new, step_cost = found
+            new_key = _key(costmap, new)
+            ahead = far[new_key[:2]]
+            if not math.isfinite(ahead):
+                continue
+            total = cost + step_cost + _change(last, move)
+            if new_key not in best or total < best[new_key][0]:
+                best[new_key] = (total, key, new, move)
+                heapq.heappush(heap, (total + ahead * CELL, next(self._order), new_key))
 
     def _clear(self, points: np.ndarray):
         """The cells under some points if all are on the map and free, else None."""
@@ -279,14 +287,21 @@ def _change(last, move) -> float:
     return extra + (TURN if last[1] != move[1] else 0.0)
 
 
-def _distance_to(costmap: Costmap, blocked, goal_xy) -> dict:
-    """The distance, in cells of the search, round blocked cells, from the goal."""
+def _coarse(costmap: Costmap, blocked) -> tuple[np.ndarray, int]:
+    """The free cells of the search's grid, and how many costmap cells one covers."""
     step = max(1, round(CELL / costmap.resolution))
     rows, cols = blocked.shape
     height, width = -(-rows // step), -(-cols // step)
     padded = np.ones((height * step, width * step), bool)
     padded[:rows, :cols] = blocked
-    free = ~padded.reshape(height, step, width, step).any(axis=(1, 3))
+    covered = padded.reshape((height, step, width, step))
+    return ~covered.any(axis=(1, 3)), step
+
+
+def _distance_to(costmap: Costmap, blocked, goal_xy) -> dict:
+    """The distance, in cells of the search, round blocked cells, from the goal."""
+    free, step = _coarse(costmap, blocked)
+    height, width = free.shape
     goal = costmap.world_to_cell(*goal_xy)
     start = (goal[0] // step, goal[1] // step)
     free[start] = True  # the goal cell is free in the costmap

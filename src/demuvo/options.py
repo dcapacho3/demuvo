@@ -177,10 +177,10 @@ def summary(path: str | None) -> str:
     if not path:
         return ""
     doc = inspect.getdoc(class_of(path)) or ""
-    return _first_sentence(doc.split("\n\n")[0])
+    return _first_sentence(doc.split("\n\n", maxsplit=1)[0])
 
 
-def summary_of_choice(field: str, spec, tables: dict) -> str:
+def summary_of_choice(field: str, spec) -> str:
     """The first sentence of what the class chosen for a part of a robot does."""
     if field == "model":
         return _first_sentence(inspect.getdoc(MODELS[spec.model]) or "")

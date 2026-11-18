@@ -223,9 +223,6 @@ def test_the_summary_of_a_choice_is_the_first_sentence_of_the_chosen_class():
         Path(__file__).resolve().parents[1] / "examples" / "worlds" / "ackermann.toml"
     )
     spec = next(iter(load_world(path).robots))
-    tables = {}
-    assert options.summary_of_choice("model", spec, tables).startswith(
-        "A car-like robot"
-    )
-    assert options.summary_of_choice("planner", spec, tables).startswith("The shortest")
-    assert options.summary_of_choice("smoother", spec, tables) == ""
+    assert options.summary_of_choice("model", spec).startswith("A car-like robot")
+    assert options.summary_of_choice("planner", spec).startswith("The shortest")
+    assert options.summary_of_choice("smoother", spec) == ""

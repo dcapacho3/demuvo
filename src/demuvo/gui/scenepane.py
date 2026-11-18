@@ -39,7 +39,7 @@ DOUBLE_CLICK = (0.6, 12.0)
 AIM_LENGTH = 48.0
 
 
-class ScenePane(Widget):
+class ScenePane(Widget):  # pylint: disable=too-many-instance-attributes
     """The widget that shows the scene and takes the mouse.
 
     Args:

@@ -80,7 +80,7 @@ class RobotForm(FormBase):
             ["circle", "box"],
             shape.name,
             lambda kind: self._body_kind(name, kind),
-            "The robot's outline, which decides what it bumps into.",
+            hint="The robot's outline, which decides what it bumps into.",
         )
         if shape.name == "circle":
             self.number(
@@ -128,7 +128,7 @@ class RobotForm(FormBase):
             lambda on: self._robot_edit(
                 name, lambda w: edit.set_replan(w, name, True if on else None)
             ),
-            REPLAN_HINT,
+            hint=REPLAN_HINT,
         )
         if spec.replan is None:
             return
@@ -139,7 +139,7 @@ class RobotForm(FormBase):
                 getattr(spec.replan, field),
                 number_spec,
                 lambda: self._replan_edited(name),
-                _REPLAN_HELP.get(field),
+                hint=_REPLAN_HELP.get(field),
             )
 
     def _replan_edited(self, name: str) -> None:
@@ -163,7 +163,7 @@ class RobotForm(FormBase):
             lambda text: self._robot_edit(
                 name, lambda w: edit.set_estimator(w, name, text)
             ),
-            ESTIMATOR_HINT,
+            hint=ESTIMATOR_HINT,
         )
         self.choice(
             "control_pose",
@@ -173,7 +173,7 @@ class RobotForm(FormBase):
             lambda text: self._robot_edit(
                 name, lambda w: edit.set_control_pose(w, name, text)
             ),
-            CONTROL_POSE_HINT,
+            hint=CONTROL_POSE_HINT,
         )
         self.column.add(Section("Sensors"))
         kinds = {s.get("type", n) for n, s in spec.sensors.items()}
@@ -290,7 +290,7 @@ class RobotForm(FormBase):
             task.goal_tolerance[0],
             NumberSpec(0.01, 10.0, 0.01, 2, " m"),
             change,
-            TOLERANCE_HINT,
+            hint=TOLERANCE_HINT,
         )
         self.number(
             f"tol{k}a",
@@ -298,7 +298,7 @@ class RobotForm(FormBase):
             math.degrees(task.goal_tolerance[1]),
             NumberSpec(0.1, 180.0, 1, 1, " °"),
             change,
-            ANGLE_HINT,
+            hint=ANGLE_HINT,
         )
         current = next(k_ for k_, v in STOP_CHOICES.items() if v is task.stop)
         self.choice(
@@ -307,7 +307,7 @@ class RobotForm(FormBase):
             list(STOP_CHOICES),
             current,
             lambda _t: change(),
-            STOP_HINT,
+            hint=STOP_HINT,
         )
         self.number(
             f"wait{k}",
@@ -315,7 +315,7 @@ class RobotForm(FormBase):
             task.wait,
             NumberSpec(0.0, 3600.0, 0.5, 2, " s"),
             change,
-            WAIT_HINT,
+            hint=WAIT_HINT,
         )
         self.button(
             f"remove{k}",

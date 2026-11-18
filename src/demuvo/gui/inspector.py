@@ -141,7 +141,7 @@ class Inspector:
                 items,
                 current,
                 lambda text, f=field: self._chosen(f, text),
-                options.summary_of_choice(field, spec, self.tables),
+                hint=options.summary_of_choice(field, spec),
             )
         self._settings(spec, forms)
         forms.replan(spec)
@@ -218,14 +218,14 @@ class Inspector:
 
         hint = setting.help or None
         if setting.kind is bool:
-            forms.switch(key, label, bool(value), changed, hint)
+            forms.switch(key, label, bool(value), changed, hint=hint)
         elif setting.kind is int:
             spec = NumberSpec(0, SETTING_MAX, 1, 0, "", True)
-            forms.number(key, label, int(value), spec, changed, hint)
+            forms.number(key, label, int(value), spec, changed, hint=hint)
         else:
             step = max(0.01, round(abs(float(setting.default)) / 10, 3))
             spec = NumberSpec(0.0, SETTING_MAX, step, 3)
-            forms.number(key, label, float(value), spec, changed, hint)
+            forms.number(key, label, float(value), spec, changed, hint=hint)
 
     def lock(self) -> None:
         """Enable the fields while editing is allowed, and say why when it is not."""
