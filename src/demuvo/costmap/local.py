@@ -95,7 +95,7 @@ class LocalCostmap:
     def _inside(self, window: Costmap, world: np.ndarray):
         """The rows and columns of the world points that fall inside the window."""
         rows, cols = window.cells(world)
-        keep = (rows >= 0) & (rows < self._cells) & (cols >= 0) & (cols < self._cells)
+        keep = window.on_grid(rows, cols)
         return rows[keep], cols[keep]
 
     def _clear(self, window: Costmap, pose: Transform2D, scan: Scan) -> None:

@@ -21,20 +21,19 @@ from __future__ import annotations
 
 import heapq
 import itertools
-import logging
 import math
 from dataclasses import dataclass, field
 from typing import ClassVar
 
 import numpy as np
-from robomath import Transform2D
+from robomath import Transform2D, wrap_angle
 
 from ..costmap import INSCRIBED, MAX_NON_OBSTACLE, Costmap
+from ..paths import arc_poses
 from ..plugins import check_not_negative, check_positive
+from .base import no_path
 from .dubins import Dubins
 from .reeds_shepp import ReedsShepp
-
-LOGGER = logging.getLogger(__name__)
 
 # The side of a cell of the search, in metres, and how many heading bins it has.
 CELL = 0.1
@@ -126,19 +125,24 @@ class HybridAStar:
         blocked = costmap.data >= INSCRIBED
         for name, pose in (("start", start), ("goal", goal)):
             if not costmap.in_bounds(*pose.xyt[:2]):
-                return _no_path(
-                    "the %s (%.2f, %.2f) is off the map", name, *pose.xyt[:2]
+                return no_path(
+                    "HybridAStar",
+                    "the %s (%.2f, %.2f) is off the map",
+                    name,
+                    *pose.xyt[:2],
                 )
         cell = costmap.world_to_cell(*goal.xyt[:2])
         if blocked[cell]:
-            return _no_path(
+            return no_path(
+                "HybridAStar",
                 "the goal cell %s is blocked (cost %d), so the car cannot be there",
                 cell,
                 costmap.data[cell],
             )
         steps, opened = self._search(start.xyt, goal, blocked)
         if steps is None:
-            return _no_path(
+            return no_path(
+                "HybridAStar",
                 "no path from the start (%.2f, %.2f) to the goal (%.2f, %.2f) that "
                 "bends no tighter than %.2f m; the search opened %d poses%s",
                 *start.xyt[:2],
@@ -201,10 +205,7 @@ class HybridAStar:
     def _clear(self, points: np.ndarray):
         """The cells under some points if all are on the map and free, else None."""
         rows, cols = self._costmap.cells(points[:, :2])
-        shape = self._costmap.data.shape
-        if rows.min() < 0 or cols.min() < 0:
-            return None
-        if rows.max() >= shape[0] or cols.max() >= shape[1]:
+        if not self._costmap.on_grid(rows, cols).all():
             return None
         if (self._costmap.data[rows, cols] >= INSCRIBED).any():
             return None
@@ -215,7 +216,7 @@ class HybridAStar:
         direction, kappa = move
         count = math.ceil(STEP / self._costmap.resolution)
         distance = direction * STEP * np.arange(1, count + 1) / count
-        points = _along(pose, kappa, distance)
+        points = arc_poses(pose, kappa, distance)
         cells = self._clear(points)
         if cells is None:
             return None
@@ -242,10 +243,10 @@ class HybridAStar:
             direction, kappa = move
             count = max(1, math.ceil(STEP / self.spacing))
             distance = direction * STEP * np.arange(1, count + 1) / count
-            pieces.append(_along(before, kappa, distance))
+            pieces.append(arc_poses(before, kappa, distance))
         pieces.append(closing[1:])
         path = np.concatenate(pieces)
-        path[:, 2] = np.arctan2(np.sin(path[:, 2]), np.cos(path[:, 2]))
+        path[:, 2] = wrap_angle(path[:, 2])
         path[-1] = goal.xyt
         return path
 
@@ -256,27 +257,6 @@ def _key(costmap: Costmap, pose) -> tuple[int, int, int]:
     bin_ = round((pose[2] % (2.0 * math.pi)) / (2.0 * math.pi / BINS)) % BINS
     step = max(1, round(CELL / costmap.resolution))
     return row // step, col // step, bin_
-
-
-def _along(pose, kappa: float, distance: np.ndarray) -> np.ndarray:
-    """The poses reached after driving signed distances on an arc of curvature kappa."""
-    x, y, yaw = pose
-    if kappa == 0.0:
-        return np.column_stack(
-            [
-                x + np.cos(yaw) * distance,
-                y + np.sin(yaw) * distance,
-                np.full_like(distance, yaw),
-            ]
-        )
-    turned = yaw + kappa * distance
-    return np.column_stack(
-        [
-            x + (np.sin(turned) - math.sin(yaw)) / kappa,
-            y - (np.cos(turned) - math.cos(yaw)) / kappa,
-            turned,
-        ]
-    )
 
 
 def _change(last, move) -> float:
@@ -331,9 +311,3 @@ class _Far(dict):
     def __missing__(self, key):
         """A cell the search did not reach is as far as can be."""
         return math.inf
-
-
-def _no_path(reason: str, *values) -> np.ndarray:
-    """Say why there is no path, and give the empty path."""
-    LOGGER.warning("HybridAStar: " + reason, *values)
-    return np.empty((0, 3))

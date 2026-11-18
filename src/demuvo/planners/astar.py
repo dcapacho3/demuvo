@@ -13,6 +13,7 @@ from robomath import Transform2D
 from ..costmap import INSCRIBED, MAX_NON_OBSTACLE, Costmap
 from ..paths import with_headings
 from ..plugins import check_not_negative
+from .base import no_path
 
 LOGGER = logging.getLogger(__name__)
 
@@ -78,16 +79,20 @@ class AStar:
         costmap = self._costmap
         first = costmap.world_to_cell(*start.xyt[:2])
         last = costmap.world_to_cell(*goal.xyt[:2])
-        if not _on_map(costmap, first):
-            return _no_path("the start (%.2f, %.2f) is off the map", *start.xyt[:2])
-        if not _on_map(costmap, last):
-            return _no_path("the goal (%.2f, %.2f) is off the map", *goal.xyt[:2])
+        if not costmap.in_bounds(*start.xyt[:2]):
+            return no_path(
+                "AStar", "the start (%.2f, %.2f) is off the map", *start.xyt[:2]
+            )
+        if not costmap.in_bounds(*goal.xyt[:2]):
+            return no_path(
+                "AStar", "the goal (%.2f, %.2f) is off the map", *goal.xyt[:2]
+            )
         blocked = costmap.data >= INSCRIBED
         end = goal.xyt[:2]
         if blocked[last]:
             wanted, near = last, self._nearest_free(blocked, goal.xyt[:2])
             if near is None:
-                return _no_path(*self._blocked_goal(wanted))
+                return no_path("AStar", *self._blocked_goal(wanted))
             last = near
             end = costmap.cell_to_world(*last)
             LOGGER.warning(
@@ -101,7 +106,8 @@ class AStar:
         price = 1.0 + self.cost_weight * costmap.data / MAX_NON_OBSTACLE
         cells = self._search(blocked, price, first, last)
         if cells is None:
-            return _no_path(
+            return no_path(
+                "AStar",
                 "no way from the start %s to the goal %s; one of them is "
                 "walled in by blocked cells",
                 first,
@@ -188,17 +194,6 @@ class AStar:
                     heapq.heappush(queue, (cost + h, h, found, neighbour))
                     found += 1
         return None
-
-
-def _on_map(costmap: Costmap, cell) -> bool:
-    """True if the (row, column) lies on the costmap."""
-    return 0 <= cell[0] < costmap.data.shape[0] and 0 <= cell[1] < costmap.data.shape[1]
-
-
-def _no_path(reason: str, *values) -> np.ndarray:
-    """Say why there is no path, and give the empty path."""
-    LOGGER.warning("AStar: " + reason, *values)
-    return np.empty((0, 3))
 
 
 def _trace(came_from, cell):

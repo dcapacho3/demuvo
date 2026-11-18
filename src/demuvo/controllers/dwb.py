@@ -351,8 +351,7 @@ class DWB:
         free = ~grow(grid.data >= INSCRIBED)
         points = along_path(obs.path, grid.resolution / 2)
         rows, cols = grid.cells(points)
-        height, width = free.shape
-        inside = (rows >= 0) & (rows < height) & (cols >= 0) & (cols < width)
+        inside = grid.on_grid(rows, cols)
         rows, cols = np.where(inside, rows, 0), np.where(inside, cols, 0)
         open_ = inside & free[rows, cols]
         seeds = rows[open_], cols[open_]
@@ -592,7 +591,7 @@ def lookup(grid: Costmap, values: np.ndarray, xy: np.ndarray) -> np.ndarray:
     flat = xy.reshape(-1, 2)
     rows, cols = grid.cells(flat)
     height, width = values.shape
-    inside = (rows >= 0) & (rows < height) & (cols >= 0) & (cols < width)
+    inside = grid.on_grid(rows, cols)
     out = np.full(len(flat), np.inf)
     out[inside] = values[rows[inside], cols[inside]]
     at = (flat - grid.origin) / grid.resolution - 0.5  # in units of cell centres
@@ -640,7 +639,7 @@ def downhill(grid: Costmap, values: np.ndarray, xy: np.ndarray) -> np.ndarray:
     best = np.full(len(xy), np.inf)
     heading = np.full(len(xy), np.nan)
     here = np.full(len(xy), np.inf)
-    inside = (rows >= 0) & (rows < height) & (cols >= 0) & (cols < width)
+    inside = grid.on_grid(rows, cols)
     here[inside] = values[rows[inside], cols[inside]]
     for dr, dc, _ in _MOVES:
         r, c = rows + dr, cols + dc
@@ -677,8 +676,7 @@ def obstacle_cost(poses: np.ndarray, grid: Costmap, free: np.ndarray) -> np.ndar
     """
     k, t = poses.shape[:2]
     rows, cols = grid.cells(poses[..., :2].reshape(-1, 2))
-    height, width = grid.data.shape
-    inside = (rows >= 0) & (rows < height) & (cols >= 0) & (cols < width)
+    inside = grid.on_grid(rows, cols)
     rows, cols = np.where(inside, rows, 0), np.where(inside, cols, 0)
     cost = (grid.data[rows, cols] / MAX_NON_OBSTACLE).reshape(k, t)
     safe = (inside & free[rows, cols]).reshape(k, t).all(axis=1)

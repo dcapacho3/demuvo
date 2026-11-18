@@ -22,6 +22,7 @@ import numpy as np
 from robomath import Transform2D, wrap_angle
 
 from ..costmap import Costmap
+from ..paths import trace_segments
 from ..plugins import check_positive
 
 TURN = 2.0 * math.pi
@@ -131,25 +132,4 @@ class Dubins:
 
     def _trace(self, start, segments, goal) -> np.ndarray:
         """Poses along the word's segments, `spacing` apart, ending on the goal."""
-        radius = self.turning_radius
-        poses, (x, y, yaw) = [np.array(start)], start
-        for kind, length in segments:
-            if length * radius < 1e-12:
-                continue
-            steps = max(1, math.ceil(length * radius / self.spacing))
-            at = np.linspace(length / steps, length, steps)
-            if kind == "S":
-                xs = x + np.cos(yaw) * at * radius
-                ys = y + np.sin(yaw) * at * radius
-                yaws = np.full_like(at, yaw)
-            else:
-                sign = 1.0 if kind == "L" else -1.0
-                yaws = yaw + sign * at
-                xs = x + sign * radius * (np.sin(yaws) - math.sin(yaw))
-                ys = y - sign * radius * (np.cos(yaws) - math.cos(yaw))
-            poses.append(np.column_stack([xs, ys, yaws]))
-            x, y, yaw = float(xs[-1]), float(ys[-1]), float(yaws[-1])
-        path = np.concatenate([np.atleast_2d(p) for p in poses])
-        path[:, 2] = np.arctan2(np.sin(path[:, 2]), np.cos(path[:, 2]))
-        path[-1] = goal  # exact, instead of within float rounding
-        return path
+        return trace_segments(start, segments, goal, self.turning_radius, self.spacing)

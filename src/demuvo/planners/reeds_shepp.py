@@ -27,6 +27,7 @@ import numpy as np
 from robomath import Transform2D, wrap_angle
 
 from ..costmap import Costmap
+from ..paths import trace_segments
 from ..plugins import check_positive
 
 PI = math.pi
@@ -60,16 +61,6 @@ PATTERNS = (
 Word = tuple[str, tuple[float, ...]]
 
 
-def _mod2pi(angle: float) -> float:
-    """The angle in [-pi, pi]."""
-    value = math.fmod(angle, 2 * PI)
-    if value < -PI:
-        value += 2 * PI
-    elif value > PI:
-        value -= 2 * PI
-    return value
-
-
 def _polar(x: float, y: float) -> tuple[float, float]:
     """(radius, angle) of a point."""
     return math.hypot(x, y), math.atan2(y, x)
@@ -77,13 +68,13 @@ def _polar(x: float, y: float) -> tuple[float, float]:
 
 def _tau_omega(u, v, xi, eta, phi) -> tuple[float, float]:
     """The two outer arcs of a CCCC word; see the paper, formulas 8.7 and 8.8."""
-    delta = _mod2pi(u - v)
+    delta = wrap_angle(u - v)
     a = math.sin(u) - math.sin(delta)
     b = math.cos(u) - math.cos(delta) - 1.0
     t1 = math.atan2(eta * a - xi * b, xi * a + eta * b)
     t2 = 2.0 * (math.cos(delta) - math.cos(v) - math.cos(u)) + 3.0
-    tau = _mod2pi(t1 + PI) if t2 < 0 else _mod2pi(t1)
-    return tau, _mod2pi(tau - u + v - phi)
+    tau = wrap_angle(t1 + PI) if t2 < 0 else wrap_angle(t1)
+    return tau, wrap_angle(tau - u + v - phi)
 
 
 # Each solver takes the goal (x, y, phi) in the start's frame, in turning radii,
@@ -94,7 +85,7 @@ def _lp_sp_lp(x, y, phi):
     """Formula 8.1: L+ S+ L+."""
     u, t = _polar(x - math.sin(phi), y - 1.0 + math.cos(phi))
     if t >= -ZERO:
-        v = _mod2pi(phi - t)
+        v = wrap_angle(phi - t)
         if v >= -ZERO:
             return t, u, v
     return None
@@ -106,8 +97,8 @@ def _lp_sp_rp(x, y, phi):
     u1 *= u1
     if u1 >= 4.0:
         u = math.sqrt(u1 - 4.0)
-        t = _mod2pi(t1 + math.atan2(2.0, u))
-        v = _mod2pi(t - phi)
+        t = wrap_angle(t1 + math.atan2(2.0, u))
+        v = wrap_angle(t - phi)
         if t >= -ZERO and v >= -ZERO:
             return t, u, v
     return None
@@ -119,8 +110,8 @@ def _lp_rm_l(x, y, phi):
     u1, theta = _polar(xi, eta)
     if u1 <= 4.0:
         u = -2.0 * math.asin(0.25 * u1)
-        t = _mod2pi(theta + 0.5 * u + PI)
-        v = _mod2pi(phi - t + u)
+        t = wrap_angle(theta + 0.5 * u + PI)
+        v = wrap_angle(phi - t + u)
         if t >= -ZERO and u <= ZERO:
             return t, u, v
     return None
@@ -158,8 +149,8 @@ def _lp_rm_sm_lm(x, y, phi):
     if rho >= 2.0:
         r = math.sqrt(rho * rho - 4.0)
         u = 2.0 - r
-        t = _mod2pi(theta + math.atan2(r, -2.0))
-        v = _mod2pi(phi - HALF_PI - t)
+        t = wrap_angle(theta + math.atan2(r, -2.0))
+        v = wrap_angle(phi - HALF_PI - t)
         if t >= -ZERO and u <= ZERO and v <= ZERO:
             return t, u, v
     return None
@@ -172,7 +163,7 @@ def _lp_rm_sm_rm(x, y, phi):
     if rho >= 2.0:
         t = theta
         u = 2.0 - rho
-        v = _mod2pi(t + HALF_PI - phi)
+        v = wrap_angle(t + HALF_PI - phi)
         if t >= -ZERO and u <= ZERO and v <= ZERO:
             return t, u, v
     return None
@@ -185,10 +176,10 @@ def _lp_rm_s_lm_rp(x, y, phi):
     if rho >= 2.0:
         u = 4.0 - math.sqrt(rho * rho - 4.0)
         if u <= ZERO:
-            t = _mod2pi(
+            t = wrap_angle(
                 math.atan2((4.0 - u) * xi - 2.0 * eta, -2.0 * xi + (u - 4.0) * eta)
             )
-            v = _mod2pi(t - phi)
+            v = wrap_angle(t - phi)
             if t >= -ZERO and v >= -ZERO:
                 return t, u, v
     return None
@@ -299,25 +290,6 @@ class ReedsShepp:
 
     def _trace(self, start, word: Word, goal) -> np.ndarray:
         """Poses along the word's segments, `spacing` apart, ending on the goal."""
-        radius = self.turning_radius
-        poses, (x, y, yaw) = [np.array(start, dtype=float)], start
-        for kind, length in zip(*word):
-            if abs(length) * radius < 1e-12:
-                continue
-            steps = max(1, math.ceil(abs(length) * radius / self.spacing))
-            at = np.linspace(length / steps, length, steps)  # signed
-            if kind == "S":
-                xs = x + np.cos(yaw) * at * radius
-                ys = y + np.sin(yaw) * at * radius
-                yaws = np.full_like(at, yaw)
-            else:
-                sign = 1.0 if kind == "L" else -1.0
-                yaws = yaw + sign * at
-                xs = x + sign * radius * (np.sin(yaws) - math.sin(yaw))
-                ys = y - sign * radius * (np.cos(yaws) - math.cos(yaw))
-            poses.append(np.column_stack([xs, ys, yaws]))
-            x, y, yaw = float(xs[-1]), float(ys[-1]), float(yaws[-1])
-        path = np.concatenate([np.atleast_2d(p) for p in poses])
-        path[:, 2] = np.arctan2(np.sin(path[:, 2]), np.cos(path[:, 2]))
-        path[-1] = goal  # exact, instead of within float rounding
-        return path
+        return trace_segments(
+            start, zip(*word), goal, self.turning_radius, self.spacing
+        )

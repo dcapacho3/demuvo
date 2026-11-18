@@ -147,8 +147,7 @@ def path_blocked(path: np.ndarray, pose: Transform2D, costmap: Costmap) -> bool:
     points = along_path(path, costmap.resolution / 2)
     nearest = int(np.argmin(np.hypot(*(points - pose.translation).T)))
     rows, cols = costmap.cells(points[nearest:])
-    height, width = costmap.data.shape
-    inside = (rows >= 0) & (rows < height) & (cols >= 0) & (cols < width)
+    inside = costmap.on_grid(rows, cols)
     return bool((costmap.data[rows[inside], cols[inside]] >= INSCRIBED).any())
 
 

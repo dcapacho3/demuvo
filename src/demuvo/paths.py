@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
+from robomath import rplus_se2, se2_to_xyt, wrap_angle, xyt_to_se2
 
 
 def with_headings(points: np.ndarray, last_angle: float) -> np.ndarray:
@@ -50,3 +51,42 @@ def distance_to_path(point, path: np.ndarray) -> float:
     t = ((point - a) * ab).sum(axis=1) / np.where(length2 > 0, length2, 1.0)
     closest = a + np.clip(t, 0.0, 1.0)[:, None] * ab
     return float(np.hypot(*(closest - point).T).min())
+
+
+def arc_poses(start, curvature: float, distances) -> np.ndarray:
+    """The poses reached from `start` by driving signed distances along one arc.
+
+    The arc bends by `curvature` (1 / radius, positive to the left, 0 for a straight
+    line); a negative distance drives backward. Shape (len(distances), 3).
+    """
+    drive = np.asarray(distances, dtype=float)
+    twist = np.column_stack([drive, np.zeros_like(drive), curvature * drive])
+    return se2_to_xyt(rplus_se2(xyt_to_se2(np.asarray(start, dtype=float)), twist))
+
+
+def trace_segments(start, segments, goal, radius: float, spacing: float) -> np.ndarray:
+    """Poses `spacing` apart along arcs and straights, ending exactly on the goal.
+
+    Args:
+        start: (x, y, angle).
+        segments: (kind, length) pairs, kind "S" for straight, "L" or "R" for an arc
+            to the left or right of `radius`; the length is in radii, and negative
+            drives backward.
+        goal: (x, y, angle), put as the last pose instead of the float rounding of it.
+        radius: the tightest bend, in metres.
+        spacing: the most a step may be, in metres.
+    """
+    poses, pose = [np.array(start, dtype=float)], tuple(start)
+    curvatures = {"S": 0.0, "L": 1.0 / radius, "R": -1.0 / radius}
+    for kind, length in segments:
+        if abs(length) * radius < 1e-12:
+            continue
+        steps = max(1, math.ceil(abs(length) * radius / spacing))
+        at = np.linspace(length / steps, length, steps)  # signed, in radii
+        arc = arc_poses(pose, curvatures[kind], at * radius)
+        poses.append(arc)
+        pose = tuple(arc[-1])
+    path = np.concatenate([np.atleast_2d(p) for p in poses])
+    path[:, 2] = wrap_angle(path[:, 2])
+    path[-1] = goal
+    return path

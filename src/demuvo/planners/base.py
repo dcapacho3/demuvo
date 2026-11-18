@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Protocol
 
 import numpy as np
 from robomath import Transform2D
 
 from ..costmap import Costmap
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Planner(Protocol):
@@ -26,3 +29,9 @@ class Planner(Protocol):
 
     def plan(self, start: Transform2D, goal: Transform2D) -> np.ndarray:
         """The path from start to goal, shape (N, 3); shape (0, 3) if there is none."""
+
+
+def no_path(planner: str, reason: str, *values) -> np.ndarray:
+    """Say why a planner found no path, and give the empty path."""
+    LOGGER.warning(f"{planner}: " + reason, *values)
+    return np.empty((0, 3))

@@ -89,10 +89,14 @@ class Costmap:
         x, y = self.centres(row, col)
         return float(x), float(y)
 
+    def on_grid(self, rows, cols):
+        """Which of these rows and columns (numbers or arrays) lie on the grid."""
+        height, width = self.data.shape
+        return (rows >= 0) & (rows < height) & (cols >= 0) & (cols < width)
+
     def in_bounds(self, x: float, y: float) -> bool:
         """True if the point lies inside the grid."""
-        row, col = self.world_to_cell(x, y)
-        return 0 <= row < self.data.shape[0] and 0 <= col < self.data.shape[1]
+        return bool(self.on_grid(*self.world_to_cell(x, y)))
 
     def cost_at(self, x: float, y: float) -> int:
         """The cost of the cell that holds the point; `NO_INFORMATION` outside."""
