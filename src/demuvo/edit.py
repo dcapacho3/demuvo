@@ -275,16 +275,36 @@ def rename_obstacle(world: World, index: int, new: str) -> World:
     new = new.strip()
     if new and any(o.name == new for i, o in enumerate(world.obstacles) if i != index):
         raise WorldError(f"an obstacle named '{new}' already exists")
-    items = list(world.obstacles)
-    items[index] = dataclasses.replace(old, name=new)
-    return dataclasses.replace(world, obstacles=tuple(items))
+    renamed = dataclasses.replace(old, name=new)
+    return dataclasses.replace(
+        world, obstacles=_replaced(world.obstacles, index, renamed)
+    )
+
+
+def _at(items: tuple, index: int, message: str):
+    """The item at a 0-based place; the message, with its 1-based number, if none.
+
+    Raises:
+        WorldError: if there is no item there.
+    """
+    if not 0 <= index < len(items):
+        raise WorldError(message.format(index + 1))
+    return items[index]
+
+
+def _replaced(items: tuple, index: int, new) -> tuple:
+    """The items with the one at a 0-based place replaced."""
+    return (*items[:index], new, *items[index + 1 :])
+
+
+def _without(items: tuple, index: int) -> tuple:
+    """The items but for the one at a 0-based place."""
+    return tuple(item for i, item in enumerate(items) if i != index)
 
 
 def _obstacle(world: World, index: int):
     """The obstacle at a 0-based place, or a plain error."""
-    if not 0 <= index < len(world.obstacles):
-        raise WorldError(f"no obstacle number {index + 1}")
-    return world.obstacles[index]
+    return _at(world.obstacles, index, "no obstacle number {}")
 
 
 def _with_obstacles(world: World, obstacles: tuple) -> World:
@@ -329,9 +349,9 @@ def move_obstacle(world: World, index: int, pose: Sequence[float]) -> World:
     moved = Transform2D.from_xyt(numbers(list(pose), 3, label, "pose"))
     if not inside(old.shape.points(moved), world.bounds):
         raise WorldError(f"{label}: must lie inside the world")
-    items = list(world.obstacles)
-    items[index] = dataclasses.replace(old, pose=moved)
-    return _with_obstacles(world, tuple(items))
+    return _with_obstacles(
+        world, _replaced(world.obstacles, index, dataclasses.replace(old, pose=moved))
+    )
 
 
 def resize_obstacle(world: World, index: int, size: Sequence[float]) -> World:
@@ -349,16 +369,13 @@ def resize_obstacle(world: World, index: int, size: Sequence[float]) -> World:
         index + 1,
         world.bounds,
     )
-    items = list(world.obstacles)
-    items[index] = made
-    return _with_obstacles(world, tuple(items))
+    return _with_obstacles(world, _replaced(world.obstacles, index, made))
 
 
 def remove_obstacle(world: World, index: int) -> World:
     """Remove the obstacle at a 0-based place."""
     _obstacle(world, index)
-    kept = tuple(o for i, o in enumerate(world.obstacles) if i != index)
-    return dataclasses.replace(world, obstacles=kept)
+    return dataclasses.replace(world, obstacles=_without(world.obstacles, index))
 
 
 def outline_center(world: World, index: int) -> tuple[float, float, float]:
@@ -421,9 +438,8 @@ def set_outline_pose(
     pose = Transform2D.from_xyt((cx - ox, cy - oy, angle))
     if not inside(obstacle.shape.points(pose), world.bounds):
         raise WorldError(f"obstacle {index + 1}: must lie inside the world")
-    items = list(world.obstacles)
-    items[index] = dataclasses.replace(obstacle, pose=pose)
-    return _with_obstacles(world, tuple(items))
+    moved = dataclasses.replace(obstacle, pose=pose)
+    return _with_obstacles(world, _replaced(world.obstacles, index, moved))
 
 
 def set_line_length(world: World, index: int, length: float) -> World:
@@ -456,9 +472,7 @@ def set_line_length(world: World, index: int, length: float) -> World:
         index + 1,
         world.bounds,
     )
-    items = list(world.obstacles)
-    items[index] = made
-    return _with_obstacles(world, tuple(items))
+    return _with_obstacles(world, _replaced(world.obstacles, index, made))
 
 
 def set_size(world: World, size: Sequence[float]) -> World:
@@ -723,9 +737,7 @@ def _actor(world: World, index: int) -> ActorSpec:
     Raises:
         WorldError: if there is no actor there.
     """
-    if not 0 <= index < len(world.actors):
-        raise WorldError(f"there is no actor {index + 1}")
-    return world.actors[index]
+    return _at(world.actors, index, "there is no actor {}")
 
 
 def _with_actor(world: World, index: int, item: dict) -> World:
@@ -737,9 +749,7 @@ def _with_actor(world: World, index: int, item: dict) -> World:
     names = {a.name for i, a in enumerate(world.actors) if i != index}
     names |= {r.name for r in world.robots}
     made = _parse_actor(item, index + 1, world.bounds, names, world.actor_defaults)
-    actors = list(world.actors)
-    actors[index] = made
-    edited = dataclasses.replace(world, actors=tuple(actors))
+    edited = dataclasses.replace(world, actors=_replaced(world.actors, index, made))
     Actors(edited)  # builds every motion, and says which actor refused its settings
     return edited
 
@@ -810,8 +820,7 @@ def add_actor(
 def remove_actor(world: World, index: int) -> World:
     """Remove the actor at a 0-based place."""
     _actor(world, index)
-    kept = tuple(a for i, a in enumerate(world.actors) if i != index)
-    return dataclasses.replace(world, actors=kept)
+    return dataclasses.replace(world, actors=_without(world.actors, index))
 
 
 def move_actor(world: World, index: int, pose: Sequence[float]) -> World:
@@ -976,9 +985,7 @@ def set_sensor(
 
 def _task(world: World, index: int):
     """The task at a 0-based place, or a plain error."""
-    if not 0 <= index < len(world.tasks):
-        raise WorldError(f"no goal number {index + 1}")
-    return world.tasks[index]
+    return _at(world.tasks, index, "no goal number {}")
 
 
 # Passed for `stop` to leave it as it is; None means the default rule.
@@ -1043,17 +1050,13 @@ def _retask(world: World, index: int, **changes) -> World:
         world.bounds,
         {r.name: r for r in world.robots},
     )
-    items = list(world.tasks)
-    items[index] = task
-    return dataclasses.replace(world, tasks=tuple(items))
+    return dataclasses.replace(world, tasks=_replaced(world.tasks, index, task))
 
 
 def remove_goal(world: World, index: int) -> World:
     """Remove the goal at a 0-based place."""
     _task(world, index)
-    return dataclasses.replace(
-        world, tasks=tuple(t for i, t in enumerate(world.tasks) if i != index)
-    )
+    return dataclasses.replace(world, tasks=_without(world.tasks, index))
 
 
 def goals_of(world: World, name: str) -> list[int]:
