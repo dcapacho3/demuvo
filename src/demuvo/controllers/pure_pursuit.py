@@ -13,6 +13,9 @@ from ..models import Limits, Twist
 from ..plugins import check_positive
 from .base import Observation, car_limits, pass_runs, path_runs
 
+# The shortest lookahead of a car near the end of its path, in metres.
+END_LOOKAHEAD = 0.2
+
 
 @dataclass
 class PurePursuit:
@@ -125,7 +128,7 @@ class PurePursuit:
                 return Twist()
         if car is not None and reverses:
             return self._follow_runs(obs, car, to_robot, distance)
-        x, y = self._target(to_robot @ obs.path[:, :2])
+        x, y = self._target(to_robot @ obs.path[:, :2], car is not None)
         bearing = math.atan2(y, x)
         vx = min(self.speed, self.approach_gain * distance)
         if abs(bearing) > self.turn_in_place_angle:
@@ -142,11 +145,20 @@ class PurePursuit:
             wz = max(-bound, min(bound, wz))
         return Twist(vx=vx, wz=wz)
 
-    def _target(self, path: np.ndarray) -> np.ndarray:
-        """The point to steer toward, from the path in the robot's frame."""
+    def _target(self, path: np.ndarray, car: bool = False) -> np.ndarray:
+        """The point to steer toward, from the path in the robot's frame.
+
+        A car's lookahead shortens toward the end of the path, to half the distance
+        left but no less than `END_LOOKAHEAD`, so it follows the last arc to its
+        end and arrives at the goal's angle; a long lookahead cuts that arc and
+        leaves the angle off.
+        """
         distance = np.hypot(path[:, 0], path[:, 1])
         nearest = int(np.argmin(distance))
-        ahead = np.flatnonzero(distance[nearest:] >= self.lookahead)
+        lookahead = self.lookahead
+        if car:
+            lookahead = min(lookahead, max(END_LOOKAHEAD, 0.5 * float(distance[-1])))
+        ahead = np.flatnonzero(distance[nearest:] >= lookahead)
         return path[nearest + int(ahead[0]) if ahead.size else -1]
 
     def _swing(self, limits: Limits, vx: float, bearing: float) -> Twist:
@@ -174,7 +186,7 @@ class PurePursuit:
             # run's own direction; before that, finish the run for its angle.
             if sign * (to_robot @ obs.goal.translation)[0] <= 0.0:
                 return Twist()
-        x, y = self._target(local[start:stop])
+        x, y = self._target(local[start:stop], True)
         if x == 0.0 and y == 0.0:
             return Twist()
         if self._run == len(runs) - 1:
