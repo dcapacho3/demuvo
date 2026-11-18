@@ -63,16 +63,11 @@ def footprint(shape) -> Footprint:
 
 def _heading_arrow(canvas: Canvas, center, reach: float, theta: float) -> None:
     """The white arrow, `reach` pixels long for a fraction of 1, along an angle."""
-    cos, sin = math.cos(theta), math.sin(theta)
+    turn = Transform2D.from_xyt((0.0, 0.0, theta))
     white = rgba("#ffffff")
     for corners in (ARROW_UPPER, ARROW_LOWER):
-        points = [
-            (
-                center[0] + (u * cos - v * sin) * reach,
-                center[1] - (u * sin + v * cos) * reach,
-            )
-            for u, v in corners
-        ]
+        u, v = (turn @ np.asarray(corners, dtype=float)).T
+        points = np.column_stack([center[0] + u * reach, center[1] - v * reach])
         canvas.convex(points, fill=white)
 
 
@@ -111,14 +106,8 @@ def _polygon_drawing(foot, color, scale, heading, halo):
     def draw(canvas: Canvas, cx: float, cy: float) -> None:
         if halo is not None:
             _halo(canvas, (cx, cy), halo)
-        cos, sin = math.cos(heading), math.sin(heading)
-        local = foot.outline
-        corners = np.column_stack(
-            [
-                cx + (local[:, 0] * cos - local[:, 1] * sin) * scale,
-                cy - (local[:, 0] * sin + local[:, 1] * cos) * scale,
-            ]
-        )
+        u, v = (Transform2D.from_xyt((0.0, 0.0, heading)) @ foot.outline).T
+        corners = np.column_stack([cx + u * scale, cy - v * scale])
         if is_convex(corners):
             canvas.convex(corners, fill=rgba(color), stroke=rgba("#ffffff"), width=2.4)
         else:

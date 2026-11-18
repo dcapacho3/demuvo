@@ -55,7 +55,7 @@ from dataclasses import dataclass, field
 from typing import ClassVar, NamedTuple
 
 import numpy as np
-from robomath import wrap_angle
+from robomath import rplus_se2, se2_to_xyt, wrap_angle, xyt_to_se2
 
 from ..costmap import INSCRIBED, MAX_NON_OBSTACLE, Costmap
 from ..models import Twist
@@ -500,23 +500,11 @@ def rollout(
     """
     count = max(1, math.ceil(round(sim_time / step, 9)))
     times = np.minimum(np.arange(1, count + 1) * step, sim_time)
-    x0, y0, yaw0 = start
-    v, w = vx[:, None], wz[:, None]
-    turned = w * times
-    straight = np.abs(w) < 1e-9
-    safe_w = np.where(straight, 1.0, w)
-    # Along the heading and to its left, in the start's frame.
-    forward = np.where(straight, v * times, v * np.sin(turned) / safe_w)
-    left = np.where(straight, 0.0, v * (1.0 - np.cos(turned)) / safe_w)
-    cos, sin = math.cos(yaw0), math.sin(yaw0)
-    return np.stack(
-        [
-            x0 + cos * forward - sin * left,
-            y0 + sin * forward + cos * left,
-            yaw0 + np.broadcast_to(turned, forward.shape),
-        ],
-        axis=-1,
+    # The body twist held for each time, so the pose moves along its exact arc.
+    twist = np.stack(
+        [vx[:, None] * times, np.zeros((len(vx), count)), wz[:, None] * times], axis=-1
     )
+    return se2_to_xyt(rplus_se2(xyt_to_se2(np.asarray(start, dtype=float)), twist))
 
 
 def grow(blocked: np.ndarray) -> np.ndarray:

@@ -13,6 +13,8 @@ import warnings
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from robomath import Transform2D
+
 from ..verify import WorldError
 
 SUFFIXES = (".world", ".sdf")
@@ -36,16 +38,11 @@ def _pose(element) -> tuple[float, float, float, float, float]:
 
 def _compose(outer, inner):
     """The pose of something placed at `inner` in the frame placed at `outer`."""
-    ox, oy, oz, otilt, oyaw = outer
-    ix, iy, iz, itilt, iyaw = inner
-    cos, sin = math.cos(oyaw), math.sin(oyaw)
-    return (
-        ox + cos * ix - sin * iy,
-        oy + sin * ix + cos * iy,
-        oz + iz,
-        max(otilt, itilt),
-        oyaw + iyaw,
+    flat = Transform2D.from_xyt((outer[0], outer[1], outer[4])) @ Transform2D.from_xyt(
+        (inner[0], inner[1], inner[4])
     )
+    x, y, yaw = (float(v) for v in flat.xyt)
+    return x, y, outer[2] + inner[2], max(outer[3], inner[3]), yaw
 
 
 def _shape(geometry, pose):

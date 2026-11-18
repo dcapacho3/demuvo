@@ -15,6 +15,7 @@ import warnings
 from collections.abc import Sequence
 from pathlib import Path
 
+import numpy as np
 from robomath import Transform2D
 
 from . import options
@@ -385,7 +386,7 @@ def outline_center(world: World, index: int) -> tuple[float, float, float]:
     """
     obstacle = _outline(world, index)
     mx, my = _mean(obstacle.shape.vertices)
-    x, y = _place(obstacle.pose, mx, my)
+    x, y = (float(v) for v in obstacle.pose @ np.array([mx, my]))
     return x, y, float(obstacle.pose.xyt[2])
 
 
@@ -402,15 +403,6 @@ def _mean(vertices) -> tuple[float, float]:
     return (
         sum(v[0] for v in vertices) / len(vertices),
         sum(v[1] for v in vertices) / len(vertices),
-    )
-
-
-def _place(pose, x: float, y: float) -> tuple[float, float]:
-    """A point of a shape's own frame, in the world."""
-    px, py, angle = (float(v) for v in pose.xyt)
-    return (
-        px + math.cos(angle) * x - math.sin(angle) * y,
-        py + math.sin(angle) * x + math.cos(angle) * y,
     )
 
 
@@ -434,7 +426,7 @@ def set_outline_pose(
     (angle,) = numbers([angle], 1, f"obstacle {index + 1}", "angle")
     mx, my = _mean(obstacle.shape.vertices)
     turned = Transform2D.from_xyt((0.0, 0.0, angle))
-    ox, oy = _place(turned, mx, my)
+    ox, oy = (float(v) for v in turned @ np.array([mx, my]))
     pose = Transform2D.from_xyt((cx - ox, cy - oy, angle))
     if not inside(obstacle.shape.points(pose), world.bounds):
         raise WorldError(f"obstacle {index + 1}: must lie inside the world")
