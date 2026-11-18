@@ -151,40 +151,30 @@ class Session:
         self.scene.fit(self.scene.view.rect)
         return None
 
-    def select(self, name: str | None) -> bool:
-        """Select a robot, or none; True if the selection changed."""
-        if name == self.scene.selected and self._nothing_else_selected():
+    def _select(self, robot=None, obstacle=None, actor=None) -> bool:
+        """Select a robot, an obstacle or an actor, or none; True if that changed."""
+        scene = self.scene
+        now = (scene.selected, scene.selected_obstacle, scene.selected_actor)
+        if now == (robot, obstacle, actor):
             return False
-        self.scene.selected = name
-        self.scene.selected_obstacle = None
-        self.scene.selected_actor = None
+        scene.selected, scene.selected_obstacle, scene.selected_actor = (
+            robot,
+            obstacle,
+            actor,
+        )
         return True
 
-    def _nothing_else_selected(self) -> bool:
-        """True if neither an obstacle nor an actor is selected."""
-        return (
-            self.scene.selected_obstacle is None and self.scene.selected_actor is None
-        )
+    def select(self, name: str | None) -> bool:
+        """Select a robot, or none; True if the selection changed."""
+        return self._select(robot=name)
 
     def select_obstacle(self, index: int | None) -> bool:
         """Select an obstacle by its 0-based place, or none; True if it changed."""
-        same = index == self.scene.selected_obstacle and self.scene.selected is None
-        if same and self.scene.selected_actor is None:
-            return False
-        self.scene.selected_obstacle = index
-        self.scene.selected = None
-        self.scene.selected_actor = None
-        return True
+        return self._select(obstacle=index)
 
     def select_actor(self, index: int | None) -> bool:
         """Select an actor by its 0-based place, or none; True if it changed."""
-        same = index == self.scene.selected_actor and self.scene.selected is None
-        if same and self.scene.selected_obstacle is None:
-            return False
-        self.scene.selected_actor = index
-        self.scene.selected = None
-        self.scene.selected_obstacle = None
-        return True
+        return self._select(actor=index)
 
     def add_actor(self) -> str | None:
         """Add an actor at a free place, and select it."""
@@ -252,48 +242,26 @@ class Session:
 
     def set_goal(self, name: str, goal: tuple[float, float, float]) -> str | None:
         """Give a robot a goal."""
-        if (why := self.guard()) is not None:
-            return why
-        try:
-            world = edit.set_goal(self.world, name, goal)
-        except WorldError as error:
-            return REFUSED.format(error)
-        return self.apply(world, rebuild=True, select=name)
+        return self.edits.change_robot(name, lambda w: edit.set_goal(w, name, goal))
 
     def choose(self, name: str, field: str, text: str) -> str | None:
         """Change the model, planner, smoother or controller by its friendly name."""
-        if (why := self.guard()) is not None:
-            return why
-        try:
-            if field == "model":
-                world = edit.set_model(self.world, name, text)
-            else:
-                world = edit.set_part(
-                    self.world, name, field, PART_TABLES[field]()[text]
-                )
-        except WorldError as error:
-            return REFUSED.format(error)
-        return self.apply(world)
+        if field == "model":
+            return self.edits.change_world(lambda w: edit.set_model(w, name, text))
+        path = PART_TABLES[field]()[text]
+        return self.edits.change_world(lambda w: edit.set_part(w, name, field, path))
 
     def set_settings(self, name: str, part: str, values: dict) -> str | None:
         """Set the settings of one part of a robot."""
-        if (why := self.guard()) is not None:
-            return why
-        try:
-            world = edit.set_settings(self.world, name, part, values)
-        except WorldError as error:
-            return REFUSED.format(error)
-        return self.apply(world)
+        return self.edits.change_world(
+            lambda w: edit.set_settings(w, name, part, values)
+        )
 
     def set_period(self, name: str, seconds: float) -> str | None:
         """Set the seconds between runs of a robot's controller."""
-        if (why := self.guard()) is not None:
-            return why
-        try:
-            world = edit.set_control_period(self.world, name, seconds)
-        except WorldError as error:
-            return REFUSED.format(error)
-        return self.apply(world)
+        return self.edits.change_world(
+            lambda w: edit.set_control_period(w, name, seconds)
+        )
 
     def toggle_play(self) -> None:
         """Start or pause the run."""
