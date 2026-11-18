@@ -48,6 +48,7 @@ class ScenePane(Widget):  # pylint: disable=too-many-instance-attributes
         actions: an object that is told what the mouse did; it has
             `select(name)`, `select_obstacle(index)`, `goal_set(name, x, y,
             heading)`, `waypoint_added(name, x, y, heading)`, `dragged()`,
+            `refused(why)`,
             `dropped(name, x, y, angle)`, `robot_moved(name, x, y, angle)`,
             `obstacle_moved(index, x, y)`, `obstacle_drawn(kind, pose, size)`,
             `outline_drawn(kind, vertices)`, `select_actor(index)`,
@@ -60,6 +61,8 @@ class ScenePane(Widget):  # pylint: disable=too-many-instance-attributes
         self.session, self.pill, self.actions = session, pill, actions
         self.add(pill)
         self.dragging: str | None = None
+        # A press on something that cannot be dragged while the world is locked.
+        self.locked_grab = False
         self.grab = (0.0, 0.0)
         self.moving: int | None = None
         self.moving_actor: int | None = None
@@ -190,6 +193,11 @@ class ScenePane(Widget):  # pylint: disable=too-many-instance-attributes
         session = self.session
         scene = session.scene
         name = scene.robot_at(event.x, event.y)
+        self.locked_grab = not session.editable and (
+            name is not None
+            or scene.obstacle_at(event.x, event.y) is not None
+            or scene.actor_at(event.x, event.y) is not None
+        )
         if session.tool in ("polygon", "line") and session.editable:
             self._add_vertex(event)
             return
@@ -273,6 +281,9 @@ class ScenePane(Widget):  # pylint: disable=too-many-instance-attributes
 
     def on_move(self, event: Event) -> None:
         """Carry the dragged robot or obstacle, or stretch the sketch."""
+        if self.locked_grab:
+            self.locked_grab = False
+            self.actions.refused(self.session.guard())
         if self.outline:
             self.cursor = self.session.scene.view.to_world(event.x, event.y)
             self.actions.sketch_changed()

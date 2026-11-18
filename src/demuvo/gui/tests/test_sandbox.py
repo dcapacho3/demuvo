@@ -314,6 +314,30 @@ def test_open_always_shows_the_dialog_and_says_if_unsaved_changes_will_be_lost(a
     )
 
 
+def test_dragging_a_robot_during_a_run_tells_the_user_to_press_reset(app):
+    """The press selects, the first move explains in the status bar."""
+    window, program = app
+    program.step_once()
+    x, y = at(program, *program.session.scene.pose("r1")[:2])
+    window.mouse_move(x, y)
+    window.mouse_press(Event(x, y))
+    window.mouse_move(x + 30, y)
+    window.mouse_release(Event(x + 30, y))
+    assert window.layout.chrome.status.message == "Press Reset (R) to edit again."
+
+
+def test_a_grey_tool_says_why_in_its_tooltip(app):
+    """The goal tool waits for a robot, and every edit tool waits for Reset."""
+    _, program = app
+    goal = program.buttons["goal"]
+    assert "select a robot" in goal.tooltip or "robot is selected" in goal.tooltip
+    program.select("r1")
+    assert goal.tooltip == "Set goal (G)"
+    program.step_once()
+    assert "Reset (R)" in program.buttons["box"].tooltip
+    assert "Reset (R)" in goal.tooltip
+
+
 def test_the_menu_state_follows_the_mode_and_the_tool(app):
     """A locked world greys the edit lines; the tool is ticked."""
     _, program = app

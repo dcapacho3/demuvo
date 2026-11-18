@@ -134,6 +134,10 @@ class PaneActions:
         if error is None:
             self.program.set_tool("select")
 
+    def refused(self, why: str) -> None:
+        """A press on something that cannot be moved now: say why."""
+        self.program.message(why)
+
     def sketch_changed(self) -> None:
         """The outline being drawn changed, so the scene is drawn again."""
         self.program.scene_changed()

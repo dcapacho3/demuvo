@@ -64,6 +64,10 @@ class Actions:
         self.log.append(("outline", kind, len(vertices)))
         self.session.edits.add_outline(kind, vertices)
 
+    def refused(self, why):
+        """Note what a press that could not edit was told."""
+        self.log.append(("refused", why))
+
     def sketch_changed(self):
         """Note a redraw."""
         self.log.append(("sketch",))
@@ -206,6 +210,21 @@ def test_a_shift_press_and_drag_adds_a_waypoint_turned_along_the_drag():
     pane.on_press(Event(*at(pane, 2.0, 2.0)))
     pane.on_release(Event(*at(pane, 2.0, 2.0)))
     assert edit.goals_of(session.world, "r1") == [0]
+
+
+def test_dragging_a_robot_while_the_world_is_locked_says_why_once():
+    """A press that only selects stays quiet; the first move after it explains."""
+    pane, session, actions = build()
+    session.step_once()
+    x, y = session.scene.pose("r1")[:2]
+    pane.on_press(Event(*at(pane, x, y)))
+    assert not any(item[0] == "refused" for item in actions.log)
+    pane.on_move(Event(*at(pane, x + 1, y)))
+    pane.on_move(Event(*at(pane, x + 2, y)))
+    pane.on_release(Event(*at(pane, x + 2, y)))
+    assert [i for i in actions.log if i[0] == "refused"] == [
+        ("refused", "Press Reset (R) to edit again.")
+    ]
 
 
 def test_the_goal_tool_on_a_robot_selects_as_usual_and_needs_a_selection():

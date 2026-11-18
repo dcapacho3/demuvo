@@ -36,6 +36,10 @@ GOAL_MESSAGE = (
     "let go to set it; Shift adds a waypoint."
 )
 # The tools, and what the status bar says when one is chosen.
+# Said in a tool's tooltip while it is grey, and why.
+EDIT_BUTTONS = ("add", "add_actor", "delete", "box", "circle", "polygon", "line")
+LOCKED_TIP = " - grey while a run is in progress; press Reset (R) to edit again"
+SELECT_TIP = " - grey until a robot is selected"
 TOOL_MESSAGES = {
     "select": DEFAULT_MESSAGE,
     "goal": GOAL_MESSAGE,
@@ -85,6 +89,7 @@ class Sandbox:
         self.groups: dict[str, list[IconButton]] = {}
         self.shell: Shell | None = None
         self.buttons: dict[str, IconButton] = {}
+        self._tips: dict[str, str] = {}
         self.badge = Badge()
         self.log_view: LogView | None = None
         self.tree = TreeList(on_select=self.select, on_rename=self._rename)
@@ -228,6 +233,7 @@ class Sandbox:
             )
             button.checked = key in ("left", "select", "right")
             self.buttons[key] = button
+            self._tips[key] = tip
         toolbar.add(*self.buttons.values(), self.badge)
         self.groups["tool"] = [self.buttons[key] for key in TOOL_MESSAGES]
 
@@ -501,9 +507,13 @@ class Sandbox:
         """Enable what the mode allows, show the badge, and tell the inspector."""
         session = self.session
         ok = session.editable
-        for key in ("add", "add_actor", "delete", "box", "circle", "polygon", "line"):
+        for key in EDIT_BUTTONS:
             self.buttons[key].enabled = ok
         self.buttons["goal"].enabled = ok and session.scene.selected is not None
+        for key in (*EDIT_BUTTONS, "goal"):
+            button = self.buttons[key]
+            why = "" if button.enabled else LOCKED_TIP if not ok else SELECT_TIP
+            button.tooltip = self._tips[key] + why
         if session.tool != "select" and not self.buttons[session.tool].enabled:
             self.set_tool("select")
         self.badge.text, self.badge.kind = BADGES[session.state]
