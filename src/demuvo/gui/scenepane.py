@@ -17,12 +17,13 @@ import time
 import numpy as np
 from robomath import Transform2D
 
+from ..world import DEFAULT_GOAL_TOLERANCE
 from ..world.shapes import Circle
 from . import font, look
 from .look import TEAL
 from .panels import Pill
 from .raster import Canvas, rgba
-from .scenedraw import arrow
+from .scenedraw import GOAL_ARROW, goal_drawing
 from .session import Session
 from .strokes import polyline
 from .widgets import Event, Widget, text_baseline
@@ -36,8 +37,6 @@ CLOSE_PIXELS = 20.0
 # Two clicks within this many seconds and pixels are a double click, which ends a
 # polygon or line.
 DOUBLE_CLICK = (0.6, 12.0)
-# The length in pixels of the arrow shown while a goal is aimed.
-AIM_LENGTH = 48.0
 
 
 class ScenePane(Widget):  # pylint: disable=too-many-instance-attributes
@@ -116,13 +115,20 @@ class ScenePane(Widget):  # pylint: disable=too-many-instance-attributes
             canvas.rect_outline(box, color, width=2, radius=0)
 
     def _draw_aim(self, canvas: Canvas) -> None:
-        """Draw the arrow of the goal being aimed, along the drag."""
+        """Draw the goal being aimed as it will look, along the drag.
+
+        It is there from the press, at heading 0, and turns as the pointer moves.
+        """
         if self.aiming is None:
             return
-        _, x, y, _ = self.aiming
+        name, x, y, _ = self.aiming
+        scene = self.session.scene
         heading = _aimed(x, y, self.aim_to)
-        origin = tuple(float(v) for v in self.session.scene.view.to_screen(x, y))
-        arrow(canvas, origin, -heading, AIM_LENGTH, rgba(TEAL), outline=rgba("#ffffff"))
+        ring = max(DEFAULT_GOAL_TOLERANCE[0] * scene.view.scale, 4.0)
+        marker = goal_drawing(
+            scene.colors[name], ring, heading, GOAL_ARROW * scene.view.scale
+        )
+        marker(canvas, *(float(v) for v in scene.view.to_screen(x, y)))
 
     def _draw_ghost(self, canvas: Canvas) -> None:
         """Outline the obstacle where the pointer holds it.
@@ -199,6 +205,7 @@ class ScenePane(Widget):  # pylint: disable=too-many-instance-attributes
         ):
             x, y = scene.view.to_world(event.x, event.y)
             self.aiming, self.aim_to = (scene.selected, x, y, event.shift), None
+            self.actions.sketch_changed()
             return
         if not name and session.editable and self._route_pressed(event):
             return
