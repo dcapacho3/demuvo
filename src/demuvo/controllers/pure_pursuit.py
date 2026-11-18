@@ -48,7 +48,8 @@ class PurePursuit:
 
     Attributes:
         speed: forward speed in m/s on the way.
-        lookahead: distance in metres to the point it steers toward.
+        lookahead: distance in metres to the point it steers toward; a long one cuts
+            corners and can touch a wall, so use less where walls are close.
         approach_gain: forward speed per metre left to the goal, in 1/s; it
             slows the robot near the goal.
         turn_in_place_angle: bearing error in radians above which it turns on
