@@ -493,16 +493,18 @@ class SceneDraw:
         index = self.selected_actor
         if index is None or index >= len(self.world.actors):
             return
-        spec = self.world.actors[index]
-        x, y, angle = (float(v) for v in self.actor_pose(index))
+        pose = Transform2D.from_xyt(np.asarray(self.actor_pose(index), dtype=float))
+        self._outline(canvas, self.world.actors[index].shape, pose)
+
+    def _outline(self, canvas: Canvas, shape, pose: Transform2D) -> None:
+        """Ring a disc, or dash round the corners of any other shape, at a pose."""
         color = rgba(look.TEAL, 1.0)
-        if isinstance(spec.shape, Circle):
-            px, py = self.view.to_screen(x, y)
-            radius = spec.shape.radius * self.view.scale + 3
-            canvas.circle((float(px), float(py)), radius, stroke=color, width=2)
+        if isinstance(shape, Circle):
+            x, y = self.view.to_screen(*pose.translation)
+            radius = shape.radius * self.view.scale + 3
+            canvas.circle((float(x), float(y)), radius, stroke=color, width=2)
             return
-        pose = Transform2D.from_xyt(np.array([x, y, angle]))
-        corners = np.array(spec.shape.points(pose), dtype=float)
+        corners = np.array(shape.points(pose), dtype=float)
         sx, sy = self.view.to_screen(corners[:, 0], corners[:, 1])
         ring = np.column_stack([sx, sy])
         polyline(canvas, np.vstack([ring, ring[:1]]), 3, color, dash=(6, 4))
@@ -636,16 +638,7 @@ class SceneDraw:
         if index is None or index >= len(self.world.obstacles):
             return
         obstacle = self.world.obstacles[index]
-        color = rgba(look.TEAL, 1.0)
-        if isinstance(obstacle.shape, Circle):
-            x, y = self.view.to_screen(*obstacle.pose.translation)
-            radius = obstacle.shape.radius * self.view.scale + 3
-            canvas.circle((float(x), float(y)), radius, stroke=color, width=2)
-            return
-        corners = np.array(obstacle.shape.points(obstacle.pose), dtype=float)
-        sx, sy = self.view.to_screen(corners[:, 0], corners[:, 1])
-        ring = np.column_stack([sx, sy])
-        polyline(canvas, np.vstack([ring, ring[:1]]), 3, color, dash=(6, 4))
+        self._outline(canvas, obstacle.shape, obstacle.pose)
 
     def draw(self, canvas: Canvas) -> None:
         """Draw the whole scene inside the canvas's clip, which may be a part of it.
