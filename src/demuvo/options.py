@@ -128,16 +128,6 @@ def label_of(choices: dict[str, str | None], path: str | None) -> str:
     return path or "none"
 
 
-def field_names(path: str | None) -> tuple[str, ...]:
-    """Every setting name of a motion class, lists included; () for no class."""
-    if not path:
-        return ()
-    cls = class_of(path)
-    if dataclasses.is_dataclass(cls):
-        return tuple(f.name for f in dataclasses.fields(cls))
-    return tuple(inspect.signature(cls).parameters)
-
-
 def _first_sentence(text: str) -> str:
     """The text up to its first full stop, on one line."""
     text = " ".join(text.split())

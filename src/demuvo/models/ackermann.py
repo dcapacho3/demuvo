@@ -74,22 +74,17 @@ division and no atan, so vx == 0 needs no special case: it then reads
 from __future__ import annotations
 
 import math
-import warnings
 from dataclasses import dataclass
 from typing import ClassVar
 
-import numpy as np
 from robomath import Transform2D
 
 from ..plugins import check_positive
-from .base import FIELDS, Limits, Twist
-
-_USES = ("vx", "wz")
-_UNUSED = tuple(name for name in FIELDS if name not in _USES)
+from .base import Limits, RollingWheels, Twist
 
 
 @dataclass(frozen=True)
-class Ackermann:
+class Ackermann(RollingWheels):
     """A car-like robot: front wheels steer, rear wheels drive.
 
     It follows vx and wz, but wz only within the cone the steering allows:
@@ -113,9 +108,6 @@ class Ackermann:
     track: float = 0.25
 
     name: ClassVar[str] = "ackermann"
-    uses: ClassVar[tuple[str, ...]] = _USES
-    # Settings only the encoders read; a form shows them when the robot has some.
-    encoder_only: ClassVar[tuple[str, ...]] = ("wheel_radius", "track")
 
     def __post_init__(self) -> None:
         """Refuse sizes that are not positive and a steering angle past pi/2."""
@@ -126,19 +118,6 @@ class Ackermann:
     def limits(self) -> Limits:
         """The feasible commands: a wedge, |wz| in proportion to |vx|."""
         return Limits(max_v=self.max_v, slope=math.tan(self.max_steer) / self.wheelbase)
-
-    def clip(self, command: Twist) -> Twist:
-        """Limit a command to the speeds and turning radius this robot has.
-
-        vx is clipped to [-max_v, max_v]; wz is then clipped to
-        [-k, k] with k = |vx| * tan(max_steer) / wheelbase, so the implied
-        steering angle never passes max_steer and vx == 0 forces wz == 0.
-        Warns once if the command asks for a Twist field the model ignores.
-        """
-        ignored = [name for name in _UNUSED if getattr(command, name) != 0.0]
-        if ignored:
-            warnings.warn(f"{self.name} ignores {', '.join(ignored)}")
-        return self.limits().clip(command)
 
     def _check_steerable(self, command: Twist) -> None:
         """Refuse a command whose constant steering angle this car cannot hold.
@@ -173,31 +152,4 @@ class Ackermann:
         """
         command = self.clip(command)
         self._check_steerable(command)
-        return pose.rplus(np.array([command.vx * dt, 0.0, command.wz * dt]))
-
-    def encoders(self, command: Twist, dt: float) -> np.ndarray:
-        """How far the left and right rear wheels turn in dt, in radians.
-
-        Args:
-            command: a command already limited by `clip`.
-            dt: length of the step in seconds.
-        """
-        half = self.track / 2
-        left = command.vx - command.wz * half
-        right = command.vx + command.wz * half
-        return np.array([left, right]) * dt / self.wheel_radius
-
-    def from_encoders(self, readings: np.ndarray) -> np.ndarray:
-        """The (x, y, angle) step that rear-wheel increments (left, right) imply.
-
-        The same form as DiffDrive.from_encoders with the rear track; it is
-        what `Transform2D.rplus` takes.
-        """
-        left, right = readings
-        return np.array(
-            [
-                self.wheel_radius * (left + right) / 2,
-                0.0,
-                self.wheel_radius * (right - left) / self.track,
-            ]
-        )
+        return self.move(pose, command, dt)

@@ -153,7 +153,7 @@ class ActorForm(FormBase):
         for setting in known:
             value = spec.motion_params.get(setting.name, setting.default)
             self._setting_field(setting, value)
-        if "points" in options.field_names(spec.motion):
+        if "points" in options.arguments_of(spec.motion):
             self._waypoints(spec)
 
     def _waypoints(self, spec) -> None:

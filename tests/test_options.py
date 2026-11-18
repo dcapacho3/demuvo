@@ -177,14 +177,6 @@ def test_the_word_settings_of_a_class_are_offered_as_choices():
     assert options.choices_of("demuvo.planners:AStar") == {}
 
 
-def test_field_names_list_every_setting_of_a_motion_lists_included():
-    """A form asks this to know whether a motion has waypoints to show."""
-    assert options.field_names(None) == ()
-    assert "points" in options.field_names("demuvo.actors:Waypoints")
-    assert options.field_names("demuvo.gui.tests.test_actor_gui:Plain") == ()
-    assert options.field_names("demuvo.controllers:PurePursuit") != ()
-
-
 class Reaching:
     """A class that is not a dataclass, so its settings are its arguments."""
 
@@ -192,9 +184,9 @@ class Reaching:
         """Keep nothing; a test reads the argument names."""
 
 
-def test_field_names_of_a_plain_class_are_its_arguments():
+def test_the_arguments_of_a_plain_class_are_those_of_its_constructor():
     """A motion that is not a dataclass is read from its constructor."""
-    assert options.field_names("tests.test_options:Reaching") == ("reach", "points")
+    assert options.arguments_of("tests.test_options:Reaching") == ("reach", "points")
 
 
 def test_each_setting_carries_its_first_sentence_from_the_docstring():

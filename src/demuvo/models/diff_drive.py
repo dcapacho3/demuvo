@@ -2,22 +2,17 @@
 
 from __future__ import annotations
 
-import warnings
 from dataclasses import dataclass
 from typing import ClassVar
 
-import numpy as np
 from robomath import Transform2D
 
 from ..plugins import check_positive
-from .base import FIELDS, Limits, Twist
-
-_USES = ("vx", "wz")
-_UNUSED = tuple(name for name in FIELDS if name not in _USES)
+from .base import Limits, RollingWheels, Twist
 
 
 @dataclass(frozen=True)
-class DiffDrive:
+class DiffDrive(RollingWheels):
     """Two wheels on one axle.
 
     It follows vx and wz. It cannot move sideways, so it ignores vy, and the
@@ -42,9 +37,6 @@ class DiffDrive:
     track: float = 0.3
 
     name: ClassVar[str] = "diff_drive"
-    uses: ClassVar[tuple[str, ...]] = _USES
-    # Settings only the encoders read; a form shows them when the robot has some.
-    encoder_only: ClassVar[tuple[str, ...]] = ("wheel_radius", "track")
 
     def __post_init__(self) -> None:
         """Refuse a wheel size that is not a positive number."""
@@ -54,44 +46,6 @@ class DiffDrive:
         """The feasible commands: a flat bound, the same max_w at every speed."""
         return Limits(max_v=self.max_v, cap=self.max_w)
 
-    def clip(self, command: Twist) -> Twist:
-        """Limit a command to the speeds this robot can reach.
-
-        Warns once if the command asks for something the robot cannot do.
-        """
-        ignored = [name for name in _UNUSED if getattr(command, name) != 0.0]
-        if ignored:
-            warnings.warn(f"{self.name} ignores {', '.join(ignored)}")
-        return self.limits().clip(command)
-
     def step(self, pose: Transform2D, command: Twist, dt: float) -> Transform2D:
         """The pose after dt seconds of command."""
-        command = self.clip(command)
-        return pose.rplus(np.array([command.vx * dt, 0.0, command.wz * dt]))
-
-    def encoders(self, command: Twist, dt: float) -> np.ndarray:
-        """How far the left and right wheels turn in dt, in radians.
-
-        Args:
-            command: a command already limited by `clip`.
-            dt: length of the step in seconds.
-        """
-        half = self.track / 2
-        left = command.vx - command.wz * half
-        right = command.vx + command.wz * half
-        return np.array([left, right]) * dt / self.wheel_radius
-
-    def from_encoders(self, readings: np.ndarray) -> np.ndarray:
-        """The (x, y, angle) step that wheel increments (left, right) imply.
-
-        It is the constant twist over the step, in the robot's own frame, in the
-        form `Transform2D.rplus` takes.
-        """
-        left, right = readings
-        return np.array(
-            [
-                self.wheel_radius * (left + right) / 2,
-                0.0,
-                self.wheel_radius * (right - left) / self.track,
-            ]
-        )
+        return self.move(pose, self.clip(command), dt)
