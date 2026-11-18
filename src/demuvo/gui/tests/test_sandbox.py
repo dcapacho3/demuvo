@@ -301,6 +301,19 @@ def test_the_menus_list_the_commands_and_run_them(app):
     assert window.quit_requested
 
 
+def test_open_always_shows_the_dialog_and_says_if_unsaved_changes_will_be_lost(app):
+    """It opens at once, whether or not the world was edited."""
+    window, program = app
+    program.menu_items("File")[1].action()
+    assert window.input.popup.ask.title == "Open a world"
+    window.input.close_popup()
+    program.session.add_robot()
+    program.menu_items("File")[1].action()
+    assert window.input.popup.ask.title == (
+        "Open a world - unsaved changes will be lost"
+    )
+
+
 def test_the_menu_state_follows_the_mode_and_the_tool(app):
     """A locked world greys the edit lines; the tool is ticked."""
     _, program = app
@@ -629,8 +642,8 @@ def test_the_title_names_the_file_and_stars_unsaved_changes(app, tmp_path):
     assert program.title == "mine.toml * - demuvo"
 
 
-def test_ctrl_q_asks_twice_when_there_is_unsaved_work_and_open_and_new_ask_too(app):
-    """A saved world quits at once; an edited one needs the second ask."""
+def test_ctrl_q_asks_twice_when_there_is_unsaved_work_and_ctrl_o_opens_at_once(app):
+    """A saved world quits at once; an edited one needs the second ask to quit."""
     window, program = app
     press_key(window, "q", ctrl=True)
     assert window.quit_requested
@@ -638,8 +651,6 @@ def test_ctrl_q_asks_twice_when_there_is_unsaved_work_and_open_and_new_ask_too(a
     program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 0.5))
     press_key(window, "q", ctrl=True)
     assert not window.quit_requested
-    press_key(window, "o", ctrl=True)
-    assert window.input.popup is None
     press_key(window, "o", ctrl=True)
     assert window.input.popup is not None
     window.input.close_popup()

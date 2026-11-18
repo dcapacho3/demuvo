@@ -622,10 +622,16 @@ class Sandbox:
         )
 
     def _open_prompt(self) -> None:
-        """Ask which world file to open."""
-        if self.session.mode == "sandbox" and self._discard_ok("Open"):
+        """Ask which world file to open.
+
+        The dialog loses nothing, so it always opens; its title says if the world's
+        unsaved changes will be lost once a file is chosen.
+        """
+        self._warned = None  # asking for something else cancels a pending warning
+        if self.session.mode == "sandbox":
+            lost = " - unsaved changes will be lost"
             self._browse(
-                "Open a world",
+                "Open a world" + (lost if self.session.edits.modified else ""),
                 "",
                 self._open,
                 save=False,

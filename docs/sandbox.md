@@ -111,11 +111,12 @@ The File menu has New world, Open, Save and Save as.
   click a file twice to take it, use Up and Home, or type a name or a whole path in the
   Name box. Save as adds `.toml` and asks before it replaces a file.
 - Ctrl+S saves to the file the world came from, and asks for one if there is none.
-- The title bar shows the file and a star if there are unsaved changes. New, Open and
-  Quit say so the first time and go ahead the second.
+- The title bar shows the file and a star if there are unsaved changes. New world and
+  Quit say so the first time and go ahead the second. Open always shows its browser, and
+  its title says when the unsaved changes will be lost.
 
 Open also takes a Gazebo `.world` or `.sdf` file: its boxes, cylinders and spheres that
-stand on the floor become obstacles, and one robot is put in the corner. The world has no
+stand on the floor become obstacles, with no robot, as in an empty Gazebo world. The world has no
 file of its own after that, so Save asks for a name and never writes over the Gazebo file.
 
 Saving writes a new file. Comments and the order of keys in the old file are not kept.

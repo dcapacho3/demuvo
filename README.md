@@ -118,7 +118,7 @@ again while it drives. A file is checked when it loads, and a
 mistake is named by object and key. [The world file](docs/world-file.md) describes every key.
 
 A Gazebo `.world` or `.sdf` file opens too, and gives its boxes, cylinders and spheres
-that stand on the floor as obstacles, with one robot in the corner. Floors, planes,
+that stand on the floor as obstacles, with no robot: add one with the robot tool. Floors, planes,
 meshes and tilted shapes are left out, since a demuvo world is flat. `examples/gazebo/`
 holds the TurtleBot3 world that Nav2 uses and two supermarket and cafe worlds to try
 the planners on. `demuvo examples/gazebo/turtlebot3_world.sdf` opens the first.
