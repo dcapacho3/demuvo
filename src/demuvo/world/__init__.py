@@ -6,6 +6,7 @@ Including size, obstacles and robots, all from a TOML file.
 from ..verify import WorldError
 from .load import FORMAT_VERSION, load_world
 from .save import save_world
+from .sdf import SUFFIXES as GAZEBO_SUFFIXES
 from .spec import (
     DEFAULT_CONTROL_PERIOD,
     DEFAULT_DT,
@@ -28,6 +29,7 @@ __all__ = [
     "DEFAULT_GOAL_TOLERANCE",
     "DEFAULT_PLANNER",
     "FORMAT_VERSION",
+    "GAZEBO_SUFFIXES",
     "ActorDefaults",
     "ActorSpec",
     "CostmapSpec",

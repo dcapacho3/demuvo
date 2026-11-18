@@ -52,6 +52,7 @@ def key(code):
 def test_a_folder_lists_its_folders_then_its_world_files_without_hidden_names(tree):
     """Sorted without regard to case; other files and dot names are left out."""
     assert list_folder(tree, ".toml") == (["Alpha", "beta"], ["A.toml", "b.toml"])
+    assert list_folder(tree, (".toml", ".nothing"))[1] == ["A.toml", "b.toml"]
 
 
 def test_the_dialog_starts_in_a_folder_and_takes_the_focus_for_the_name(tree):

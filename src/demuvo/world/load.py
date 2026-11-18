@@ -23,6 +23,7 @@ from ..verify import (
     text,
 )
 from .mapfile import MapFile, read_map
+from .sdf import SUFFIXES, read_sdf
 from .shapes import parse_shape
 from .spec import (
     DEFAULT_CONTROL_PERIOD,
@@ -538,7 +539,8 @@ def load_world(path: str | Path) -> World:
     """Read a world file and check it.
 
     Args:
-        path: path of a TOML file in the format of `examples/worlds/demo.toml`.
+        path: path of a TOML file in the format of `examples/worlds/demo.toml`, or
+            of a Gazebo `.world` or `.sdf` file, which gives its obstacles only.
 
     Returns:
         The world.
@@ -548,11 +550,14 @@ def load_world(path: str | Path) -> World:
             object (for example "obstacle 2" or "robot 'r1'") and which key.
         OSError: if the file cannot be read.
     """
-    try:
-        with open(path, "rb") as f:
-            data = tomllib.load(f)
-    except tomllib.TOMLDecodeError as error:
-        raise WorldError(f"file: not valid TOML: {error}") from error
+    if Path(path).suffix in SUFFIXES:
+        data = read_sdf(path)
+    else:
+        try:
+            with open(path, "rb") as f:
+                data = tomllib.load(f)
+        except tomllib.TOMLDecodeError as error:
+            raise WorldError(f"file: not valid TOML: {error}") from error
 
     version = require_key(data, "version", "file")
     if version != FORMAT_VERSION:

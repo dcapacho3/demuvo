@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 from .. import edit
+from ..world import GAZEBO_SUFFIXES as SUFFIXES
 from . import look
 from .clock import Clock
 from .filedialog import Browse, FileDialog
@@ -606,7 +607,9 @@ class Sandbox:
         )
         return False
 
-    def _browse(self, title: str, name: str, action, *, save: bool) -> None:
+    def _browse(
+        self, title: str, name: str, action, *, save: bool, suffix=".toml"
+    ) -> None:
         """Open the file dialog near the top of the window."""
         screen = self.shell.screen
         width = min(680.0, screen.width - 40)
@@ -615,13 +618,19 @@ class Sandbox:
         path = self.session.edits.path
         folder = Path(path).parent if path else Path.cwd()
         self.shell.open_popup(
-            FileDialog(Browse(title, action, name, save), folder, place)
+            FileDialog(Browse(title, action, name, save, suffix), folder, place)
         )
 
     def _open_prompt(self) -> None:
         """Ask which world file to open."""
         if self.session.mode == "sandbox" and self._discard_ok("Open"):
-            self._browse("Open a world", "", self._open, save=False)
+            self._browse(
+                "Open a world",
+                "",
+                self._open,
+                save=False,
+                suffix=(".toml", *SUFFIXES),
+            )
 
     def _open(self, path: str) -> None:
         """Open the file at a path, and show the new world."""

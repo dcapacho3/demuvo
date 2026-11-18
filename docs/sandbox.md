@@ -113,6 +113,10 @@ The File menu has New world, Open, Save and Save as.
 - The title bar shows the file and a star if there are unsaved changes. New, Open and
   Quit say so the first time and go ahead the second.
 
+Open also takes a Gazebo `.world` or `.sdf` file: its boxes, cylinders and spheres that
+stand on the floor become obstacles, and one robot is put in the corner. The world has no
+file of its own after that, so Save asks for a name and never writes over the Gazebo file.
+
 Saving writes a new file. Comments and the order of keys in the old file are not kept.
 The [world file](world-file.md) has the format.
 

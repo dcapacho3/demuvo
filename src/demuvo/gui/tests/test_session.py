@@ -458,3 +458,11 @@ def test_the_log_of_a_worker_reaches_the_session_log(remote_session):
     )
     remote_session.advance(0.01)
     assert remote_session.log.entries[-1].text == "from the worker"
+
+
+def test_opening_a_gazebo_world_gives_its_obstacles_and_no_file_to_save_to():
+    """Save then asks for a name, so the Gazebo file is never written over."""
+    sandbox = Session()
+    path = str(DEMO.parents[1] / "gazebo" / "supermarket.world")
+    assert sandbox.edits.open(path) is None
+    assert sandbox.edits.path is None and len(sandbox.world.obstacles) == 8

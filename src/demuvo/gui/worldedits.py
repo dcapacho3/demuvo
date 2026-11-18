@@ -7,9 +7,11 @@ if it worked.
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 from .. import edit
 from ..verify import WorldError
+from ..world import GAZEBO_SUFFIXES as SUFFIXES
 from ..world import World, load_world, save_world
 
 REFUSED = "That change cannot be made: {}"
@@ -193,7 +195,8 @@ class WorldEdits:
             world = load_world(path)
         except (OSError, ValueError) as error:
             return f"Could not open {path}: {error}"
-        return self._replace(world, path)
+        # A Gazebo file has no TOML to save back to, so Save asks for a name.
+        return self._replace(world, None if Path(path).suffix in SUFFIXES else path)
 
     def new(self) -> str | None:
         """Replace the world with a blank one, which has no file yet."""

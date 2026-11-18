@@ -20,7 +20,9 @@ from .widgets import Event, TextButton, text_baseline
 ROW = 30
 
 
-def list_folder(folder: Path, suffix: str) -> tuple[list[str], list[str]]:
+def list_folder(
+    folder: Path, suffix: str | tuple[str, ...]
+) -> tuple[list[str], list[str]]:
     """The folders and the files ending in `suffix` of a folder, each sorted.
 
     Names that start with a dot are left out.
@@ -48,14 +50,15 @@ class Browse:
         on_choose: called with the path chosen, after the card closes.
         name: the file name to start with.
         save: True to name a file that may not exist yet; False to pick one that does.
-        suffix: the ending of the files shown, and added to a name that lacks it.
+        suffix: the ending of the files shown, and added to a name that lacks it; a
+            dialog that opens a file may show several endings.
     """
 
     title: str
     on_choose: object
     name: str = ""
     save: bool = False
-    suffix: str = ".toml"
+    suffix: str | tuple[str, ...] = ".toml"
 
 
 @dataclass
