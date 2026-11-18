@@ -55,6 +55,9 @@ class Application(Protocol):
     quit_requested: bool
     appearance: tuple[str, str]
 
+    def can_close(self) -> bool:
+        """True if the window may close now; if not, the program asks the user."""
+
     def mouse_move(self, x: float, y: float) -> None:
         """The pointer moved to a pixel of the frame."""
 
@@ -283,7 +286,11 @@ class Window:
         self.attach(app)
         started = time.perf_counter()
         title = shape = None
-        while not self.glfw.should_close(self.handle):
+        while True:
+            if self.glfw.should_close(self.handle):
+                if app.quit_requested or app.can_close():
+                    break
+                self.glfw.set_should_close(self.handle, False)  # the program asks
             self.glfw.wait_events(BUSY_WAIT if app.busy() else IDLE_WAIT)
             app.tick(time.perf_counter())
             if app.appearance != (title, shape):

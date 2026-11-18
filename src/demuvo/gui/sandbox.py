@@ -17,6 +17,7 @@ from .. import edit
 from ..world import GAZEBO_SUFFIXES as SUFFIXES
 from . import look
 from .clock import Clock
+from .confirm import ConfirmBox
 from .filedialog import Browse, FileDialog
 from .inputs import Combo, MenuItem, NameBox, Row, TreeList
 from .inspector import Inspector
@@ -102,7 +103,6 @@ class Sandbox:
         self.clock = Clock()
         self.alpha: Slider | None = None
         self.palette: Combo | None = None
-        self._warned: str | None = None
 
     # -- building --
     def build(self, shell: Shell) -> None:
@@ -606,16 +606,17 @@ class Sandbox:
         name = os.path.basename(edits.path) if edits.path else "untitled"
         return f"{name}{' *' if edits.modified else ''} - demuvo"
 
-    def _discard_ok(self, what: str) -> bool:
-        """True if nothing is unsaved, or this is the second ask in a row."""
-        if not self.session.edits.modified or self._warned == what:
-            self._warned = None
-            return True
-        self._warned = what
-        self.message(
-            f"Unsaved changes. Choose {what} again to drop them, or save first."
+    def _ask_discard(self, question: str, action) -> None:
+        """Run an action that drops the world, after asking if anything is unsaved."""
+        if not self.session.edits.modified:
+            action()
+            return
+        screen = self.shell.screen
+        width, height = 440.0, 140.0
+        place = ((screen.width - width) / 2, MENU_H + TOOL_H + 40, width, height)
+        self.shell.open_popup(
+            ConfirmBox("Unsaved changes", question, "Discard", action, place)
         )
-        return False
 
     def _browse(
         self, title: str, name: str, action, *, save: bool, suffix=".toml"
@@ -637,7 +638,6 @@ class Sandbox:
         The dialog loses nothing, so it always opens; its title says if the world's
         unsaved changes will be lost once a file is chosen.
         """
-        self._warned = None  # asking for something else cancels a pending warning
         if self.session.mode == "sandbox":
             lost = " - unsaved changes will be lost"
             self._browse(
@@ -661,9 +661,11 @@ class Sandbox:
         self.message(f"Opened {path}.")
 
     def _new_world(self) -> None:
+        """Start again with a blank world, after asking if anything is unsaved."""
+        self._ask_discard("Start a new world and lose the changes?", self._start_new)
+
+    def _start_new(self) -> None:
         """Start again with a blank world."""
-        if not self._discard_ok("New world"):
-            return
         error = self.session.edits.new()
         self.pane.pill.set_playing(False)
         self.pane.pill.set_time(0.0)
@@ -690,13 +692,19 @@ class Sandbox:
         self.message(error or f"Saved {path}.")
 
     def can_quit(self) -> bool:
-        """True if the window may close: nothing is unsaved, or it was asked twice."""
-        return self._discard_ok("Quit")
+        """True if the window may close now; else a card asks, and Discard quits."""
+        if not self.session.edits.modified:
+            return True
+        self._ask_discard("Quit and lose the changes?", self._force_quit)
+        return False
 
     def _quit(self) -> None:
-        """Ask the window to close, unless there are unsaved changes."""
-        if self._discard_ok("Quit"):
-            self.shell.quit_requested = True
+        """Close the window, after asking if anything is unsaved."""
+        self._ask_discard("Quit and lose the changes?", self._force_quit)
+
+    def _force_quit(self) -> None:
+        """Ask the window to close."""
+        self.shell.quit_requested = True
 
     # -- editing: what the pane tells --
     def select(self, name: str | None) -> None:

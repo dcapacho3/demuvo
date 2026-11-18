@@ -58,6 +58,10 @@ class FakeApp:
         """Note an expose or resize."""
         self.events.append(("all",))
 
+    def can_close(self):
+        """The close button is allowed unless a test says the app wants to ask."""
+        return not getattr(self, "asking", False)
+
     def busy(self):
         """Busy until the frames are shown."""
         return len(self.shown) < self.frames
@@ -226,6 +230,32 @@ def test_the_loop_waits_ticks_shows_dirty_frames_and_closes():
     glfw.lib.glfwWaitEventsTimeout.assert_any_call(module.BUSY_WAIT)
     glfw.lib.glfwDestroyWindow.assert_called_once_with(11)
     glfw.lib.glfwTerminate.assert_called()
+
+
+def test_the_close_button_asks_the_application_before_the_window_closes():
+    """The first click on it is refused, and the flag is cleared; the next is let by."""
+    window, glfw, _ = build()
+
+    class Asking(FakeApp):
+        """An application with unsaved work: it asks once."""
+
+        asked = 0
+
+        def can_close(self):
+            """Refuse the first time."""
+            self.asked += 1
+            return self.asked > 1
+
+        def tick(self, _now):
+            """Never quits by itself."""
+
+    app = Asking(frames=1)
+    app.dirty = False
+    glfw.lib.glfwWindowShouldClose.side_effect = [1, 1]
+    window.run(app)
+    assert app.asked == 2
+    assert glfw.lib.glfwSetWindowShouldClose.call_count == 1
+    glfw.lib.glfwDestroyWindow.assert_called_once_with(11)
 
 
 def test_an_idle_application_waits_long_and_a_time_limit_ends_the_loop():

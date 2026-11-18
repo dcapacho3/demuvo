@@ -7,6 +7,7 @@ import pytest
 
 from demuvo import edit
 from demuvo.gui import look
+from demuvo.gui.confirm import ConfirmBox
 from demuvo.gui.keys import CTRL, KEY
 from demuvo.gui.sandbox import BADGES, DEFAULT_MESSAGE, GOAL_MESSAGE, Sandbox
 from demuvo.gui.session import Session
@@ -296,8 +297,8 @@ def test_the_menus_list_the_commands_and_run_them(app):
     view[-1].action()
     program.menu_items("File")[-1].action()
     assert not window.quit_requested
-    assert "Unsaved changes" in window.layout.chrome.status.message
-    program.menu_items("File")[-1].action()
+    assert isinstance(window.input.popup, ConfirmBox)
+    click(window, window.input.popup.buttons["yes"])
     assert window.quit_requested
 
 
@@ -606,9 +607,28 @@ def test_escape_closes_the_prompt_and_new_world_starts_blank(app):
     program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 0.5))
     program.menu_items("File")[0].action()
     assert program.session.world.obstacles
-    assert "Choose New world again" in window.layout.chrome.status.message
+    assert isinstance(window.input.popup, ConfirmBox)
+    click(window, window.input.popup.buttons["yes"])
+    assert not program.session.world.obstacles and window.input.popup is None
+
+
+def test_new_world_on_an_unsaved_free_world_starts_at_once_and_the_card_is_drawn(app):
+    """Nothing to lose, nothing asked; with work to lose the card is on the frame."""
+    window, program = app
     program.menu_items("File")[0].action()
-    assert not program.session.world.obstacles
+    assert window.input.popup is None and window.can_close()
+    program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 0.5))
+    assert not window.can_close()
+    card = window.input.popup
+    assert isinstance(card, ConfirmBox)
+    frame = window.render().astype(int)
+    inside = frame[
+        int(card.y) + 20 : int(card.y) + 70, int(card.x) + 10 : int(card.x) + 300
+    ]
+    assert inside.sum() < 255 * 3 * inside.shape[0] * inside.shape[1]  # some ink
+    window.mouse_move(*centre(card.buttons["yes"]))
+    window.mouse_move(*centre(card.buttons["no"]))
+    assert card.buttons["no"].hover and not card.buttons["yes"].hover
 
 
 def test_a_benchmark_world_cannot_be_replaced_but_can_be_saved(tmp_path):
@@ -666,20 +686,28 @@ def test_the_title_names_the_file_and_stars_unsaved_changes(app, tmp_path):
     assert program.title == "mine.toml * - demuvo"
 
 
-def test_ctrl_q_asks_twice_when_there_is_unsaved_work_and_ctrl_o_opens_at_once(app):
-    """A saved world quits at once; an edited one needs the second ask to quit."""
+def test_quit_with_unsaved_work_asks_in_a_card_and_only_discard_quits(app):
+    """A saved world quits at once; an edited one asks; Cancel, Esc, Enter keep it."""
     window, program = app
     press_key(window, "q", ctrl=True)
     assert window.quit_requested
     window.quit_requested = False
     program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 0.5))
     press_key(window, "q", ctrl=True)
-    assert not window.quit_requested
+    assert not window.quit_requested and isinstance(window.input.popup, ConfirmBox)
+    press_key(window, "escape")
+    assert window.input.popup is None and not window.quit_requested
+    press_key(window, "q", ctrl=True)
+    press_key(window, "enter")  # the safe answer
+    assert window.input.popup is None and not window.quit_requested
+    press_key(window, "q", ctrl=True)
+    click(window, window.input.popup.buttons["no"])
+    assert window.input.popup is None and not window.quit_requested
+    program.menu_items("File")[-1].action()
+    click(window, window.input.popup.buttons["yes"])
+    assert window.quit_requested
     press_key(window, "o", ctrl=True)
     assert window.input.popup is not None
-    window.input.close_popup()
-    press_key(window, "q", ctrl=True)
-    assert not window.quit_requested
 
 
 def test_ctrl_z_and_ctrl_y_undo_and_redo_and_the_menu_follows(app):

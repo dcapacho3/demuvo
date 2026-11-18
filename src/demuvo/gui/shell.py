@@ -876,6 +876,10 @@ class Shell:
         """The wheel turned."""
         self.input.scroll(dy)
 
+    def can_close(self) -> bool:
+        """True if the window may close now, as its close button asks."""
+        return self.program.can_quit()
+
     def key(self, key: int, _action: int, mods: int) -> None:
         """A key went down or repeated."""
         self.input.key(key, mods)
