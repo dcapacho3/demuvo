@@ -20,7 +20,7 @@ from .fakes import EXAMPLES, FakeHost
 
 def build(session=None, name="r1"):
     """An inspector over a blank sandbox, showing a robot, with a message log."""
-    session = session or Session()
+    session = session or Session(edit.new_world())
     column = Column()
     column.set_rect(0, 0, 312, 600)
     host = FakeHost()
@@ -247,7 +247,7 @@ def test_replanning_is_switched_on_tuned_and_switched_off_in_the_form():
 
 def test_the_replanning_settings_the_form_does_not_show_are_kept():
     """A file's timer, blocked and stuck survive an edit of the period."""
-    session = Session()
+    session = Session(edit.new_world())
     session.apply(
         edit.set_replan(
             session.world, "r1", {"timer": True, "blocked": False, "stuck": 0.0}
@@ -305,6 +305,7 @@ def test_a_combo_that_is_a_choice_lists_the_friendly_names():
         "A*",
         "Dubins",
         "Reeds-Shepp",
+        "Hybrid A*",
     ]
 
 

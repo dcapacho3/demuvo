@@ -9,8 +9,7 @@ it and finishes aligned.
 The path is the shortest of the six Dubins words, each an arc, a straight or an
 arc, and an arc: LSL, RSR, LSR, RSL, RLR and LRL (L a left arc, R a right arc,
 S straight), driven forward only. Like the straight-line planner it ignores the
-costmap; A* territory round obstacles is Hybrid A* territory for a car, which
-demuvo does not have yet.
+costmap; `HybridAStar` plans a car's path round obstacles.
 """
 
 from __future__ import annotations

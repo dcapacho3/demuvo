@@ -170,7 +170,13 @@ behind it is reached by backing up instead of by a loop. It has the same setting
 path changes direction at its cusps, so the robot needs a controller that reverses:
 `PurePursuit`, which follows the cusps. `DWB` does too. A robot that
 cannot turn in place warns at the start of a run if its planner does not bound curvature,
-as `StraightLine` and `AStar` do not.
+as `StraightLine` and `AStar` do not. `HybridAStar` (`demuvo.planners:HybridAStar`) is
+the planner for a car among obstacles: it searches poses over the costmap with arcs of
+`turning_radius`, so the path goes round what the map shows and bends no tighter than the
+car can steer, and it ends on the goal pose. `allow_reversing` lets it back up, as
+`ReedsShepp` does. `cost_weight` keeps it off walls, `reverse_penalty` makes a metre
+backward dearer than one forward, and `max_expansions` stops a search that finds
+nothing. A start in a blocked cell gives no path, since no arc may leave it.
 
 When there is no path, the robot stays still and the run says why in plain words, once
 for the task, for example `AStar: the goal cell (90, 80) is blocked (cost 254), so the

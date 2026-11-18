@@ -12,7 +12,8 @@ demuvo builds the class once for each robot that names it, with the robot's
 from .astar import AStar
 from .base import Planner
 from .dubins import Dubins
+from .hybrid_astar import HybridAStar
 from .reeds_shepp import ReedsShepp
 from .straight_line import StraightLine
 
-__all__ = ["AStar", "Dubins", "Planner", "ReedsShepp", "StraightLine"]
+__all__ = ["AStar", "Dubins", "HybridAStar", "Planner", "ReedsShepp", "StraightLine"]

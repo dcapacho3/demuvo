@@ -40,6 +40,7 @@ _PLANNERS = {
     "A*": "demuvo.planners:AStar",
     "Dubins": "demuvo.planners:Dubins",
     "Reeds-Shepp": "demuvo.planners:ReedsShepp",
+    "Hybrid A*": "demuvo.planners:HybridAStar",
 }
 _SMOOTHERS = {
     NO_SMOOTHER: None,
