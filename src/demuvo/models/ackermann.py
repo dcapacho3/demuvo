@@ -114,6 +114,8 @@ class Ackermann:
 
     name: ClassVar[str] = "ackermann"
     uses: ClassVar[tuple[str, ...]] = _USES
+    # Settings only the encoders read; a form shows them when the robot has some.
+    encoder_only: ClassVar[tuple[str, ...]] = ("wheel_radius", "track")
 
     def __post_init__(self) -> None:
         """Refuse sizes that are not positive and a steering angle past pi/2."""

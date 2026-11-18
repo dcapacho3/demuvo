@@ -103,6 +103,44 @@ def test_the_settings_fields_have_the_kind_of_each_setting():
     )
 
 
+def test_settings_that_do_nothing_for_the_robot_are_not_shown():
+    """A robot that turns in place has no reversing switch; a car has no spot turn."""
+    inspector, session, _, _ = build()
+    controller = inspector.settings["controller"]
+    assert "rotate_to_goal" in controller and "allow_reversing" not in controller
+    assert "wheel_radius" not in inspector.settings["model"]
+    session.choose("r1", "model", "ackermann")
+    inspector.show("r1")
+    controller = inspector.settings["controller"]
+    assert "allow_reversing" in controller and "rotate_to_goal" not in controller
+    session.choose("r1", "controller", "DWB")
+    inspector.show("r1")
+    controller = inspector.settings["controller"]
+    assert {"car_min_vel_x", "path_angle_scale"} <= set(controller)
+    assert not {"turn_gain", "rotate_speed", "rotate_to_goal"} & set(controller)
+
+
+def test_the_wheel_settings_show_once_the_robot_reads_its_encoders():
+    """Wheel radius and track only matter to dead reckoning."""
+    inspector, session, _, _ = build()
+    session.edits.change_robot(
+        "r1", lambda w: edit.set_estimator(w, "r1", "dead_reckoning")
+    )
+    inspector.show("r1")
+    assert {"wheel_radius", "track"} <= set(inspector.settings["model"])
+
+
+def test_editing_a_setting_keeps_the_value_of_one_that_is_hidden():
+    """The form sends only what it shows; a hidden setting keeps what it was."""
+    inspector, session, _, _ = build()
+    session.set_settings("r1", "controller", {"allow_reversing": True})
+    inspector.show("r1")
+    assert "allow_reversing" not in inspector.settings["controller"]
+    inspector.settings["controller"]["lookahead"].set(0.9)
+    kept = edit.settings_of_robot(session.world, "r1", "controller")
+    assert kept["allow_reversing"] is True and kept["lookahead"] == 0.9
+
+
 def test_editing_the_pose_moves_the_robot_and_refreshes():
     """A new x is applied through the session, and the window is told."""
     inspector, session, reports, refreshed = build()

@@ -159,6 +159,8 @@ class Inspector:
             ),
         )
         for part, known, current in parts:
+            hidden = options.hidden_settings(spec, part)
+            known = [s for s in known if s.name not in hidden]
             if not known:
                 continue
             col.add(Section(f"{part} settings"))
@@ -261,11 +263,16 @@ class Inspector:
 
     def _settings_edited(self, part: str) -> None:
         """A setting of a part changed."""
-        values = {
+        shown = {
             key: (w.checked if isinstance(w, Checkbox) else w.value)
             for key, w in self.settings[part].items()
         }
         if self.name:
+            # A setting this robot hides keeps the value it has.
+            values = {
+                **edit.settings_of_robot(self.session.world, self.name, part),
+                **shown,
+            }
             self._done(self.session.set_settings(self.name, part, values))
 
     def _period_edited(self, seconds: float) -> None:

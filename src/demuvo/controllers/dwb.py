@@ -46,7 +46,7 @@ import heapq
 import logging
 import math
 from dataclasses import dataclass, field
-from typing import NamedTuple
+from typing import ClassVar, NamedTuple
 
 import numpy as np
 from robomath import wrap_angle
@@ -162,6 +162,14 @@ class DWB:
     rotate_to_goal: bool = True
     path_angle_scale: float = 2.0
     car_min_vel_x: float = 0.1
+    # Settings only a robot that cannot turn in place uses, and only one that can;
+    # a form shows the ones that apply.
+    car_only: ClassVar[tuple[str, ...]] = ("car_min_vel_x", "path_angle_scale")
+    spot_only: ClassVar[tuple[str, ...]] = (
+        "rotate_speed",
+        "turn_gain",
+        "rotate_to_goal",
+    )
     _last: Twist = field(default_factory=Twist, init=False, repr=False, compare=False)
     _maps: tuple[tuple, _Maps] | None = field(
         default=None, init=False, repr=False, compare=False

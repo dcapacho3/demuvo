@@ -43,6 +43,8 @@ class DiffDrive:
 
     name: ClassVar[str] = "diff_drive"
     uses: ClassVar[tuple[str, ...]] = _USES
+    # Settings only the encoders read; a form shows them when the robot has some.
+    encoder_only: ClassVar[tuple[str, ...]] = ("wheel_radius", "track")
 
     def __post_init__(self) -> None:
         """Refuse a wheel size that is not a positive number."""

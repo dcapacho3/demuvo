@@ -212,6 +212,32 @@ def sensor_settings(kind: str) -> list[Setting]:
     return _fields(_SENSORS[kind])
 
 
+def hidden_settings(spec, part: str) -> frozenset[str]:
+    """The settings of one part of a robot that do nothing for it.
+
+    A class lists them in `car_only` (a robot that turns in place has no use for
+    them), `spot_only` (a car has none) and `encoder_only` (no use without
+    encoders). A setting it lists nowhere always shows.
+
+    Args:
+        spec: the `RobotSpec`.
+        part: "model", "planner", "smoother" or "controller".
+    """
+    path = spec.model if part == "model" else getattr(spec, part)
+    if part == "planner":
+        path = path or DEFAULT_PLANNER
+    if not path:
+        return frozenset()
+    cls = MODELS[path] if part == "model" else _class_of(path)
+    car = not MODELS[spec.model]().limits().turns_in_place
+    hidden = set(getattr(cls, "spot_only" if car else "car_only", ()))
+    if "encoders" not in spec.sensors and "encoders" not in (
+        ESTIMATORS[spec.estimator].needs
+    ):
+        hidden |= set(getattr(cls, "encoder_only", ()))
+    return frozenset(hidden)
+
+
 def model_settings(name: str) -> list[Setting]:
     """The settings a model takes in its `params` table, such as "max_v"."""
     return _fields(MODELS[name])

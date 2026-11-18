@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 import numpy as np
 from robomath import Transform2D, wrap_angle
@@ -66,6 +67,14 @@ class PurePursuit:
     rotate_speed: float = 1.0
     rotate_to_goal: bool = True
     allow_reversing: bool = False
+    # Settings only a robot that cannot turn in place uses, and only one that can;
+    # a form shows the ones that apply.
+    car_only: ClassVar[tuple[str, ...]] = ("allow_reversing",)
+    spot_only: ClassVar[tuple[str, ...]] = (
+        "rotate_speed",
+        "turn_gain",
+        "rotate_to_goal",
+    )
     _run: int = field(default=0, init=False, repr=False, compare=False)
     _changes: int = field(default=-1, init=False, repr=False, compare=False)
 
