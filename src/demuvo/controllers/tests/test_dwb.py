@@ -246,13 +246,12 @@ def test_a_bad_positive_number_is_refused_when_the_controller_is_built(name, bad
     [
         ({"obstacle_scale": -1.0}, "obstacle_scale"),
         ({"cost_weight": math.nan}, "cost_weight"),
-        ({"min_vel_x": 2.0}, "min_vel_x"),
         ({"vx_samples": 0}, "vx_samples"),
         ({"vtheta_samples": 2.5}, "vtheta_samples"),
     ],
 )
 def test_other_bad_settings_are_refused(kwargs, match):
-    """Weights are 0 or more, min_vel_x is at most max_vel_x, samples are counts."""
+    """Weights are 0 or more, samples are counts."""
     with pytest.raises(ValueError, match=match):
         DWB(**kwargs)
 
@@ -368,10 +367,10 @@ def test_a_car_at_the_goal_stops_and_leaves_its_angle():
 
 
 def test_a_reversing_car_backs_toward_a_goal_behind():
-    """With min_vel_x below 0 a car backs up instead of looping round forwards."""
+    """With allow_reversing a car backs up instead of looping round forwards."""
     model = Ackermann()
     poses, commands = steer(
-        DWB(min_vel_x=-0.5),
+        DWB(allow_reversing=True),
         see((1.0, 1.0, 0.0), (0.3, 1.0, 3.14), model.limits()),
         model,
         60,

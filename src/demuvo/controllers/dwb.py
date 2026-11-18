@@ -34,7 +34,7 @@ robot's do) gets a window shaped like its steering: every sampled turn rate is
 pulled inside what the model allows at that sample's speed, so the trajectory
 that is scored is the one the robot will drive, trajectories slower than
 `car_min_vel_x` are thrown out so it turns on its least circle rather than inching,
-and the turn on the spot at the goal is skipped. With `min_vel_x` below 0 such a
+and the turn on the spot at the goal is skipped. With `allow_reversing` such a
 robot may also back up, and the path angle critic then counts facing away from its
 aim as good as facing it, so a reverse trajectory toward the path is not punished.
 A robot that can turn in place is driven as before.
@@ -104,7 +104,7 @@ class DWB:
 
     Attributes:
         max_vel_x: largest forward speed in m/s.
-        min_vel_x: smallest forward speed in m/s; below 0 lets it back up.
+        allow_reversing: lets it back up, at up to `max_vel_x`.
         max_vel_theta: largest turn rate in rad/s, either way.
         acc_lim_x: forward acceleration limit in m/s^2.
         acc_lim_theta: turn acceleration limit in rad/s^2.
@@ -142,7 +142,7 @@ class DWB:
     """
 
     max_vel_x: float = 0.5
-    min_vel_x: float = 0.0
+    allow_reversing: bool = False
     max_vel_theta: float = 1.0
     acc_lim_x: float = 2.5
     acc_lim_theta: float = 3.2
@@ -167,6 +167,11 @@ class DWB:
         default=None, init=False, repr=False, compare=False
     )
     _stuck_on: int = field(default=-1, init=False, repr=False, compare=False)
+
+    @property
+    def min_vel_x(self) -> float:
+        """The slowest forward speed, in m/s: minus `max_vel_x` if it may back up."""
+        return -self.max_vel_x if self.allow_reversing else 0.0
 
     def __post_init__(self) -> None:
         """Check the numbers."""
@@ -193,11 +198,6 @@ class DWB:
             "path_angle_scale",
             "car_min_vel_x",
         )
-        if not math.isfinite(self.min_vel_x) or self.min_vel_x > self.max_vel_x:
-            raise ValueError(
-                f"min_vel_x must be a number no more than max_vel_x, "
-                f"got {self.min_vel_x!r}"
-            )
         for name in ("vx_samples", "vtheta_samples"):
             value = getattr(self, name)
             if not isinstance(value, int) or isinstance(value, bool) or value < 1:

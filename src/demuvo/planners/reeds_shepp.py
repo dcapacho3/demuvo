@@ -13,8 +13,8 @@ whichever way it moves, so a controller that follows the path backwards keeps
 the heading continuous.
 
 A robot follows such a path only with a controller that reverses:
-`PurePursuit` with `allow_reversing`, or `DWB` with `min_vel_x` below 0. Like
-the straight-line and Dubins planners it ignores the costmap.
+`PurePursuit`; `DWB` with `allow_reversing` backs up but does not follow the
+cusps. Like the straight-line and Dubins planners it ignores the costmap.
 """
 
 from __future__ import annotations

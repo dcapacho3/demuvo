@@ -168,7 +168,8 @@ the costmap. `ReedsShepp` (`demuvo.planners:ReedsShepp`) is Dubins for a car tha
 back up: the shortest such path when the car can also drive in reverse, so a goal just
 behind it is reached by backing up instead of by a loop. It has the same settings. The
 path changes direction at its cusps, so the robot needs a controller that reverses:
-`PurePursuit` with `allow_reversing`, or `DWB` with `min_vel_x` below 0. A robot that
+`PurePursuit`, which follows the cusps. `DWB` with `allow_reversing` backs up but does
+not follow them. A robot that
 cannot turn in place warns at the start of a run if its planner does not bound curvature,
 as `StraightLine` and `AStar` do not.
 
@@ -223,14 +224,14 @@ Distances to the path are counted through free cells, and cost more near obstacl
 `cost_weight`, as in `AStar`. While the path ahead runs through something the lidar
 sees, the robot leaves it: it heads, through free cells, for the last free point of the
 path in the local costmap, then follows the path again. At the goal it turns to the
-goal's angle (`rotate_to_goal`, `rotate_speed`, `turn_gain`). `min_vel_x` below 0 lets
+goal's angle (`rotate_to_goal`, `rotate_speed`, `turn_gain`). `allow_reversing` lets
 it back up. An `ackermann` robot cannot turn in place, so for one the window is shaped
 like its steering, trajectories slower than `car_min_vel_x` are thrown out so it turns on
 its least circle rather than inching, a path angle critic (`path_angle_scale`) makes it
 swing toward the path, and it does not turn to the goal's angle. DWB tracks a path more
 loosely than pure pursuit, so a car it drives meets a goal angle only within 0.3 rad or
 so; give such a goal a tolerance to match, or the car `PurePursuit` with a short
-`lookahead`, as `examples/worlds/ackermann.toml` does. `min_vel_x` below 0 lets a car
+`lookahead`, as `examples/worlds/ackermann.toml` does. `allow_reversing` lets a car
 back up too: the path angle critic then counts facing away from its aim as good as
 facing it, so backing toward the path costs nothing extra. DWB does not follow a
 change of direction along the path, so a `ReedsShepp` path with a cusp needs
