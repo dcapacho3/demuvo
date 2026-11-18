@@ -27,7 +27,7 @@ import numpy as np
 from . import font, look
 from .inputs import Popup
 from .keys import CTRL, KEY, SHIFT
-from .raster import Canvas, rgba
+from .raster import Canvas, rgba, to_uint8
 from .widgets import Column, Event, IconButton, Panel, Widget, text_baseline
 
 MENU_H, TOOL_H, STATUS_H = 34, 44, 26
@@ -182,8 +182,7 @@ class Surface:
     def copy(self, box: tuple[int, int, int, int]) -> None:
         """Convert a box of the canvas to uint8 into the frame."""
         x0, y0, x1, y1 = box
-        part = np.clip(self.canvas.px[y0:y1, x0:x1], 0.0, 1.0)
-        self.frame[y0:y1, x0:x1] = (part * 255.0 + 0.5).astype(np.uint8)
+        self.frame[y0:y1, x0:x1] = to_uint8(self.canvas.px[y0:y1, x0:x1])
 
 
 @dataclass

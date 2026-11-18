@@ -233,8 +233,6 @@ def test_trails_follow_the_robots_and_can_be_cleared(scene, run):
         (y0 + y1) // 2 - 2 : (y0 + y1) // 2 + 3, (x0 + x1) // 2 - 3 : (x0 + x1) // 2 + 4
     ]
     assert mid.min() < 0.9
-    scene.reset_history()
-    assert len(scene.trails["r1"]) == 1
 
 
 def test_a_dragged_robot_is_drawn_where_it_is_dragged(scene):

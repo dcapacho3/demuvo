@@ -84,6 +84,11 @@ def _sampled_coverage(p: np.ndarray, left: int, top: int, rows: int, cols: int):
     return inside.reshape(rows, n, cols, n).mean(axis=(1, 3)).astype(np.float32)
 
 
+def to_uint8(px: np.ndarray) -> np.ndarray:
+    """A picture of floats from 0 to 1 as bytes; what drawing pushed out is clamped."""
+    return (np.clip(px, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
+
+
 class Canvas:
     """An opaque RGB picture and the calls that draw on it.
 
@@ -120,10 +125,6 @@ class Canvas:
             min(self.width, int(x1)),
             min(self.height, int(y1)),
         )
-
-    def to_uint8(self) -> np.ndarray:
-        """The picture as uint8, shape (height, width, 3)."""
-        return (np.clip(self.px, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
 
     def _visible(self, x0: int, y0: int, width: int, height: int):
         """The part of a box inside the clip as (source, target) slices, or None."""

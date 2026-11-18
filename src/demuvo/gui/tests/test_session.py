@@ -230,12 +230,6 @@ def test_a_step_is_about_a_control_period_and_reset_goes_back_to_zero(sandbox):
     assert len(sandbox.scene.trails["r1"]) == 1
 
 
-def test_the_heading_to_a_point_is_the_angle_from_the_robot(sandbox):
-    """r1 is in the middle at (5, 3); a point straight above is 90 degrees."""
-    assert sandbox.scene.heading_to("r1", 5.0, 5.0) == pytest.approx(1.5707963)
-    assert sandbox.scene.heading_to("r1", 9.0, 3.0) == pytest.approx(0.0)
-
-
 @pytest.fixture(name="remote_session")
 def thread_served(monkeypatch):
     """A session whose simulation is a worker served from a thread."""

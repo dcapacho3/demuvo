@@ -760,11 +760,6 @@ def _actor_table(spec: ActorSpec) -> dict:
     return item
 
 
-def actor_label(world: World, index: int) -> str:
-    """What to call an actor: its name, which it always has."""
-    return _actor(world, index).name
-
-
 def actor_names(world: World) -> set[str]:
     """Every name already taken, by a robot or by an actor."""
     return {r.name for r in world.robots} | {a.name for a in world.actors}

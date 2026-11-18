@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from demuvo.gui import font
-from demuvo.gui.raster import Canvas, is_convex, rgba
+from demuvo.gui.raster import Canvas, is_convex, rgba, to_uint8
 
 BLACK = rgba("#000000")
 WHITE = rgba("#ffffff")
@@ -26,16 +26,16 @@ def test_a_canvas_starts_as_one_colour_and_fill_repaints_it():
     """A hex string or a colour; the picture comes out as uint8."""
     canvas = Canvas(4, 3, "#336699")
     assert canvas.px.shape == (3, 4, 3)
-    assert canvas.to_uint8()[0, 0].tolist() == [51, 102, 153]
+    assert to_uint8(canvas.px)[0, 0].tolist() == [51, 102, 153]
     canvas.fill((1.0, 0.0, 0.0, 1.0))
-    assert canvas.to_uint8()[2, 3].tolist() == [255, 0, 0]
+    assert to_uint8(canvas.px)[2, 3].tolist() == [255, 0, 0]
 
 
 def test_to_uint8_clamps_what_drawing_pushed_out_of_range():
     """Blending never leaves 0 to 1, but a caller may write to `px`."""
     canvas = Canvas(2, 1)
     canvas.px[0, 0] = (1.5, -0.5, 0.5)
-    assert canvas.to_uint8()[0, 0].tolist() == [255, 0, 128]
+    assert to_uint8(canvas.px)[0, 0].tolist() == [255, 0, 128]
 
 
 def test_drawing_stays_inside_the_clip_and_the_clip_can_be_lifted():

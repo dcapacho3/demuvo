@@ -151,9 +151,6 @@ class Font:
 
     Args:
         path: a TrueType file.
-
-    Attributes:
-        glyphs_made: how many glyph bitmaps are in the cache.
     """
 
     def __init__(self, path: str | Path) -> None:
@@ -166,11 +163,6 @@ class Font:
         hhea = self._file["hhea"]
         self._height = hhea.ascent - hhea.descent
         self._cache: dict[tuple[str, int], Glyph] = {}
-
-    @property
-    def glyphs_made(self) -> int:
-        """The number of glyph bitmaps kept."""
-        return len(self._cache)
 
     def glyph(self, char: str, size: int) -> Glyph:
         """The bitmap of a character at a size in pixels.
@@ -198,10 +190,6 @@ class Font:
     def width(self, text: str, size: int) -> float:
         """How many pixels wide a string is at a size."""
         return sum(self.glyph(char, size).advance for char in text)
-
-    def line_height(self, size: int) -> float:
-        """Pixels from one baseline to the next, at a size."""
-        return self._height * size / self._units
 
 
 def font_file(name: str) -> Path:

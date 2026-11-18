@@ -29,7 +29,7 @@ def test_a_glyph_is_made_once_per_size():
     first = face.glyph("a", 13)
     assert face.glyph("a", 13) is first
     face.glyph("a", 20)
-    assert face.glyphs_made == 2
+    assert face.glyph("a", 20) is face.glyph("a", 20)
 
 
 def test_a_character_the_font_lacks_is_drawn_as_a_question_mark():
@@ -56,11 +56,6 @@ def test_bold_puts_more_ink_on_the_page():
         font.bold().glyph("a", 24).coverage.sum()
         > font.regular().glyph("a", 24).coverage.sum()
     )
-
-
-def test_a_line_is_a_little_taller_than_the_text():
-    """The gap from one baseline to the next."""
-    assert 13 < font.regular().line_height(13) < 20
 
 
 def test_a_letter_with_a_hole_keeps_it():

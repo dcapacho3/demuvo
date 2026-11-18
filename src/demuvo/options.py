@@ -120,11 +120,6 @@ def estimators() -> tuple[str, ...]:
 _SENSORS = {"encoders": Encoders, "lidar": LidarSettings}
 
 
-def sensor_kinds() -> tuple[str, ...]:
-    """The kinds of sensor a robot can carry."""
-    return tuple(_SENSORS)
-
-
 def label_of(choices: dict[str, str | None], path: str | None) -> str:
     """The friendly name of a path in a table above; the path itself if unknown."""
     for label, value in choices.items():

@@ -202,12 +202,6 @@ class SceneDraw:
         for name, pose in self._poses.items():
             self.trails[name].append((float(pose[0]), float(pose[1])))
 
-    def reset_history(self) -> None:
-        """Empty the trails, each keeping the robot's place now."""
-        for robot in self.world.robots:
-            self.trails[robot.name].clear()
-            self.trails[robot.name].append(tuple(self.pose(robot.name)[:2]))
-
     def _path_signature(self) -> tuple:
         """A short description of every planned path, to see when one changed."""
         found = []
@@ -614,11 +608,6 @@ class SceneDraw:
     def robot_at(self, sx: float, sy: float) -> str | None:
         """The robot under a pixel, or None."""
         return robot_at(self, sx, sy)
-
-    def heading_to(self, name: str, x: float, y: float) -> float:
-        """The heading from a robot towards a world point."""
-        rx, ry = self.pose(name)[:2]
-        return math.atan2(y - ry, x - rx)
 
     def obstacle_at(self, sx: float, sy: float) -> int | None:
         """The place of the topmost obstacle under a pixel, or None."""

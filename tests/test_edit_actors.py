@@ -68,7 +68,6 @@ def test_an_actor_may_be_moved_resized_and_renamed(world):
     boxed = edit.resize_actor(moved, 0, (0.6, 0.4))
     assert boxed.actors[0].shape.size == (0.6, 0.4)
     assert edit.rename_actor(moved, 0, " bob ").actors[0].name == "bob"
-    assert edit.actor_label(moved, 0) == "w"
 
 
 def test_an_empty_name_is_refused(world):
@@ -118,7 +117,6 @@ def test_a_place_that_is_not_an_actor_is_refused(world):
     for call in (
         lambda: edit.remove_actor(world, 3),
         lambda: edit.move_actor(world, 3, (1.0, 1.0, 0.0)),
-        lambda: edit.actor_label(world, -1),
     ):
         with pytest.raises(WorldError, match="there is no actor"):
             call()
