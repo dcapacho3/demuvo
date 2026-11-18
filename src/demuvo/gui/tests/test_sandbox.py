@@ -120,6 +120,20 @@ def test_delete_removes_the_selected_robot_even_the_last_one(app):
     assert [r.name for r in program.session.world.robots] == ["r2"]
 
 
+def test_shift_press_with_the_goal_tool_adds_a_waypoint_through_the_window(app):
+    """A press sets the goal, a Shift press adds another, and the form lists both."""
+    window, program = app
+    program.select("r1")
+    program.set_tool("goal")
+    for y, shift in ((1.0, False), (5.0, True)):
+        x, py = at(program, 8.0, y)
+        window.mouse_move(x, py)
+        window.mouse_press(Event(x, py, shift=shift))
+        window.mouse_release(Event(x, py))
+    assert edit.goals_of(program.session.world, "r1") == [0, 1]
+    assert "g1x" in program.inspector.fields
+
+
 def test_the_goal_tool_is_picked_by_key_and_a_floor_click_sets_the_goal(
     app,
 ):
@@ -631,20 +645,6 @@ def test_ctrl_q_asks_twice_when_there_is_unsaved_work_and_open_and_new_ask_too(a
     window.input.close_popup()
     press_key(window, "q", ctrl=True)
     assert not window.quit_requested
-
-
-def test_shift_click_with_the_goal_tool_adds_a_waypoint_through_the_window(app):
-    """A click sets the goal, a Shift click adds another, and the form lists both."""
-    window, program = app
-    program.select("r1")
-    program.set_tool("goal")
-    for y, shift in ((1.0, False), (5.0, True)):
-        x, py = at(program, 8.0, y)
-        window.mouse_move(x, py)
-        window.mouse_press(Event(x, py, shift=shift))
-        window.mouse_release(Event(x, py))
-    assert edit.goals_of(program.session.world, "r1") == [0, 1]
-    assert "g1x" in program.inspector.fields
 
 
 def test_ctrl_z_and_ctrl_y_undo_and_redo_and_the_menu_follows(app):

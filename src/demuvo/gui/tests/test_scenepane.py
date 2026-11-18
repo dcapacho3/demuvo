@@ -54,7 +54,7 @@ class Actions:
 
     def waypoint_added(self, name, x, y, heading):
         """Note a waypoint and add it."""
-        self.log.append(("waypoint", name, round(x, 2), round(y, 2)))
+        self.log.append(("waypoint", name, round(x, 2), round(y, 2), round(heading, 2)))
         self.session.edits.change_robot(
             name, lambda w: edit.add_goal(w, name, (x, y, heading))
         )
@@ -160,13 +160,16 @@ def test_a_benchmark_world_can_be_selected_but_not_dragged():
     assert session.scene.selected == "r1" and pane.dragging is None
 
 
-def test_with_the_goal_tool_a_click_on_the_floor_sets_the_goal_towards_it():
-    """The heading points from the robot to the click, and the goal is there."""
+def test_with_the_goal_tool_a_click_on_the_floor_sets_the_goal_with_heading_zero():
+    """As RViz does: the goal is there, and with no drag its heading is 0."""
     pane, session, actions = build()
     session.select("r1")
     session.set_tool("goal")
     pane.on_press(Event(*at(pane, 8.0, 3.0)))
     assert not any(item[0] == "goal" for item in actions.log)
+    canvas = Canvas(900, 600, (1, 1, 1, 1))
+    pane.draw(canvas)  # the arrow is already there, before the pointer moves
+    assert ink(canvas) > 0
     pane.on_release(Event(*at(pane, 8.0, 3.0)))
     kind, name, x, y, heading = actions.log[-2]
     assert (kind, name, x, y, heading) == ("goal", "r1", 8.0, 3.0, 0.0)
@@ -188,17 +191,21 @@ def test_dragging_with_the_goal_tool_turns_the_goal_like_a_2d_goal_pose():
     assert pane.aiming is None and pane.aim_to is None
 
 
-def test_a_shift_drag_adds_a_waypoint_turned_along_the_drag():
-    """A waypoint takes its heading from the drag as a goal does."""
+def test_a_shift_press_and_drag_adds_a_waypoint_turned_along_the_drag():
+    """Shift queues a waypoint after the goal; a plain press still replaces it."""
     pane, session, actions = build()
     session.select("r1")
     session.set_tool("goal")
-    pane.on_press(Event(*at(pane, 8.0, 3.0), shift=True))
-    pane.on_move(Event(*at(pane, 7.0, 3.0)))
-    pane.on_release(Event(*at(pane, 7.0, 3.0)))
-    assert actions.log[-2] == ("waypoint", "r1", 8.0, 3.0)
-    heading = session.world.tasks[edit.goals_of(session.world, "r1")[-1]].goal.xyt[2]
-    assert abs(heading) == pytest.approx(3.14159, abs=1e-3)
+    pane.on_press(Event(*at(pane, 8.0, 3.0)))
+    pane.on_release(Event(*at(pane, 8.0, 3.0)))
+    pane.on_press(Event(*at(pane, 8.0, 5.0), shift=True))
+    pane.on_move(Event(*at(pane, 7.0, 5.0)))
+    pane.on_release(Event(*at(pane, 7.0, 5.0)))
+    assert ("waypoint", "r1", 8.0, 5.0, 3.14) in actions.log
+    assert edit.goals_of(session.world, "r1") == [0, 1]
+    pane.on_press(Event(*at(pane, 2.0, 2.0)))
+    pane.on_release(Event(*at(pane, 2.0, 2.0)))
+    assert edit.goals_of(session.world, "r1") == [0]
 
 
 def test_the_goal_tool_on_a_robot_selects_as_usual_and_needs_a_selection():
@@ -373,19 +380,6 @@ def test_an_outline_tool_does_nothing_while_a_run_is_in_progress():
     session.step_once()
     click_at(pane, 1.0, 1.0)
     assert not pane.outline
-
-
-def test_shift_with_the_goal_tool_adds_a_waypoint_after_the_first_goal():
-    """A plain click sets the goal; Shift keeps it and adds another."""
-    pane, session, actions = build()
-    session.select("r1")
-    session.set_tool("goal")
-    pane.on_press(Event(*at(pane, 8.0, 3.0)))
-    pane.on_release(Event(*at(pane, 8.0, 3.0)))
-    pane.on_press(Event(*at(pane, 8.0, 5.0), shift=True))
-    pane.on_release(Event(*at(pane, 8.0, 5.0)))
-    assert ("waypoint", "r1", 8.0, 5.0) in actions.log
-    assert edit.goals_of(session.world, "r1") == [0, 1]
 
 
 def test_a_double_click_ends_a_polygon_or_a_line_at_the_last_corner(monkeypatch):

@@ -48,7 +48,7 @@ Pick a tool from the tool bar or by key, then use the pointer.
 | Tool | Key | What it does |
 | --- | --- | --- |
 | Select | V | Click a robot, an actor or an obstacle to select it. Drag it to move it. |
-| Goal | G | Press on the floor to set the selected robot's goal and drag to turn its arrow, as RViz does; a click alone aims it away from the robot. Shift adds a waypoint after the goals it has. It is grey until a robot is selected. |
+| Goal | G | Press on the floor to put the selected robot's goal there, drag to turn its arrow and let go to set it, as RViz's 2D Goal Pose does; a click alone sets the heading to 0. Hold Shift to add a waypoint after the goals it has instead, which is how strategy games queue moves; the robot form's Add waypoint does the same. It is grey until a robot is selected. |
 | Box | B | Drag from one corner to the other. |
 | Circle | C | Drag from the centre outwards. |
 | Polygon | P | Click the corners. Click near the first corner, double click, right click or press Enter to close it. |

@@ -32,8 +32,8 @@ from .widgets import Checkbox, Folds, IconButton, Section, Slider
 
 DEFAULT_MESSAGE = "Drag a robot to move it. Ctrl+1 and Ctrl+2 show or hide the panels."
 GOAL_MESSAGE = (
-    "Press the floor to set the goal of the selected robot and drag to turn it; "
-    "Shift adds a waypoint."
+    "Press the floor to place the goal of the selected robot, drag to turn it and "
+    "let go to set it; Shift adds a waypoint."
 )
 # The tools, and what the status bar says when one is chosen.
 TOOL_MESSAGES = {

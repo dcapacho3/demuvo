@@ -93,7 +93,7 @@ resizes by dragging its edge.
 | Tool | Key | Action |
 | --- | --- | --- |
 | Select | V | click a robot, actor or obstacle to select it; drag it to move it |
-| Goal | G | press on the floor to set the selected robot's goal and drag to turn it; Shift adds a waypoint |
+| Goal | G | press on the floor, drag to turn the arrow and let go to set the selected robot's goal, as RViz does; Shift adds a waypoint |
 | Box, Circle | B, C | drag on the floor |
 | Polygon, Line | P, L | click the corners; double click, right click or Enter finishes |
 | Add robot, Add actor | Ctrl+N, Ctrl+M | add a robot, add an actor |

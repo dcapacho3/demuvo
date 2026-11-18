@@ -1,11 +1,12 @@
 """The scene pane - the world in the window, and what the mouse does to it.
 
 Click a robot or an obstacle to select it; drag it to move it while editing. With
-the goal tool, press on the floor to give the selected robot a goal and drag to
-turn its arrow, or hold Shift to add a waypoint; a click alone aims it away from
-the robot. With the box or circle tool, drag on the floor to draw an obstacle;
-with the polygon or line tool, click its corners. The playback pill floats over
-the bottom of the pane.
+the goal tool, press on the floor to put the selected robot's goal there, drag to
+turn its arrow, and let go to set it, as RViz's 2D Goal Pose does; a click alone
+sets the heading to 0. Hold Shift to add a waypoint after the goals it has instead.
+With the box or circle tool, drag on the floor to draw an obstacle; with the
+polygon or line tool, click its corners. The playback pill floats over the bottom
+of the pane.
 """
 
 from __future__ import annotations
@@ -68,8 +69,8 @@ class ScenePane(Widget):  # pylint: disable=too-many-instance-attributes
         self.sketch: tuple[float, float, float, float] | None = None
         self.outline: list[tuple[float, float]] = []
         self.cursor: tuple[float, float] | None = None
-        # The goal being aimed - robot, its place, and whether Shift was held -
-        # and the world point the pointer has dragged to.
+        # The goal being aimed - robot, its place, and whether Shift was held - and
+        # the world point the pointer has dragged to.
         self.aiming: tuple[str, float, float, bool] | None = None
         self.aim_to: tuple[float, float] | None = None
         self._last_click: tuple[float, float, float] | None = None
@@ -116,10 +117,10 @@ class ScenePane(Widget):  # pylint: disable=too-many-instance-attributes
 
     def _draw_aim(self, canvas: Canvas) -> None:
         """Draw the arrow of the goal being aimed, along the drag."""
-        if self.aiming is None or self.aim_to is None:
+        if self.aiming is None:
             return
         _, x, y, _ = self.aiming
-        heading = math.atan2(self.aim_to[1] - y, self.aim_to[0] - x)
+        heading = _aimed(x, y, self.aim_to)
         origin = tuple(float(v) for v in self.session.scene.view.to_screen(x, y))
         arrow(canvas, origin, -heading, AIM_LENGTH, rgba(TEAL), outline=rgba("#ffffff"))
 
@@ -337,16 +338,14 @@ class ScenePane(Widget):  # pylint: disable=too-many-instance-attributes
         self.down = False
 
     def _finish_aim(self) -> None:
-        """Set the goal or waypoint where it was pressed, along the drag.
+        """Set the goal, or add a waypoint with Shift, where it was pressed.
 
-        A drag shorter than a click's worth points it away from the robot.
+        It is turned along the drag; a drag shorter than a click's worth leaves the
+        heading at 0, as RViz does.
         """
         name, x, y, shift = self.aiming
         end, self.aiming, self.aim_to = self.aim_to, None, None
-        if end is not None and math.hypot(end[0] - x, end[1] - y) >= MIN_SIZE:
-            heading = math.atan2(end[1] - y, end[0] - x)
-        else:
-            heading = self.session.scene.heading_to(name, x, y)
+        heading = _aimed(x, y, end)
         if shift:
             self.actions.waypoint_added(name, x, y, heading)
         else:
@@ -410,3 +409,10 @@ class ScenePane(Widget):  # pylint: disable=too-many-instance-attributes
         self.outline, self.cursor, self._last_click = [], None, None
         if had:
             self.actions.sketch_changed()
+
+
+def _aimed(x: float, y: float, end) -> float:
+    """The heading of a goal at (x, y) dragged to `end`; 0 if it was not dragged."""
+    if end is None or math.hypot(end[0] - x, end[1] - y) < MIN_SIZE:
+        return 0.0
+    return math.atan2(end[1] - y, end[0] - x)
