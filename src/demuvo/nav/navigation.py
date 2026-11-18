@@ -139,6 +139,7 @@ class Navigation:
                     "or reach a goal's angle. The Dubins planner does.",
                     robot.name,
                 )
+            self._warn_if_tighter_than_steering(robot.name, limits)
             if robot.smoother is not None:
                 self._smoothers[robot.name] = load_class(
                     robot.smoother,
@@ -147,6 +148,22 @@ class Navigation:
                     "smoother",
                     ("configure", "smooth"),
                 )
+
+    def _warn_if_tighter_than_steering(self, name: str, limits) -> None:
+        """Warn if the planner bends its path tighter than the robot can steer."""
+        radius = getattr(self._planners[name], "turning_radius", None)
+        if radius is None or limits.turns_in_place:
+            return
+        least = 1.0 / limits.slope
+        if radius < least * (1.0 - 1e-9):
+            LOGGER.warning(
+                "robot '%s': its planner bends the path to a radius of %.2f m, but "
+                "the robot cannot steer tighter than %.2f m; it may not track the "
+                "path or reach a goal's angle.",
+                name,
+                radius,
+                least,
+            )
 
     @property
     def path_changes(self) -> dict[str, int]:

@@ -137,6 +137,24 @@ def test_a_car_on_a_corner_making_planner_warns_once(caplog):
     assert warnings_for("diff_drive", "demuvo.planners:StraightLine") == []
 
 
+def test_a_planner_tighter_than_the_steering_warns(caplog):
+    """The default car cannot steer under 0.55 m; a planner at 0.3 m is a mistake."""
+    import logging  # pylint: disable=import-outside-toplevel
+
+    def warnings_for(radius):
+        world = edit.set_model(load_world(DEMO), "r1", "ackermann")
+        world = edit.set_part(world, "r1", "planner", "demuvo.planners:Dubins")
+        world = edit.set_settings(world, "r1", "planner", {"turning_radius": radius})
+        caplog.clear()
+        with caplog.at_level(logging.WARNING, logger="demuvo.nav.navigation"):
+            Navigation(world)
+        return [r for r in caplog.records if "cannot steer tighter" in r.message]
+
+    assert len(warnings_for(0.3)) == 1
+    assert warnings_for(0.6) == []
+    assert warnings_for(0.5493) == []  # about the least radius itself
+
+
 PARKING = (
     Path(__file__).resolve().parents[4] / "examples" / "worlds" / "reeds_shepp.toml"
 )
