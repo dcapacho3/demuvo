@@ -215,6 +215,13 @@ def test_allow_reversing_changes_nothing_for_a_diff_drive():
     assert flagged == plain
 
 
+def test_a_car_backs_along_a_path_that_backs_without_allow_reversing():
+    """A path whose headings disagree with its motion is driven backwards."""
+    path = np.array([[1.0, 1.0, 0.0], [0.7, 1.0, 0.0], [0.3, 1.0, 0.0]])
+    obs = see((1.0, 1.0, 0.0), (0.3, 1.0, 0.0), CAR, path=path)
+    assert PurePursuit().command(obs).vx < 0.0
+
+
 def test_a_reversing_car_swings_toward_a_target_beside_it():
     """A target to the side, not behind, is swung to on full lock, not backed to."""
     command = PurePursuit(allow_reversing=True).command(

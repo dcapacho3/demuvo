@@ -29,13 +29,13 @@ class PurePursuit:
     `use_rotate_to_heading` off for a car. A robot that can turn in place is
     driven as before, whatever its limits say.
 
-    With `allow_reversing` such a robot follows a path that changes direction,
-    as a Reeds-Shepp path does at its cusps, the way Nav2's Regulated Pure
-    Pursuit does: the path is split where the car's heading and its motion
-    disagree into runs driven forward or backward, each run is followed in its
-    direction with the point ahead taken from that run alone, and the next run
-    starts once the end of this one is passed. A path with no cusp whose target
-    lies behind the robot is backed toward on the arc through the target.
+    Such a robot follows a path that changes direction, as a Reeds-Shepp path
+    does at its cusps, the way Nav2's Regulated Pure Pursuit does: the path is
+    split where the car's heading and its motion disagree into runs driven
+    forward or backward, each run is followed in its direction with the point
+    ahead taken from that run alone, and the next run starts once the end of
+    this one is passed. With `allow_reversing` a path with no cusp whose target
+    lies behind the robot is also backed toward, on the arc through the target.
 
     The point ahead is the first path point at least `lookahead` away from the
     robot, searching from the path point nearest to it. Shortcut: a path that
@@ -52,9 +52,10 @@ class PurePursuit:
         turn_gain: turn rate per radian of error when turning on the spot, in 1/s.
         rotate_speed: largest turn rate in rad/s when turning on the spot.
         rotate_to_goal: turn to the goal's angle once at the goal.
-        allow_reversing: back toward a target behind the robot instead of
-            going round to it forwards, as Nav2's Regulated Pure Pursuit does.
-            Only a robot that cannot turn in place uses it; see the class note.
+        allow_reversing: back toward a target behind the robot on a path with no
+            cusp, instead of going round to it forwards, as Nav2's Regulated
+            Pure Pursuit does. A path that backs is followed without it. Only a
+            robot that cannot turn in place uses it; see the class note.
     """
 
     speed: float = 0.5
@@ -96,6 +97,7 @@ class PurePursuit:
         distance = float(np.hypot(*(to_robot @ obs.goal.translation)))
         xy_tolerance, yaw_tolerance = obs.goal_tolerance
         car = car_limits(obs)
+        reverses = self.allow_reversing or any(s < 0.0 for *_, s in _runs(obs.path))
         if distance <= xy_tolerance:
             if car is None:
                 return self._turn_to_goal(obs, yaw_tolerance)
@@ -110,9 +112,9 @@ class PurePursuit:
                 return Twist()
             # With reversing, whether the goal is passed depends on which way
             # the last run drives; `_follow_runs` judges it.
-            if passed and not self.allow_reversing:
+            if passed and not reverses:
                 return Twist()
-        if car is not None and self.allow_reversing:
+        if car is not None and reverses:
             return self._follow_runs(obs, car, to_robot, distance)
         x, y = self._target(to_robot @ obs.path[:, :2])
         bearing = math.atan2(y, x)

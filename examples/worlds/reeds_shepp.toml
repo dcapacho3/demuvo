@@ -3,7 +3,7 @@ version = 1
 # A car that parks. The Reeds-Shepp planner may change direction, so each goal
 # is reached the way a driver would: the car pulls forward, backs into the
 # space beside it, then backs straight out and drives off facing the other way.
-# Pure pursuit with `allow_reversing` follows the path run by run, cusp by cusp.
+# Pure pursuit follows the path run by run, cusp by cusp.
 
 [world]
 size = [8.0, 6.0]
@@ -18,7 +18,7 @@ params = { max_v = 0.8, max_steer = 0.6, wheelbase = 0.4 }
 planner = "demuvo.planners:ReedsShepp"
 planner_params = { turning_radius = 1.0 }
 controller = "demuvo.controllers:PurePursuit"
-controller_params = { lookahead = 0.2, allow_reversing = true }
+controller_params = { lookahead = 0.2 }
 
 [[task]]                  # parallel park: a sideways shift, with a cusp
 robot = "car"

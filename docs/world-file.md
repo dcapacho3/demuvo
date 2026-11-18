@@ -234,7 +234,7 @@ so; give such a goal a tolerance to match, or the car `PurePursuit` with a short
 back up too: the path angle critic then counts facing away from its aim as good as
 facing it, so backing toward the path costs nothing extra. DWB does not follow a
 change of direction along the path, so a `ReedsShepp` path with a cusp needs
-`PurePursuit` with `allow_reversing`, which follows the path run by run. A trajectory that leaves the local costmap is thrown out, so the window
+`PurePursuit`, which follows the path run by run. A trajectory that leaves the local costmap is thrown out, so the window
 should hold `max_vel_x * sim_time + forward_point_distance` each way: 0.825 m with the
 defaults, inside the default 1.5 m. A robot with no lidar follows its path with no
 obstacle check. If no trajectory that moves is free, the robot stops until one is, and
