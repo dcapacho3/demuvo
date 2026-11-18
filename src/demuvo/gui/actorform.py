@@ -17,7 +17,7 @@ from . import look
 from .formbase import FormBase
 from .inputs import NumberSpec
 from .panels import TitleRow
-from .widgets import Checkbox, Label, Section, TextButton
+from .widgets import Checkbox, Label, Section
 
 # The largest body an actor can be given here, in metres.
 MAX_SIZE = 200.0
@@ -27,8 +27,7 @@ WHAT = (
     "An actor is a moving obstacle. A planner never sees it: a robot finds it "
     "with its lidar."
 )
-# The section that shows the waypoints, and how far a new one is put, in metres.
-FOLD = "waypoints"
+# How far a new waypoint is put from the last, in metres.
 WAYPOINT_STEP = 0.5
 POSE_HINT = "Where the actor starts. The heading is in degrees; 0 faces along +x."
 SIZE_HINT = "The size of the actor, which decides what it bumps into."
@@ -158,15 +157,9 @@ class ActorForm(FormBase):
             self._waypoints(spec)
 
     def _waypoints(self, spec) -> None:
-        """A fold that opens a row of x and y for each point of the route."""
+        """A section with a row of x and y for each point of the route."""
         points = [list(p) for p in spec.motion_params.get("points", [])]
-        opened = FOLD in self.session.opened
-        word = "Hide" if opened else "Show"
-        fold = TextButton(f"{word} waypoints ({len(points)})", self._toggle)
-        self.fields["waypoints"] = fold  # opening it only looks, so it works mid-run
-        self.column.add(fold)
-        if not opened:
-            return
+        self.column.add(Section("Waypoints"))
         bounds = self.session.world.bounds
         for k, point in enumerate(points):
             self.column.add(Label(f"Waypoint {k + 1}", 12, look.MUTED))
@@ -214,11 +207,6 @@ class ActorForm(FormBase):
                 NumberSpec(-180, 180, 5, 2, " °"),
                 self._points_edited,
             )
-
-    def _toggle(self) -> None:
-        """Open or close the waypoint fold, and show the form again."""
-        self.session.opened ^= {FOLD}
-        self.done(None)
 
     def _points_edited(self) -> None:
         """A field of a waypoint changed."""

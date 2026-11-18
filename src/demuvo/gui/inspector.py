@@ -29,6 +29,7 @@ CLOSED = frozenset(
     {
         "Body",
         "Collisions",
+        "Waypoints",
         "model settings",
         "planner settings",
         "smoother settings",

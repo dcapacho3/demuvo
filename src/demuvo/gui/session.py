@@ -82,8 +82,6 @@ class Session:
         self._seen = 0.0
         self._owed = 0.0
         self.tool = "select"
-        # Names of the inspector sections the user has opened.
-        self.opened: set[str] = set()
         self.edits = WorldEdits(self)
         self.history = History(self)
         self.playing = False

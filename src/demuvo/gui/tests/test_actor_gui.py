@@ -12,7 +12,7 @@ from demuvo.gui.keys import CTRL, KEY
 from demuvo.gui.sandbox import ACTOR_KEY, Sandbox
 from demuvo.gui.session import Session
 from demuvo.gui.shell import Shell
-from demuvo.gui.widgets import Event
+from demuvo.gui.widgets import Event, Section
 from demuvo.verify import WorldError
 
 # A motion named by a test, to see a form built for a class demuvo does not ship.
@@ -385,21 +385,32 @@ def _selected_actor_with_route():
     return program, window, 0
 
 
-def test_the_waypoints_fold_shows_a_row_per_point_when_opened():
-    """Closed it is one button with the count; opened, each point has x and y."""
+def _open_waypoints(program):
+    """Open the Waypoints section of the inspector, as a click on its heading does."""
+    head = next(
+        c
+        for c in program.inspector.column.children
+        if isinstance(c, Section) and c.title == "Waypoints"
+    )
+    head.activate()
+    return head
+
+
+def test_the_waypoints_section_shows_a_row_per_point_when_opened():
+    """Closed its rows are hidden; opened, each point has x and y."""
     program, _, _ = _selected_actor_with_route()
     fields = program.inspector.fields
-    assert fields["waypoints"].text == "Show waypoints (2)" and "wp0x" not in fields
-    fields["waypoints"].on_click()
-    fields = program.inspector.fields
-    assert fields["waypoints"].text == "Hide waypoints (2)"
+    assert not fields["wp0x"].parent.visible
+    head = _open_waypoints(program)
+    assert head.title == "Waypoints" and not head.collapsed
+    assert fields["wp0x"].parent.visible
     assert (fields["wp1x"].value, fields["wp1y"].value) == (7.0, 5.0)
 
 
 def test_waypoints_are_added_edited_and_removed_from_the_fold():
     """Each button and field changes the points of the actor, and undo restores them."""
     program, _, index = _selected_actor_with_route()
-    program.inspector.fields["waypoints"].on_click()
+    _open_waypoints(program)
     program.inspector.fields["wp_add"].on_click()
     points = program.session.world.actors[index].motion_params["points"]
     assert points == [[7.0, 1.0], [7.0, 5.0], [7.5, 5.0]]
@@ -412,7 +423,7 @@ def test_waypoints_are_added_edited_and_removed_from_the_fold():
 def test_the_last_waypoint_has_no_remove_button():
     """A route needs one point, so the button is not offered for it."""
     program, _, index = _selected_actor_with_route()
-    program.inspector.fields["waypoints"].on_click()
+    _open_waypoints(program)
     program.inspector.fields["wp1remove"].on_click()
     assert "wp0remove" not in program.inspector.fields
     assert len(program.session.world.actors[index].motion_params["points"]) == 1
@@ -499,7 +510,7 @@ def test_no_waypoint_is_under_a_pixel_without_an_actor_or_a_route():
 def test_a_waypoint_gets_its_own_wait_and_heading_from_the_fold():
     """The wait makes it a three-number point, the heading switch a four-number one."""
     program, window, _ = _selected_actor_with_route()
-    program.inspector.fields["waypoints"].on_click()
+    _open_waypoints(program)
     program.inspector.fields["wp1wait"].set(3.0)
     assert _points(program)[1] == [7.0, 5.0, 3.0]
     program.inspector.fields["wp1turn"].activate()
