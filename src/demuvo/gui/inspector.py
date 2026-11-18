@@ -17,7 +17,7 @@ from . import look
 from .actorform import ActorForm
 from .inputs import NumberSpec, Spin
 from .panels import FormRow, Note, TitleRow
-from .robotform import RobotForm
+from .robotform import POSE_HINT, RobotForm
 from .session import Session
 from .widgets import Checkbox, Column, Folds, Label, Section, Widget
 from .worldform import OUTLINES, WorldForm
@@ -28,7 +28,7 @@ HINT = "Select a robot, an actor or an obstacle to see and edit it."
 CLOSED = frozenset(
     {
         "Body",
-        "Meets",
+        "Collisions",
         "model settings",
         "planner settings",
         "smoother settings",
@@ -38,6 +38,8 @@ CLOSED = frozenset(
         "Pose source",
         "Sensors",
         "Default sensors",
+        "encoders",
+        "lidar",
         "Global costmap",
         "Local costmap",
     }
@@ -123,7 +125,11 @@ class Inspector:
         pose = self.session.scene.pose(name)
         forms = RobotForm(col, self.session, self.fields, self._done)
         forms.pose_triple(
-            ("x", "y", "th"), ("x", "y", "heading"), pose, self._pose_edited
+            ("x", "y", "th"),
+            ("x", "y", "heading"),
+            pose,
+            self._pose_edited,
+            POSE_HINT,
         )
         forms.goals(name, pose)
         forms.body(spec)
@@ -135,6 +141,7 @@ class Inspector:
                 items,
                 current,
                 lambda text, f=field: self._chosen(f, text),
+                options.summary_of_choice(field, spec, self.tables),
             )
         self._settings(spec, forms)
         forms.replan(spec)
@@ -209,15 +216,16 @@ class Inspector:
         def changed(*_args) -> None:
             self._settings_edited(part)
 
+        hint = setting.help or None
         if setting.kind is bool:
-            forms.switch(key, label, bool(value), changed)
+            forms.switch(key, label, bool(value), changed, hint)
         elif setting.kind is int:
             spec = NumberSpec(0, SETTING_MAX, 1, 0, "", True)
-            forms.number(key, label, int(value), spec, changed)
+            forms.number(key, label, int(value), spec, changed, hint)
         else:
             step = max(0.01, round(abs(float(setting.default)) / 10, 3))
             spec = NumberSpec(0.0, SETTING_MAX, step, 3)
-            forms.number(key, label, float(value), spec, changed)
+            forms.number(key, label, float(value), spec, changed, hint)
 
     def lock(self) -> None:
         """Enable the fields while editing is allowed, and say why when it is not."""

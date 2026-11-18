@@ -23,6 +23,13 @@ from .widgets import Label, Section
 MAX_SIZE = 200.0
 STEP_RANGE = (0.0005, 1.0)
 OUTLINES = ("polygon", "linestring")
+SIZE_HINT = "The size of the world, in metres."
+SEED_HINT = (
+    "Starts the random numbers of sensor noise, so the same seed gives the same run."
+)
+STEP_HINT = "Seconds of simulated time in one step of the simulation."
+CORNER_HINT = "Where the lower left corner of the world is, in metres."
+OBSTACLE_HINT = "Where the obstacle is. The heading is in degrees; 0 faces along +x."
 NO_SIZE = (
     "The corners of this shape are in the world file; here it can move, turn and go."
 )
@@ -40,14 +47,18 @@ class WorldForm(FormBase):
             ("height", "height", world.size[1]),
         ):
             spec = NumberSpec(1.0, MAX_SIZE, 0.5, 2, " m")
-            self.number(key, label, value, spec, self._size_edited)
+            self.number(key, label, value, spec, self._size_edited, SIZE_HINT)
         spec = NumberSpec(0, 2**31 - 1, 1, 0, "", True)
-        self.number("seed", "seed", world.seed, spec, self._seed_edited)
+        self.number("seed", "seed", world.seed, spec, self._seed_edited, SEED_HINT)
         spec = NumberSpec(*STEP_RANGE, 0.001, 4, " s")
-        self.number("dt", "step", world.dt, spec, self._step_edited)
+        self.number("dt", "step", world.dt, spec, self._step_edited, STEP_HINT)
         corner = NumberSpec(-1000.0, 1000.0, 0.5, 2, " m")
-        self.number("ox0", "corner x", world.origin[0], corner, self._origin_edited)
-        self.number("oy0", "corner y", world.origin[1], corner, self._origin_edited)
+        self.number(
+            "ox0", "corner x", world.origin[0], corner, self._origin_edited, CORNER_HINT
+        )
+        self.number(
+            "oy0", "corner y", world.origin[1], corner, self._origin_edited, CORNER_HINT
+        )
         self._sensors()
         costmaps = CostmapForm(self.column, self.session, self.fields, self.done)
         costmaps.costmap("global")
@@ -57,10 +68,10 @@ class WorldForm(FormBase):
         """The sensors every robot starts with, and buttons to add one."""
         robots = RobotForm(self.column, self.session, self.fields, self.done)
         self.column.add(Section("Default sensors"))
-        for sensor, settings in self.session.world.sensors.items():
-            robots.sensor(None, sensor, settings)
         if "encoders" not in self.session.world.sensors:
             robots.button("add_default_encoders", "Add encoders", self._add_encoders)
+        for sensor, settings in self.session.world.sensors.items():
+            robots.sensor(None, sensor, settings)
 
     def _add_encoders(self) -> None:
         """Give every robot encoders to start from."""
@@ -100,7 +111,9 @@ class WorldForm(FormBase):
         names = (
             ("center x", "center y", "rotation") if outline else ("x", "y", "heading")
         )
-        self.pose_triple(("ox", "oy", "oth"), names, (x, y, angle), self._pose_edited)
+        self.pose_triple(
+            ("ox", "oy", "oth"), names, (x, y, angle), self._pose_edited, OBSTACLE_HINT
+        )
 
     def _size_rows(self, shape) -> None:
         """The size fields of a shape that has them, else a note."""

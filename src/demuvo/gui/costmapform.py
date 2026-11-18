@@ -5,7 +5,8 @@ Each field applies its edit through the session and says why when it is refused.
 
 from __future__ import annotations
 
-from .. import edit
+from .. import edit, options
+from ..world import CostmapSpec, LocalCostmapSpec
 from .formbase import FormBase
 from .inputs import NumberSpec
 from .widgets import Section
@@ -35,6 +36,12 @@ NUMBERS = {
 }
 
 
+HELP = {
+    "global": options.described(CostmapSpec),
+    "local": options.described(LocalCostmapSpec),
+}
+
+
 class CostmapForm(FormBase):
     """Builds the global and local costmap sections into a column."""
 
@@ -49,6 +56,7 @@ class CostmapForm(FormBase):
             "enabled",
             spec.enabled,
             lambda on: self._set(which, {"enabled": on}),
+            HELP[which].get("enabled"),
         )
         for key, label, shape in NUMBERS[which]:
             self.number(
@@ -57,6 +65,7 @@ class CostmapForm(FormBase):
                 getattr(spec, key),
                 shape,
                 lambda k=key: self._set(which, {k: self.fields[f"{prefix}.{k}"].value}),
+                HELP[which].get(key),
             )
         for layer in PLUGINS[which]:
             self.switch(
@@ -72,12 +81,14 @@ class CostmapForm(FormBase):
                 spec.source,
                 lambda t: self._set(which, {"source": t}),
             )
+            self.fields["cm.source"].tooltip = HELP[which].get("source")
             self.choice(
                 "cm.unknown",
                 "unknown cells",
                 ["free", "blocked"],
                 spec.unknown,
                 lambda t: self._set(which, {"unknown": t}),
+                HELP[which].get("unknown"),
             )
 
     def _layers(self, which: str, prefix: str) -> None:

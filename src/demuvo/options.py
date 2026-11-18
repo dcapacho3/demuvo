@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import dataclasses
 import inspect
+import re
 from dataclasses import dataclass
 from importlib import import_module
 from importlib.metadata import entry_points
@@ -67,11 +68,13 @@ class Setting:
         name: the key in the world file, such as "lookahead".
         kind: `float`, `int` or `bool`.
         default: the value a robot gets if the file does not set it.
+        help: what it does, in a sentence, from the class's docstring.
     """
 
     name: str
     kind: type
     default: object
+    help: str = ""
 
 
 def _with_entry_points(builtin: dict, group: str) -> dict:
@@ -133,10 +136,57 @@ def field_names(path: str | None) -> tuple[str, ...]:
     """Every setting name of a motion class, lists included; () for no class."""
     if not path:
         return ()
-    cls = _class_of(path)
+    cls = class_of(path)
     if dataclasses.is_dataclass(cls):
         return tuple(f.name for f in dataclasses.fields(cls))
     return tuple(inspect.signature(cls).parameters)
+
+
+def _first_sentence(text: str) -> str:
+    """The text up to its first full stop, on one line."""
+    text = " ".join(text.split())
+    stop = text.find(". ")
+    return text[: stop + 1] if stop >= 0 else text
+
+
+def described(cls) -> dict[str, str]:
+    """What each setting does, read from the `Attributes:` or `Args:` of a docstring.
+
+    A setting that the docstring does not describe is not in the result.
+    """
+    lines = (inspect.getdoc(cls) or "").splitlines()
+    notes: dict[str, str] = {}
+    name = None
+    inside = False
+    for line in lines:
+        if line.rstrip() in ("Attributes:", "Args:"):
+            inside = True
+        elif inside and line and not line.startswith(" "):
+            inside = False
+        elif inside and (match := re.match(r"^ {4}(\w+): (.*)", line)):
+            name = match.group(1)
+            notes[name] = match.group(2)
+        elif inside and name and line.strip():
+            notes[name] += " " + line.strip()
+    return {key: _first_sentence(text) for key, text in notes.items()}
+
+
+def summary(path: str | None) -> str:
+    """The first sentence of the docstring of the class a path names, or ""."""
+    if not path:
+        return ""
+    doc = inspect.getdoc(class_of(path)) or ""
+    return _first_sentence(doc.split("\n\n")[0])
+
+
+def summary_of_choice(field: str, spec, tables: dict) -> str:
+    """The first sentence of what the class chosen for a part of a robot does."""
+    if field == "model":
+        return _first_sentence(inspect.getdoc(MODELS[spec.model]) or "")
+    path = getattr(spec, field)
+    if field == "planner":
+        path = path or DEFAULT_PLANNER
+    return summary(path)
 
 
 def _fields(cls) -> list[Setting]:
@@ -162,14 +212,15 @@ def _fields(cls) -> list[Setting]:
             for name, p in inspect.signature(cls).parameters.items()
             if p.default is not p.empty
         ]
+    notes = described(cls)
     return [
-        Setting(name, _KINDS[kind], default)
+        Setting(name, _KINDS[kind], default, notes.get(name, ""))
         for name, kind, default in raw
         if not name.startswith("_") and kind in _KINDS
     ]
 
 
-def _class_of(path: str):
+def class_of(path: str):
     """The class a "module:Class" path names.
 
     Raises:
@@ -190,7 +241,7 @@ def arguments_of(path: str | None) -> tuple[str, ...]:
     """
     if not path:
         return ()
-    cls = _class_of(path)
+    cls = class_of(path)
     if dataclasses.is_dataclass(cls):
         return tuple(f.name for f in dataclasses.fields(cls))
     return tuple(inspect.signature(cls).parameters)
@@ -204,7 +255,7 @@ def choices_of(path: str | None) -> dict[str, tuple[str, ...]]:
     """
     if not path:
         return {}
-    return {k: tuple(v) for k, v in getattr(_class_of(path), "CHOICES", {}).items()}
+    return {k: tuple(v) for k, v in getattr(class_of(path), "CHOICES", {}).items()}
 
 
 def sensor_settings(kind: str) -> list[Setting]:
@@ -228,7 +279,7 @@ def hidden_settings(spec, part: str) -> frozenset[str]:
         path = path or DEFAULT_PLANNER
     if not path:
         return frozenset()
-    cls = MODELS[path] if part == "model" else _class_of(path)
+    cls = MODELS[path] if part == "model" else class_of(path)
     car = not MODELS[spec.model]().limits().turns_in_place
     hidden = set(getattr(cls, "spot_only" if car else "car_only", ()))
     if "encoders" not in spec.sensors and "encoders" not in (
@@ -251,4 +302,4 @@ def settings_of(path: str | None) -> list[Setting]:
     """
     if not path:
         return []
-    return _fields(_class_of(path))
+    return _fields(class_of(path))

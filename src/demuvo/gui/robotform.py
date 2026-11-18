@@ -10,6 +10,7 @@ import functools
 import math
 
 from .. import edit, options
+from ..world import ReplanSpec
 from . import look
 from .formbase import FormBase
 from .inputs import NumberSpec
@@ -22,11 +23,37 @@ STOP_CHOICES = {"default": None, "yes": True, "no": False}
 # How far, in metres, a new waypoint is put from the last goal.
 WAYPOINT_STEP = 0.5
 LENGTH = NumberSpec(0.05, 100.0, 0.05, 2, " m")
+# What a field does, shown after a pause over it.
+POSE_HINT = (
+    "Where the robot is. The heading is the way it faces, in degrees; 0 faces along +x."
+)
+GOAL_HINT = "Where the robot is sent. The heading is the way it should face on arrival."
+TOLERANCE_HINT = "How close to the goal, in metres, counts as arrived."
+ANGLE_HINT = "How close to the goal's heading, in degrees, counts as arrived."
+STOP_HINT = (
+    "yes: the robot must stand still to finish this goal. no: it may pass through. "
+    "default: yes for the last goal or one with a wait, no for the others."
+)
+WAIT_HINT = "Seconds the robot holds the goal before the goal is done."
+REPLAN_HINT = (
+    "Plan a new path while driving, when the path ahead is blocked "
+    "or the robot strays from it."
+)
+ESTIMATOR_HINT = (
+    "Where the controller's pose comes from: "
+    "the true pose, or dead reckoning from the wheels."
+)
+CONTROL_POSE_HINT = (
+    "estimate: the controller sees the estimator's pose. truth: it sees the true pose."
+)
 # The replanning settings the form shows, each with how its field takes a number.
 REPLAN_FIELDS = {
     "period": ("period", NumberSpec(0.05, 60.0, 0.1, 2, " s")),
     "off_path": ("off path", NumberSpec(0.0, 100.0, 0.1, 2, " m")),
 }
+
+
+_REPLAN_HELP = options.described(ReplanSpec)
 
 
 class RobotForm(FormBase):
@@ -53,6 +80,7 @@ class RobotForm(FormBase):
             ["circle", "box"],
             shape.name,
             lambda kind: self._body_kind(name, kind),
+            "The robot's outline, which decides what it bumps into.",
         )
         if shape.name == "circle":
             self.number(
@@ -100,6 +128,7 @@ class RobotForm(FormBase):
             lambda on: self._robot_edit(
                 name, lambda w: edit.set_replan(w, name, True if on else None)
             ),
+            REPLAN_HINT,
         )
         if spec.replan is None:
             return
@@ -110,6 +139,7 @@ class RobotForm(FormBase):
                 getattr(spec.replan, field),
                 number_spec,
                 lambda: self._replan_edited(name),
+                _REPLAN_HELP.get(field),
             )
 
     def _replan_edited(self, name: str) -> None:
@@ -133,6 +163,7 @@ class RobotForm(FormBase):
             lambda text: self._robot_edit(
                 name, lambda w: edit.set_estimator(w, name, text)
             ),
+            ESTIMATOR_HINT,
         )
         self.choice(
             "control_pose",
@@ -142,10 +173,9 @@ class RobotForm(FormBase):
             lambda text: self._robot_edit(
                 name, lambda w: edit.set_control_pose(w, name, text)
             ),
+            CONTROL_POSE_HINT,
         )
         self.column.add(Section("Sensors"))
-        for sensor, settings in spec.sensors.items():
-            self.sensor(name, sensor, settings)
         kinds = {s.get("type", n) for n, s in spec.sensors.items()}
         if "encoders" not in kinds:
             self.button(
@@ -154,6 +184,8 @@ class RobotForm(FormBase):
                 lambda: self._add_sensor(spec, "encoders"),
             )
         self.button("add_lidar", "Add lidar", lambda: self._add_sensor(spec, "lidar"))
+        for sensor, settings in spec.sensors.items():
+            self.sensor(name, sensor, settings)
 
     def _add_sensor(self, spec, kind: str) -> None:
         """Add a sensor of a kind under a name no other sensor has."""
@@ -242,6 +274,7 @@ class RobotForm(FormBase):
             ("x", "y", "heading"),
             goal,
             lambda: self._goal_edited(name, k, place),
+            GOAL_HINT,
         )
 
     def _goal_block(self, name: str, k: int, place: int) -> None:
@@ -257,6 +290,7 @@ class RobotForm(FormBase):
             task.goal_tolerance[0],
             NumberSpec(0.01, 10.0, 0.01, 2, " m"),
             change,
+            TOLERANCE_HINT,
         )
         self.number(
             f"tol{k}a",
@@ -264,13 +298,24 @@ class RobotForm(FormBase):
             math.degrees(task.goal_tolerance[1]),
             NumberSpec(0.1, 180.0, 1, 1, " °"),
             change,
+            ANGLE_HINT,
         )
         current = next(k_ for k_, v in STOP_CHOICES.items() if v is task.stop)
         self.choice(
-            f"stop{k}", "stop at goal", list(STOP_CHOICES), current, lambda _t: change()
+            f"stop{k}",
+            "stop at goal",
+            list(STOP_CHOICES),
+            current,
+            lambda _t: change(),
+            STOP_HINT,
         )
         self.number(
-            f"wait{k}", "wait", task.wait, NumberSpec(0.0, 3600.0, 0.5, 2, " s"), change
+            f"wait{k}",
+            "wait",
+            task.wait,
+            NumberSpec(0.0, 3600.0, 0.5, 2, " s"),
+            change,
+            WAIT_HINT,
         )
         self.button(
             f"remove{k}",

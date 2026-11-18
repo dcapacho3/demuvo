@@ -474,6 +474,17 @@ def test_a_tooltip_is_drawn_inside_the_window(toy):
     assert frame[int(y) + 3, int(x), :].sum() < 3 * 120
 
 
+def test_a_long_tooltip_wraps_to_several_lines_inside_the_window(toy):
+    """Each line is no wider than the limit, and the box grows with the lines."""
+    two, pointer = toy.program.two, toy.input.pointer
+    two.tooltip = "a long sentence of help text " * 12
+    toy.mouse_move(*centre(two))
+    toy.tick(pointer.since + 1.0)
+    frame = toy.render().astype(int)
+    _, x, y = pointer.tip
+    assert frame[int(y) + 50, int(x), :].sum() < 3 * 120  # a third line is dark too
+
+
 def test_a_message_shows_in_the_status_bar_and_returns_to_the_default(toy):
     """After its time the default text is back."""
     status = toy.layout.chrome.status

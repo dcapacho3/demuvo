@@ -41,14 +41,20 @@ class FormBase:
 
         return guarded
 
-    def number(self, key: str, label: str, value: float, spec: NumberSpec, change):
-        """A labelled number field; `change` is called with no argument."""
+    def number(
+        self, key: str, label: str, value: float, spec: NumberSpec, change, hint=None
+    ):
+        """A labelled number field; `change` is called with no argument.
+
+        `hint` is shown after a pause over the field.
+        """
         change = self._only_when_editable(change)
         field = Spin(value, spec, on_change=lambda _v: change())
+        field.tooltip = hint
         self.fields[key] = field
         self.column.add(FormRow(label, field))
 
-    def pose_triple(self, keys, labels, pose, change) -> None:
+    def pose_triple(self, keys, labels, pose, change, hint=None) -> None:
         """Three number rows for a pose - x and y in metres, the angle in degrees."""
         x0, y0, x1, y1 = self.session.world.bounds
         rows = (
@@ -57,17 +63,21 @@ class FormBase:
             (math.degrees(pose[2]), NumberSpec(-180, 180, 5, 2, " °")),
         )
         for key, label, (value, spec) in zip(keys, labels, rows):
-            self.number(key, label, value, spec, change)
+            self.number(key, label, value, spec, change, hint)
 
-    def choice(self, key: str, label: str, items: list[str], current: str, change):
+    def choice(
+        self, key: str, label: str, items: list[str], current: str, change, hint=None
+    ):
         """A labelled drop-down; `change` is called with the chosen text."""
         field = Combo(items, current, on_change=self._only_when_editable(change))
+        field.tooltip = hint
         self.fields[key] = field
         self.column.add(FormRow(label, field))
 
-    def switch(self, key: str, label: str, on: bool, change):
+    def switch(self, key: str, label: str, on: bool, change, hint=None):
         """A labelled check box; `change` is called with the new state."""
         field = Checkbox("", on, self._only_when_editable(change), states=("off", "on"))
+        field.tooltip = hint
         self.fields[key] = field
         self.column.add(FormRow(label, field))
 

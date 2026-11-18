@@ -2,12 +2,13 @@
 
 from dataclasses import dataclass, field
 from importlib.metadata import EntryPoint
+from pathlib import Path
 
 import pytest
 
 from demuvo import options
 from demuvo.options import Setting
-from demuvo.world import WorldError
+from demuvo.world import WorldError, load_world
 
 
 def join(monkeypatch, group, name, value):
@@ -96,7 +97,9 @@ def test_the_settings_of_a_model_come_with_their_defaults():
     """The diff drive takes four numbers."""
     settings = {s.name: s for s in options.model_settings("diff_drive")}
     assert set(settings) == {"max_v", "max_w", "wheel_radius", "track"}
-    assert settings["max_v"] == Setting("max_v", float, 1.0)
+    assert settings["max_v"] == Setting(
+        "max_v", float, 1.0, "largest forward speed in m/s, in either direction."
+    )
 
 
 def test_the_settings_of_a_controller_have_a_kind_each():
@@ -193,3 +196,36 @@ class Reaching:
 def test_field_names_of_a_plain_class_are_its_arguments():
     """A motion that is not a dataclass is read from its constructor."""
     assert options.field_names("tests.test_options:Reaching") == ("reach", "points")
+
+
+def test_each_setting_carries_its_first_sentence_from_the_docstring():
+    """A form shows it after a pause; a continued line is joined to its setting."""
+    notes = {s.name: s.help for s in options.settings_of("demuvo.controllers:DWB")}
+    assert notes["max_vel_x"] == "largest forward speed in m/s."
+    assert notes["allow_reversing"].startswith("lets it back up")
+    assert all(notes.values())
+
+
+def test_a_class_with_no_documented_settings_describes_none():
+    """No Attributes or Args section gives an empty table."""
+
+    class Plain:
+        """Nothing documented."""
+
+    assert options.described(Plain) == {}
+    assert options.summary(None) == ""
+    assert options.summary("demuvo.planners:AStar").startswith("The cheapest path")
+
+
+def test_the_summary_of_a_choice_is_the_first_sentence_of_the_chosen_class():
+    """A model, a planner left at its default, and a part left empty."""
+    path = (
+        Path(__file__).resolve().parents[1] / "examples" / "worlds" / "ackermann.toml"
+    )
+    spec = next(iter(load_world(path).robots))
+    tables = {}
+    assert options.summary_of_choice("model", spec, tables).startswith(
+        "A car-like robot"
+    )
+    assert options.summary_of_choice("planner", spec, tables).startswith("The shortest")
+    assert options.summary_of_choice("smoother", spec, tables) == ""

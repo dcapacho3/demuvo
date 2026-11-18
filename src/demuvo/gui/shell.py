@@ -36,6 +36,8 @@ LEFT_W, RIGHT_W, BOTTOM_H = 248, 312, 170
 DOCK_LIMITS = {"left": (160, 520), "right": (200, 560), "bottom": (80, 480)}
 # The scene keeps at least this many pixels across; the panels give way.
 SCENE_MIN = 240
+# The widest a line of a tooltip may be, in pixels.
+TOOLTIP_WIDTH = 300
 # A tooltip shows after the pointer rests this long, in seconds.
 TOOLTIP_DELAY = 0.5
 # A drawn widget's dirty box grows by this many pixels each side, for shadows and rings.
@@ -775,10 +777,10 @@ class Input:
                 hovered.y + hovered.height + 8,
             )
             pointer.tip_box = (
-                int(hovered.x) - 150,
+                int(hovered.x) - 170,
                 int(hovered.y),
-                int(hovered.x + hovered.width) + 150,
-                int(hovered.y + hovered.height) + 44,
+                int(hovered.x + hovered.width) + 170,
+                int(hovered.y + hovered.height) + 130,
             )
             self.shell.screen.damage.add(pointer.tip_box)
 
@@ -943,13 +945,24 @@ class Shell:
         if tip:
             text, center, y = tip
             face = font.regular()
-            width = face.width(text, 12) + 16
+            lines, line = [], ""
+            for word in text.split():
+                trial = (line + " " + word).strip()
+                if line and face.width(trial, 12) > TOOLTIP_WIDTH:
+                    lines.append(line)
+                    line = word
+                else:
+                    line = trial
+            lines = [*lines, line]
+            width = max(face.width(t, 12) for t in lines) + 16
+            height = 8 + 18 * len(lines)
             x = min(max(center - width / 2, 4), canvas.width - width - 4)
-            canvas.rect((x, y, width, 26), rgba(look.NAVY), radius=4)
-            canvas.text(
-                face,
-                text,
-                (x + 8, text_baseline(y, 26, 12)),
-                size=12,
-                color=rgba("#ffffff"),
-            )
+            canvas.rect((x, y, width, height), rgba(look.NAVY), radius=4)
+            for i, row in enumerate(lines):
+                canvas.text(
+                    face,
+                    row,
+                    (x + 8, text_baseline(y + 4 + 18 * i, 18, 12)),
+                    size=12,
+                    color=rgba("#ffffff"),
+                )

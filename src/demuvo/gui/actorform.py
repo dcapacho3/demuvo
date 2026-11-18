@@ -30,6 +30,8 @@ WHAT = (
 # The section that shows the waypoints, and how far a new one is put, in metres.
 FOLD = "waypoints"
 WAYPOINT_STEP = 0.5
+POSE_HINT = "Where the actor starts. The heading is in degrees; 0 faces along +x."
+SIZE_HINT = "The size of the actor, which decides what it bumps into."
 TURN_HINT = "On, it turns to this heading while it stands at the point."
 NO_MOTION_SETTINGS = "This motion has nothing to set here."
 # What each flag means, in the order they are shown.
@@ -70,11 +72,15 @@ class ActorForm(FormBase):
         self.column.add(Section("Pose"))
         pose = tuple(float(v) for v in self.session.scene.actor_pose(index))
         self.pose_triple(
-            ("ax", "ay", "ath"), ("x", "y", "heading"), pose, self._pose_edited
+            ("ax", "ay", "ath"),
+            ("x", "y", "heading"),
+            pose,
+            self._pose_edited,
+            POSE_HINT,
         )
         self.column.add(Section("Body"))
         self._size_rows(spec.shape)
-        self.column.add(Section("Meets"))
+        self.column.add(Section("Collisions"))
         for key, label, hint in FLAGS:
             self.switch(
                 f"actor_{key}",
@@ -89,10 +95,16 @@ class ActorForm(FormBase):
         """The radius of a disc, or the length and width of a box."""
         spec = NumberSpec(0.05, MAX_SIZE, 0.05, 2, " m")
         if isinstance(shape, Circle):
-            self.number("asize0", "radius", shape.radius, spec, self._size_edited)
+            self.number(
+                "asize0", "radius", shape.radius, spec, self._size_edited, SIZE_HINT
+            )
         else:
-            self.number("asize0", "length", shape.size[0], spec, self._size_edited)
-            self.number("asize1", "width", shape.size[1], spec, self._size_edited)
+            self.number(
+                "asize0", "length", shape.size[0], spec, self._size_edited, SIZE_HINT
+            )
+            self.number(
+                "asize1", "width", shape.size[1], spec, self._size_edited, SIZE_HINT
+            )
 
     def _motion(self, spec) -> None:
         """The motion drop-down, then a field for each of its settings."""
@@ -104,10 +116,12 @@ class ActorForm(FormBase):
             list(table),
             options.label_of(table, spec.motion),
             lambda text: self._motion_chosen(table, text),
+            options.summary(spec.motion) or "How the actor moves, if it does.",
         )
         if spec.motion is None:
             return
         choices = options.choices_of(spec.motion)
+        notes = options.described(options.class_of(spec.motion))
         known = options.settings_of(spec.motion)
         if not known and not choices:
             self.column.add(Label(NO_MOTION_SETTINGS, 12, look.MUTED, wrap=True))
@@ -120,6 +134,7 @@ class ActorForm(FormBase):
                 list(words),
                 current,
                 lambda text, k=name: self._word_edited(k, text),
+                notes.get(name),
             )
         for setting in known:
             value = spec.motion_params.get(setting.name, setting.default)
@@ -172,7 +187,9 @@ class ActorForm(FormBase):
             self._points_edited,
         )
         turns = len(point) > 3
-        self.switch(f"wp{k}turn", "faces", turns, lambda _on: self._points_edited())
+        self.switch(
+            f"wp{k}turn", "face heading", turns, lambda _on: self._points_edited()
+        )
         self.column.add(Label(TURN_HINT, 11, look.MUTED, wrap=True))
         if turns:
             self.number(
@@ -215,15 +232,18 @@ class ActorForm(FormBase):
         """A row for one motion setting: a switch, a whole number or a number."""
         key = f"motion.{setting.name}"
         label = setting.name.replace("_", " ")
+        hint = setting.help or None
         if setting.kind is bool:
-            self.switch(key, label, bool(value), lambda _on: self._settings_edited())
+            self.switch(
+                key, label, bool(value), lambda _on: self._settings_edited(), hint
+            )
         elif setting.kind is int:
             spec = NumberSpec(0, SETTING_MAX, 1, 0, "", True)
-            self.number(key, label, int(value), spec, self._settings_edited)
+            self.number(key, label, int(value), spec, self._settings_edited, hint)
         else:
             step = max(0.01, round(abs(float(setting.default)) / 10, 3))
             spec = NumberSpec(0.0, SETTING_MAX, step, 3)
-            self.number(key, label, float(value), spec, self._settings_edited)
+            self.number(key, label, float(value), spec, self._settings_edited, hint)
         self.settings[setting.name] = self.fields[key]
 
     # -- edits --
