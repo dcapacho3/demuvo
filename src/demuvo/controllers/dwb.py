@@ -38,10 +38,16 @@ and the turn on the spot at the goal is skipped. With `allow_reversing` such a
 robot may also back up, and the path angle critic then counts facing away from its
 aim as good as facing it, so a reverse trajectory toward the path is not punished.
 A robot that can turn in place is driven as before.
+
+A car follows a path that changes direction, as a Reeds-Shepp path does, one run at
+a time: the path is cut to the run, only speeds in the run's direction are sampled,
+and the local goal is the run's end. Near the path a heading critic also keeps the
+car facing as the path does, which lands it on the goal's angle.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import heapq
 import logging
 import math
@@ -55,9 +61,11 @@ from ..costmap import INSCRIBED, MAX_NON_OBSTACLE, Costmap
 from ..models import Twist
 from ..paths import along_path
 from ..plugins import check_not_negative, check_positive
-from .base import Observation, car_limits
+from .base import Observation, car_limits, pass_runs, path_runs
 
 LOGGER = logging.getLogger(__name__)
+# How many times the path angle weight the heading critic counts, near the path.
+HEADING_WEIGHT = 3.0
 # Extra metres round the path of the blank grid a robot with no local costmap uses.
 _BLANK_MARGIN = 2.0
 _BLANK_RESOLUTION = 0.05
@@ -104,7 +112,8 @@ class DWB:
 
     Attributes:
         max_vel_x: largest forward speed in m/s.
-        allow_reversing: lets it back up, at up to `max_vel_x`.
+        allow_reversing: lets it back up, at up to `max_vel_x`, on a path with no
+            cusp; a path that backs is followed without it.
         max_vel_theta: largest turn rate in rad/s, either way.
         acc_lim_x: forward acceleration limit in m/s^2.
         acc_lim_theta: turn acceleration limit in rad/s^2.
@@ -175,6 +184,8 @@ class DWB:
         default=None, init=False, repr=False, compare=False
     )
     _stuck_on: int = field(default=-1, init=False, repr=False, compare=False)
+    _run: int = field(default=0, init=False, repr=False, compare=False)
+    _changes: int = field(default=-1, init=False, repr=False, compare=False)
 
     @property
     def min_vel_x(self) -> float:
@@ -226,17 +237,20 @@ class DWB:
         xy_tolerance, yaw_tolerance = obs.goal_tolerance
         to_goal = math.hypot(gx - x, gy - y)
         car = car_limits(obs)
-        if to_goal <= xy_tolerance:
+        obs, sign, last = self._run_of(obs, car)
+        if to_goal <= xy_tolerance and last:
             if car is None:
                 return self._keep(self._turn_to_goal(gyaw - yaw, yaw_tolerance))
             # A car arrives at the goal's angle or not at all, so it finishes
             # its path instead of stopping at the first touch of the tolerance,
             # which on an arc would leave the last of the turn undriven. Once
             # the angle is met, or the goal is behind it, it stops where it is.
-            behind = (gx - x) * math.cos(yaw) + (gy - y) * math.sin(yaw) <= 0.0
+            behind = (sign or 1.0) * (
+                (gx - x) * math.cos(yaw) + (gy - y) * math.sin(yaw)
+            ) <= 0.0
             if abs(float(wrap_angle(gyaw - yaw))) <= yaw_tolerance or behind:
                 return self._keep(Twist())
-        vx, wz = self._window(obs.dt)
+        vx, wz = self._window(obs.dt, sign)
         if car is not None:
             # Project the window onto the steering cone: a sample the model would
             # clip is scored as what the model would drive instead.
@@ -244,7 +258,9 @@ class DWB:
             wz = np.clip(wz, -bound, bound)
         poses = rollout(obs.pose.xyt, vx, wz, self.sim_time, self.time_granularity)
         reach = self.max_vel_x * self.sim_time + self.forward_point_distance
-        scores = self._score(poses, obs, align=to_goal > reach, car=car is not None)
+        scores = self._score(
+            poses, obs, align=to_goal > reach, car=car is not None, sign=sign
+        )
         still = (np.abs(vx) < 1e-9) & (np.abs(wz) < 1e-9)
         scores[still] = np.inf  # standing still gets nowhere
         if car is not None:
@@ -264,16 +280,54 @@ class DWB:
             return self._keep(Twist())
         return self._keep(Twist(vx=float(vx[best]), wz=float(wz[best])))
 
+    def _run_of(self, obs: Observation, car) -> tuple[Observation, float | None, bool]:
+        """The observation of the run being followed, its direction and if it is last.
+
+        A car follows a path that changes direction one run at a time: the path
+        is cut to the run, which the window then drives only forwards or only
+        backwards. A path that only goes forward, or any path for a robot that turns in
+        place, is followed whole, with no direction, as before.
+        """
+        if obs.path_changes != self._changes:
+            self._run, self._changes = 0, obs.path_changes
+        runs = path_runs(obs.path)
+        if car is None or runs == [(0, len(obs.path), 1.0)]:
+            return obs, None, True
+        local = obs.pose.inverse() @ obs.path[:, :2]
+        now = pass_runs(runs, self._run, local, self.forward_point_distance)
+        if now != self._run:
+            self._run = now
+            self._last = Twist()  # the car stops at a cusp
+        start, stop, sign = runs[now]
+        cut = dataclasses.replace(
+            obs,
+            path=obs.path[start:stop],
+            path_changes=obs.path_changes * len(runs) + now,
+        )
+        return cut, sign, now == len(runs) - 1
+
     def _keep(self, command: Twist) -> Twist:
         """Remember the command as the robot's speed for the next window."""
         self._last = command
         return command
 
-    def _window(self, dt: float) -> tuple[np.ndarray, np.ndarray]:
-        """Every (vx, wz) pair reachable in dt from the last command, flat."""
+    def _window(
+        self, dt: float, sign: float | None = None
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Every (vx, wz) pair reachable in dt from the last command, flat.
+
+        `sign` is the direction of the run being followed, +1 or -1, which keeps
+        the speeds to that side of zero; None leaves both open.
+        """
         v0, w0 = self._last.vx, self._last.wz
-        v_low = max(self.min_vel_x, v0 - self.acc_lim_x * dt)
+        # A run backwards is driven backwards whether or not `allow_reversing` is on.
+        floor = -self.max_vel_x if sign is not None and sign < 0 else self.min_vel_x
+        v_low = max(floor, v0 - self.acc_lim_x * dt)
         v_high = min(self.max_vel_x, v0 + self.acc_lim_x * dt)
+        if sign is not None:
+            v_low, v_high = (
+                (max(v_low, 0.0), v_high) if sign > 0 else (v_low, min(v_high, 0.0))
+            )
         w_low = max(-self.max_vel_theta, w0 - self.acc_lim_theta * dt)
         w_high = min(self.max_vel_theta, w0 + self.acc_lim_theta * dt)
         vs = np.linspace(v_low, v_high, self.vx_samples)
@@ -318,11 +372,18 @@ class DWB:
         return maps
 
     def _score(
-        self, poses: np.ndarray, obs: Observation, align: bool, car: bool = False
+        self,
+        poses: np.ndarray,
+        obs: Observation,
+        align: bool,
+        car: bool = False,
+        sign: float | None = None,
     ) -> np.ndarray:
         """The total of the critics for each trajectory; inf if it is thrown out.
 
         `car` adds the path angle critic, for a robot that cannot turn in place.
+        `sign` is the direction of the run being driven, if it has one: the
+        critics then face along it, or against it for a run backwards.
         """
         maps = self._grids(obs)
         nearest = int(np.argmin(np.hypot(*(maps.points - obs.pose.translation).T)))
@@ -332,13 +393,28 @@ class DWB:
             reach = self.max_vel_x * self.sim_time + self.forward_point_distance
             aim = self._aim(maps, nearest, reach)
             to_aim = np.arctan2(aim[1] - end[:, 1], aim[0] - end[:, 0])
+            if sign is not None:
+                to_aim = to_aim + (math.pi if sign < 0 else 0.0)
             error = np.abs(wrap_angle(to_aim - poses[:, -1, 2]))
-            if self.min_vel_x < 0.0:
+            if sign is None and self.allow_reversing:
                 # The robot may back up, so facing away from the aim is as
                 # good as facing it, as MPPI's PathAngle critic allows a car.
                 error = np.minimum(error, math.pi - error)
             total = self.path_angle_scale * error
-        ahead = end + self.forward_point_distance * np.column_stack(
+            # Near the path, face as it does: its headings end at the goal's angle,
+            # so this lands the car there. Where it may back up on a path with no
+            # cusp, facing against the path is as good as facing along it.
+            apart = end[:, None, :] - obs.path[None, :, :2]
+            gap = np.hypot(apart[..., 0], apart[..., 1])
+            near = np.argmin(gap, axis=1)
+            along = np.abs(wrap_angle(obs.path[near, 2] - poses[:, -1, 2]))
+            if sign is None and self.allow_reversing:
+                along = np.minimum(along, math.pi - along)
+            closeness = np.clip(
+                1.0 - gap.min(axis=1) / self.forward_point_distance, 0.0, 1.0
+            )
+            total = total + HEADING_WEIGHT * self.path_angle_scale * closeness * along
+        ahead = end + (sign or 1.0) * self.forward_point_distance * np.column_stack(
             [np.cos(poses[:, -1, 2]), np.sin(poses[:, -1, 2])]
         )
         if maps.blocked[nearest:].any():

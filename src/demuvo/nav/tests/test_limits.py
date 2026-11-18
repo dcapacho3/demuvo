@@ -151,3 +151,14 @@ def test_the_reeds_shepp_example_parks_the_car():
 
     run = Run(load_world(PARKING))
     assert run.until_done(90.0)
+
+
+def test_dwb_follows_the_same_parking_world_cusp_by_cusp():
+    """DWB drives each run in its own direction and lands on every goal angle."""
+    from demuvo import Run  # pylint: disable=import-outside-toplevel
+
+    path = PARKING.with_name("reeds_shepp_dwb.toml")
+    run = Run(load_world(path))
+    assert run.until_done(120.0)
+    assert run.result()[-1] == "0 collisions"
+    assert all("reached" in line for line in run.result()[:3])

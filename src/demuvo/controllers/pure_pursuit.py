@@ -11,7 +11,7 @@ from robomath import Transform2D, wrap_angle
 
 from ..models import Limits, Twist
 from ..plugins import check_positive
-from .base import Observation, car_limits
+from .base import Observation, car_limits, pass_runs, path_runs
 
 
 @dataclass
@@ -106,7 +106,7 @@ class PurePursuit:
         distance = float(np.hypot(*(to_robot @ obs.goal.translation)))
         xy_tolerance, yaw_tolerance = obs.goal_tolerance
         car = car_limits(obs)
-        reverses = self.allow_reversing or any(s < 0.0 for *_, s in _runs(obs.path))
+        reverses = self.allow_reversing or any(s < 0.0 for *_, s in path_runs(obs.path))
         if distance <= xy_tolerance:
             if car is None:
                 return self._turn_to_goal(obs, yaw_tolerance)
@@ -165,16 +165,9 @@ class PurePursuit:
         """Follow the current run of the path in its direction; see the class note."""
         if obs.path_changes != self._changes:
             self._run, self._changes = 0, obs.path_changes
-        runs = _runs(obs.path)
+        runs = path_runs(obs.path)
         local = to_robot @ obs.path[:, :2]
-        while self._run < len(runs) - 1:
-            start, stop, sign = runs[self._run]
-            end_x, end_y = local[stop - 1]
-            # The run is done once its last point is passed, close by.
-            if math.hypot(end_x, end_y) <= self.lookahead and sign * end_x <= 0.0:
-                self._run += 1
-            else:
-                break
+        self._run = pass_runs(runs, self._run, local, self.lookahead)
         start, stop, sign = runs[self._run]
         if self._run == len(runs) - 1 and distance <= obs.goal_tolerance[0]:
             # On the last run and at the goal: stop once it is passed in the
@@ -231,25 +224,3 @@ class PurePursuit:
         if abs(error) <= tolerance:
             return Twist()
         return Twist(wz=self._turn(error))
-
-
-def _runs(path: np.ndarray) -> list[tuple[int, int, float]]:
-    """The path split where its direction of travel changes.
-
-    A point moves forward if its heading agrees with the step to the next
-    point, backward if not; the last point moves as the one before it. Each run
-    is (first index, one past the last index, +1.0 or -1.0). A path of one
-    point is one forward run.
-    """
-    if len(path) < 2:
-        return [(0, len(path), 1.0)]
-    step = np.diff(path[:, :2], axis=0)
-    along = np.cos(path[:-1, 2]) * step[:, 0] + np.sin(path[:-1, 2]) * step[:, 1]
-    signs = np.where(along < 0.0, -1.0, 1.0)
-    runs, start = [], 0
-    for i in range(1, len(signs)):
-        if signs[i] != signs[start]:
-            runs.append((start, i + 1, float(signs[start])))
-            start = i
-    runs.append((start, len(path), float(signs[start])))
-    return runs

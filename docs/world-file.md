@@ -168,8 +168,7 @@ the costmap. `ReedsShepp` (`demuvo.planners:ReedsShepp`) is Dubins for a car tha
 back up: the shortest such path when the car can also drive in reverse, so a goal just
 behind it is reached by backing up instead of by a loop. It has the same settings. The
 path changes direction at its cusps, so the robot needs a controller that reverses:
-`PurePursuit`, which follows the cusps. `DWB` with `allow_reversing` backs up but does
-not follow them. A robot that
+`PurePursuit`, which follows the cusps. `DWB` does too. A robot that
 cannot turn in place warns at the start of a run if its planner does not bound curvature,
 as `StraightLine` and `AStar` do not.
 
@@ -233,9 +232,11 @@ loosely than pure pursuit, so a car it drives meets a goal angle only within 0.3
 so; give such a goal a tolerance to match, or the car `PurePursuit` with a short
 `lookahead`, as `examples/worlds/ackermann.toml` does. `allow_reversing` lets a car
 back up too: the path angle critic then counts facing away from its aim as good as
-facing it, so backing toward the path costs nothing extra. DWB does not follow a
-change of direction along the path, so a `ReedsShepp` path with a cusp needs
-`PurePursuit`, which follows the path run by run. A trajectory that leaves the local costmap is thrown out, so the window
+facing it, so backing toward the path costs nothing extra. A path that changes
+direction, as a `ReedsShepp` path does at a cusp, is followed one run at a time: DWB
+samples only speeds in the run's direction, aims at the run's end, and near the path
+keeps the car facing as the path does, which lands it on the goal's angle
+(`examples/worlds/reeds_shepp_dwb.toml`). A trajectory that leaves the local costmap is thrown out, so the window
 should hold `max_vel_x * sim_time + forward_point_distance` each way: 0.825 m with the
 defaults, inside the default 1.5 m. A robot with no lidar follows its path with no
 obstacle check. If no trajectory that moves is free, the robot stops until one is, and

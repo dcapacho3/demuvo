@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -73,3 +74,47 @@ def car_limits(obs: Observation) -> Limits | None:
     if limits is None or limits.turns_in_place:
         return None
     return limits
+
+
+def path_runs(path: np.ndarray) -> list[tuple[int, int, float]]:
+    """The path split where its direction of travel changes.
+
+    A point moves forward if its heading agrees with the step to the next
+    point, backward if not; the last point moves as the one before it. Each run
+    is (first index, one past the last index, +1.0 or -1.0). A path of one
+    point is one forward run.
+    """
+    if len(path) < 2:
+        return [(0, len(path), 1.0)]
+    step = np.diff(path[:, :2], axis=0)
+    along = np.cos(path[:-1, 2]) * step[:, 0] + np.sin(path[:-1, 2]) * step[:, 1]
+    signs = np.where(along < 0.0, -1.0, 1.0)
+    runs, start = [], 0
+    for i in range(1, len(signs)):
+        if signs[i] != signs[start]:
+            runs.append((start, i + 1, float(signs[start])))
+            start = i
+    runs.append((start, len(path), float(signs[start])))
+    return runs
+
+
+def pass_runs(
+    runs: list[tuple[int, int, float]], run: int, local: np.ndarray, near: float
+) -> int:
+    """The first run, from `run` on, whose end the robot has not yet passed.
+
+    Args:
+        runs: the runs of the path, from `path_runs`.
+        run: the run being followed.
+        local: the path's points in the robot's frame.
+        near: how close, in metres, to the end of a run counts as at it.
+    """
+    while run < len(runs) - 1:
+        _, stop, sign = runs[run]
+        end_x, end_y = local[stop - 1]
+        # A run is done once its last point is passed, close by.
+        if math.hypot(end_x, end_y) <= near and sign * end_x <= 0.0:
+            run += 1
+        else:
+            break
+    return run
