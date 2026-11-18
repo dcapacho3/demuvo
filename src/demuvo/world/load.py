@@ -605,8 +605,6 @@ def load_world(path: str | Path) -> World:
         _parse_robot(item, i, bounds, names)
         for i, item in enumerate(items(data, "robot"), start=1)
     )
-    if not robots:
-        raise WorldError("file: needs at least one [[robot]]")
 
     actor_defaults = _parse_actor_defaults(data.get("actors", {}))
     actors = tuple(

@@ -76,7 +76,7 @@ class Session:
         self.mode = mode
         self.log = LogBuffer()
         self._release = capture(self.log) if keep_messages else None
-        world = edit.new_world() if source is None else source
+        world = edit.empty_world() if source is None else source
         self.run = RemoteRun(world) if remote else Run(world)
         self.scene = SceneDraw(self.run)
         self._seen = 0.0
@@ -236,10 +236,7 @@ class Session:
         name = self.scene.selected
         if (why := self.guard()) is not None or name is None:
             return why
-        try:
-            world = edit.remove_robot(self.world, name)
-        except WorldError as error:
-            return REFUSED.format(error)
+        world = edit.remove_robot(self.world, name)
         return self.apply(world, rebuild=True, select="")
 
     def move_robot(self, name: str, pose: tuple[float, float, float]) -> str | None:

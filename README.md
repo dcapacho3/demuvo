@@ -40,7 +40,7 @@ demuvo [world.toml] [options]
 
 | Option | Meaning |
 | --- | --- |
-| *(no file)* | open the sandbox with a blank world |
+| *(no file)* | open the sandbox with an empty world |
 | `world.toml` | open the sandbox with that world |
 | `--bench` | open the world fixed, as a benchmark: every run is the same |
 | `--check` | check the file, print a summary, open nothing |

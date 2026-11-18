@@ -13,8 +13,9 @@ demuvo examples/worlds/demo.toml      # open a world file
 demuvo examples/worlds/demo.toml --bench   # the same world, fixed
 ```
 
-A blank world is 10 by 6 metres with one robot, `r1`, in the middle. The world needs at
-least one robot, so the last one cannot be deleted.
+A blank world is 10 by 6 metres and empty, like an empty Gazebo world: no obstacles,
+actors or robots. Add a robot with the robot tool, then give it a goal. Any robot can be
+deleted, the last one too.
 
 ## Two modes
 

@@ -253,9 +253,14 @@ class SceneDraw:
         self._cutout.keep = (world.obstacles, world.tasks)
         return alphas, key
 
+    def _first_costmap(self):
+        """The global costmap of the first robot, or None if there is no robot."""
+        robots = self.world.robots
+        return self.run.sim.costmaps[robots[0].name] if robots else None
+
     def _costmap_key(self) -> tuple | None:
         """What the drawn global costmap holds, so an equal one is not drawn again."""
-        costmap = self.run.sim.costmaps[self.world.robots[0].name]
+        costmap = self._first_costmap()
         if costmap is None:
             return None
         return (hash(costmap.data.tobytes()), costmap.resolution, tuple(costmap.origin))
@@ -323,7 +328,7 @@ class SceneDraw:
 
     def _costmap(self, canvas: Canvas, view: View, opacity: float) -> None:
         """The global costmap of the first robot, if the world has one."""
-        costmap = self.run.sim.costmaps[self.world.robots[0].name]
+        costmap = self._first_costmap()
         if costmap is not None:
             self._picture(
                 canvas,

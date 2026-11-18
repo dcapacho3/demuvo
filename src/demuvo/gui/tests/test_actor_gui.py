@@ -56,7 +56,7 @@ COUNTED = "demuvo.gui.tests.test_actor_gui:Counted"
 
 def start(session=None, width=1280, height=780):
     """A shell over a sandbox program, rendered once."""
-    program = Sandbox(session or Session())
+    program = Sandbox(session or Session(edit.new_world()))
     window = Shell(program, width, height)
     window.render()
     return window, program
@@ -358,7 +358,7 @@ def test_an_actor_route_is_a_layer_and_is_drawn_numbered():
     """The route shows with the actor, and turning its layer off hides it."""
     from demuvo.gui.raster import Canvas
 
-    session = Session()
+    session = Session(edit.new_world())
     session.add_actor()
     session.edits.set_actor_motion(0, "demuvo.actors:Waypoints")
     session.edits.set_actor_motion_params(0, {"points": [[7.0, 1.0], [7.0, 5.0]]})

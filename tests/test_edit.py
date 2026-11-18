@@ -101,10 +101,9 @@ def test_a_robot_is_removed_with_its_goals(world):
     assert [t.robot for t in world.tasks] == ["r2"]
 
 
-def test_the_last_robot_cannot_be_removed(world):
-    """A world needs one."""
-    with pytest.raises(WorldError, match="only robot"):
-        edit.remove_robot(world, "r1")
+def test_the_last_robot_can_be_removed_leaving_an_empty_world(world):
+    """A world may have no robot."""
+    assert not edit.remove_robot(world, "r1").robots
 
 
 def test_a_robot_is_moved(world):

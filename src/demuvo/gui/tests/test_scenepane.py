@@ -76,7 +76,7 @@ class Actions:
 
 def build(session=None):
     """A pane over a blank sandbox, placed in a 700 by 500 area."""
-    session = session or Session()
+    session = session or Session(edit.new_world())
     actions = Actions(session)
     pill = Pill(print, print, print, print)
     pane = ScenePane(session, pill, actions)

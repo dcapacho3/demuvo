@@ -19,7 +19,7 @@ from .fakes import EXAMPLES
 
 def start(session=None, width=1280, height=780):
     """A shell over a sandbox program, rendered once."""
-    program = Sandbox(session or Session())
+    program = Sandbox(session or Session(edit.new_world()))
     window = Shell(program, width, height)
     window.render()
     return window, program
@@ -107,12 +107,13 @@ def test_the_add_button_adds_a_robot_and_selects_it_and_the_count_follows(app):
     assert [row.text for row in program.tree.rows][:3] == ["Robots (2)", "r1", "r2"]
 
 
-def test_delete_removes_the_selected_robot_and_the_last_one_is_kept_with_a_message(app):
-    """Delete key on the only robot says why not; with two, one goes."""
+def test_delete_removes_the_selected_robot_even_the_last_one(app):
+    """Delete key on the only robot leaves an empty world; then two are added."""
     window, program = app
     program.select("r1")
     press_key(window, "delete")
-    assert window.layout.chrome.status.message.startswith("That change cannot be made")
+    assert not program.session.world.robots
+    click(window, program.buttons["add"])
     click(window, program.buttons["add"])
     program.select("r1")
     click(window, program.buttons["delete"])

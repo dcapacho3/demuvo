@@ -67,14 +67,13 @@ def test_the_shapes_that_stand_on_the_floor_become_obstacles(world_file):
     assert data["obstacle"][2]["shape"]["radius"] == 0.3
 
 
-def test_the_world_is_sized_round_the_shapes_with_a_robot_in_the_corner(world_file):
-    """A margin of whole metres, and the robot in the lower left corner."""
+def test_the_world_is_sized_round_the_shapes_and_has_no_robot(world_file):
+    """A margin of whole metres, and, as in an empty Gazebo world, no robot."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         world = load_world(world_file)
-    assert world.origin == (-3.0, -3.0) and world.size == (7.0, 8.0)
-    assert len(world.obstacles) == 3 and world.robots[0].name == "r1"
-    assert tuple(world.robots[0].pose.translation) == (-2.5, -2.5)
+    assert world.origin == (-3.0, -3.0) and world.size == (7.0, 7.0)
+    assert len(world.obstacles) == 3 and not world.robots
 
 
 def test_a_file_that_is_not_xml_or_has_no_shape_is_refused(tmp_path):
@@ -105,8 +104,15 @@ def test_a_gazebo_world_with_leading_blank_lines_is_read(tmp_path):
 def test_a_robot_drives_across_a_gazebo_example_with_a_planner_that_goes_round(name):
     """The imported walls and shelves are in the way, and A* finds the way."""
     world = load_world(GAZEBO / name)
+    x0, y0 = world.origin
+    world = edit.add_robot(
+        world,
+        "r1",
+        (x0 + 1.0, y0 + 1.0, 0.0),
+        planner="demuvo.planners:AStar",
+        controller="demuvo.controllers:PurePursuit",
+    )
     free = _far_free_place(world)
-    world = edit.set_part(world, "r1", "planner", "demuvo.planners:AStar")
     world = edit.set_goal(world, "r1", (*free, 0.0))
     run = Run(world)
     assert run.until_done(300.0)

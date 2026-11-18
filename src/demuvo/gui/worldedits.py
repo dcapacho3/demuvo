@@ -202,7 +202,7 @@ class WorldEdits:
         """Replace the world with a blank one, which has no file yet."""
         if self.session.mode == "benchmark":
             return "A benchmark world is fixed."
-        return self._replace(edit.new_world(), None)
+        return self._replace(edit.empty_world(), None)
 
     def _replace(self, world: World, path: str | None) -> str | None:
         """Make another world the one that runs, ending any run in progress."""

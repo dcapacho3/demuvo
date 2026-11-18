@@ -18,7 +18,8 @@ def stand_in_window(monkeypatch):
     shown = []
 
     def show(session, seconds):
-        shown.append((session.mode, session.world.robots[0].name, seconds))
+        names = [r.name for r in session.world.robots]
+        shown.append((session.mode, names[0] if names else None, seconds))
         return 0
 
     real = cli.Session
@@ -77,10 +78,10 @@ def test_the_window_opens_on_the_sandbox_by_default(windows):
 
 
 def test_bench_opens_a_fixed_benchmark_and_no_file_a_blank_sandbox(windows):
-    """The mode follows the option; a blank world has its starter robot."""
+    """The mode follows the option; a blank world has no robot, like an empty one."""
     assert main([DEMO, "--bench"]) == 0
     assert main([]) == 0
-    assert windows == [("benchmark", "r1", None), ("sandbox", "r1", None)]
+    assert windows == [("benchmark", "r1", None), ("sandbox", None, None)]
 
 
 def test_the_simulation_gets_a_process_of_its_own_unless_told_not_to(monkeypatch):

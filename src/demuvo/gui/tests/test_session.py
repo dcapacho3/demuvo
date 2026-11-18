@@ -19,12 +19,12 @@ DEMO = Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml"
 @pytest.fixture(name="sandbox")
 def blank():
     """A blank sandbox: one robot, r1, in the middle."""
-    return Session()
+    return Session(edit.new_world())
 
 
 def test_the_sandbox_starts_blank_and_a_benchmark_needs_a_world():
     """The modes, and what each needs."""
-    fresh = Session()
+    fresh = Session(edit.new_world())
     assert fresh.mode == "sandbox" and [r.name for r in fresh.world.robots] == ["r1"]
     assert Session(DEMO, "benchmark").mode == "benchmark"
     with pytest.raises(ValueError, match="needs a world file"):
@@ -105,11 +105,12 @@ def test_nothing_can_be_edited_once_a_run_has_begun_or_in_a_benchmark(sandbox):
     assert [r.name for r in bench.world.robots] == ["r1"]
 
 
-def test_a_selected_robot_is_deleted_unless_it_is_the_last(sandbox):
-    """Nothing selected is nothing to do; the last robot stays; one of two can go."""
+def test_a_selected_robot_is_deleted_even_the_last_one(sandbox):
+    """Nothing selected is nothing to do; any robot can go, leaving an empty world."""
     assert sandbox.delete_robot() is None
     sandbox.select("r1")
-    assert "only robot" in sandbox.delete_robot()
+    assert sandbox.delete_robot() is None and not sandbox.world.robots
+    sandbox.add_robot()
     sandbox.add_robot()
     sandbox.select("r1")
     assert sandbox.delete_robot() is None
@@ -247,7 +248,7 @@ def thread_served(monkeypatch):
         return remote.RemoteRun(world, connection=parent)
 
     monkeypatch.setattr(module, "RemoteRun", make)
-    session = Session(remote=True)
+    session = Session(edit.new_world(), remote=True)
     yield session
     session.close()
 
@@ -334,7 +335,7 @@ def test_a_world_is_saved_and_opened_again(sandbox, tmp_path):
     sandbox.edits.add_obstacle("circle", (2.0, 2.0, 0.0), (0.3,))
     path = str(tmp_path / "mine.toml")
     assert sandbox.edits.save(path) is None and sandbox.edits.path == path
-    other = Session()
+    other = Session(edit.new_world())
     assert other.edits.open(path) is None and other.edits.path == path
     assert other.world.obstacles[0].shape.radius == 0.3
     assert other.scene.selected is None

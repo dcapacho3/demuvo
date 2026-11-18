@@ -2,8 +2,8 @@
 
 A `.world` or `.sdf` file gives the obstacles of a demuvo world: each collision shape
 that stands on the floor, seen from above. Floors and planes, shapes too high to touch
-a robot, tilted shapes and meshes are left out, since demuvo's world is flat. One
-robot is put in the corner, since a world needs one.
+a robot, tilted shapes and meshes are left out, since demuvo's world is flat. There
+are no robots, as in an empty Gazebo world; the sandbox adds them.
 """
 
 from __future__ import annotations
@@ -22,8 +22,8 @@ FLOOR = 0.1
 REACH = 1.0
 # A shape tilted more than this, in radians, is not a flat obstacle.
 TILT = 0.2
-# Metres of free floor left round the shapes, enough for a robot in the corner.
-MARGIN = 1.5
+# Metres of free floor left round the shapes.
+MARGIN = 1.0
 
 
 def _pose(element) -> tuple[float, float, float, float, float]:
@@ -93,8 +93,7 @@ def read_sdf(path: str | Path) -> dict:
 
     Returns:
         The same dictionary that `tomllib` gives for a world file: its version,
-        a `world` table sized to hold the shapes, the `obstacle` list and one
-        `robot` in the corner. A model
+        a `world` table sized to hold the shapes and the `obstacle` list. A model
         nested in another is placed as if it stood alone.
 
     Raises:
@@ -123,17 +122,11 @@ def read_sdf(path: str | Path) -> dict:
     if not obstacles:
         raise WorldError("file: no box, cylinder or sphere stands on the floor")
     extents = [_extent(o) for o in obstacles]
-    x0 = math.floor(min(e[0] for e in extents) - MARGIN)
-    y0 = math.floor(min(e[1] for e in extents) - MARGIN)
-    x1 = math.ceil(max(e[2] for e in extents) + MARGIN)
-    y1 = math.ceil(max(e[3] for e in extents) + MARGIN)
-    robot = {
-        "name": "r1",
-        "model": "diff_drive",
-        "shape": {"name": "circle", "radius": 0.2},
-        "pose": [x0 + 0.5, y0 + 0.5, 0.0],
-        "controller": "demuvo.controllers:PurePursuit",
-    }
+    # Rounded first, so float noise in a turned box does not add a whole metre.
+    x0 = math.floor(round(min(e[0] for e in extents) - MARGIN, 3))
+    y0 = math.floor(round(min(e[1] for e in extents) - MARGIN, 3))
+    x1 = math.ceil(round(max(e[2] for e in extents) + MARGIN, 3))
+    y1 = math.ceil(round(max(e[3] for e in extents) + MARGIN, 3))
     return {
         "version": 1,
         "world": {
@@ -142,5 +135,4 @@ def read_sdf(path: str | Path) -> dict:
             "seed": 1,
         },
         "obstacle": obstacles,
-        "robot": [robot],
     }

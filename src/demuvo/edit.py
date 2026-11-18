@@ -104,11 +104,16 @@ def _starter(size: tuple[float, float]) -> RobotSpec:
 
 
 def new_world(size: tuple[float, float] = (10.0, 6.0), seed: int = 1) -> World:
-    """An empty world with one robot, r1, in the middle.
-
-    A world needs at least one robot, so a new one starts with one.
-    """
+    """A world with one robot, r1, in the middle, for a script that needs one."""
     return World(tuple(size), seed, (), (_starter(size),))
+
+
+def empty_world(size: tuple[float, float] = (10.0, 6.0), seed: int = 1) -> World:
+    """A world like an empty Gazebo world: no obstacles, actors or robots.
+
+    The sandbox starts from it, and a robot is added with `add_robot`.
+    """
+    return World(tuple(size), seed, (), ())
 
 
 def validate(world: World) -> None:
@@ -201,11 +206,9 @@ def remove_robot(world: World, name: str) -> World:
     """Remove a robot and its goals.
 
     Raises:
-        WorldError: if there is no such robot, or it is the last one.
+        WorldError: if there is no such robot.
     """
     _robot(world, name)
-    if len(world.robots) == 1:
-        raise WorldError(f"robot '{name}' is the only robot; a world needs one")
     return dataclasses.replace(
         world,
         robots=tuple(r for r in world.robots if r.name != name),

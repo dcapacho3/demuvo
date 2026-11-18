@@ -156,10 +156,10 @@ def test_a_misspelled_key_is_refused(tmp_path):
         load(tmp_path, GOOD.replace("radius = 0.2", "raduis = 0.2"))
 
 
-def test_a_world_without_a_robot_is_refused(tmp_path):
-    """A world with no robot has nothing to run."""
-    with pytest.raises(WorldError, match="robot"):
-        load(tmp_path, GOOD[: GOOD.index("[[robot]]")])
+def test_a_world_without_a_robot_loads(tmp_path):
+    """An empty world is a place to add robots to, like an empty Gazebo world."""
+    world = load(tmp_path, GOOD[: GOOD.index("[[robot]]")])
+    assert not world.robots and world.obstacles
 
 
 def test_a_world_without_obstacles_loads(tmp_path):
