@@ -14,15 +14,13 @@ import math
 from .. import options
 from ..world.shapes import Circle
 from . import look
-from .formbase import FormBase
+from .formbase import SETTING_MAX, FormBase
 from .inputs import NumberSpec
 from .panels import TitleRow
 from .widgets import Checkbox, Label, Section
 
 # The largest body an actor can be given here, in metres.
 MAX_SIZE = 200.0
-# Largest value a motion setting field accepts.
-SETTING_MAX = 1000.0
 WHAT = (
     "An actor is a moving obstacle. A planner never sees it: a robot finds it "
     "with its lidar."
@@ -232,23 +230,9 @@ class ActorForm(FormBase):
         )
 
     def _setting_field(self, setting, value) -> None:
-        """A row for one motion setting: a switch, a whole number or a number."""
+        """A row for one motion setting."""
         key = f"motion.{setting.name}"
-        label = setting.name.replace("_", " ")
-        hint = setting.help or None
-        if setting.kind is bool:
-            self.switch(
-                key, label, bool(value), lambda _on: self._settings_edited(), hint=hint
-            )
-        elif setting.kind is int:
-            spec = NumberSpec(0, SETTING_MAX, 1, 0, "", True)
-            self.number(key, label, int(value), spec, self._settings_edited, hint=hint)
-        else:
-            step = max(0.01, round(abs(float(setting.default)) / 10, 3))
-            spec = NumberSpec(0.0, SETTING_MAX, step, 3)
-            self.number(
-                key, label, float(value), spec, self._settings_edited, hint=hint
-            )
+        self.setting(key, setting, value, lambda *_args: self._settings_edited())
         self.settings[setting.name] = self.fields[key]
 
     # -- edits --

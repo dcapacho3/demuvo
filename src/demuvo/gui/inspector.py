@@ -45,8 +45,6 @@ CLOSED = frozenset(
         "Local costmap",
     }
 )
-# Largest value a setting field accepts.
-SETTING_MAX = 1000.0
 
 
 class Inspector:
@@ -199,7 +197,9 @@ class Inspector:
             for setting in known:
                 value = current.get(setting.name, setting.default)
                 key = f"{part}.{setting.name}"
-                self._setting_field(forms, part, key, setting, value)
+                forms.setting(
+                    key, setting, value, lambda *_a, p=part: self._settings_edited(p)
+                )
                 self.settings[part][setting.name] = self.fields.pop(key)
         col.add(Section("Control timing"))
         period = Spin(
@@ -209,24 +209,6 @@ class Inspector:
         )
         self.fields["period"] = period
         col.add(FormRow("control period", period))
-
-    def _setting_field(self, forms, part: str, key: str, setting, value) -> None:
-        """A row for one setting: a switch, a whole number or a number."""
-        label = setting.name.replace("_", " ")
-
-        def changed(*_args) -> None:
-            self._settings_edited(part)
-
-        hint = setting.help or None
-        if setting.kind is bool:
-            forms.switch(key, label, bool(value), changed, hint=hint)
-        elif setting.kind is int:
-            spec = NumberSpec(0, SETTING_MAX, 1, 0, "", True)
-            forms.number(key, label, int(value), spec, changed, hint=hint)
-        else:
-            step = max(0.01, round(abs(float(setting.default)) / 10, 3))
-            spec = NumberSpec(0.0, SETTING_MAX, step, 3)
-            forms.number(key, label, float(value), spec, changed, hint=hint)
 
     def lock(self) -> None:
         """Enable the fields while editing is allowed, and say why when it is not."""

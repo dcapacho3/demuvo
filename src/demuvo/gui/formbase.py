@@ -12,6 +12,9 @@ from .inputs import Combo, NumberSpec, Spin, TextField
 from .panels import FormRow
 from .widgets import Checkbox, TextButton, Widget
 
+# Largest value a setting field accepts.
+SETTING_MAX = 1000.0
+
 
 class FormBase:
     """A form being built into a column.
@@ -53,6 +56,23 @@ class FormBase:
         field.tooltip = hint
         self.fields[key] = field
         self.column.add(FormRow(label, field))
+
+    def setting(self, key: str, setting, value, change) -> None:
+        """A row for one `Setting`: a switch, a whole number or a number.
+
+        `change` is called after any edit, with whatever the control gives.
+        """
+        label = setting.name.replace("_", " ")
+        hint = setting.help or None
+        if setting.kind is bool:
+            self.switch(key, label, bool(value), change, hint=hint)
+        elif setting.kind is int:
+            spec = NumberSpec(0, SETTING_MAX, 1, 0, "", True)
+            self.number(key, label, int(value), spec, change, hint=hint)
+        else:
+            step = max(0.01, round(abs(float(setting.default)) / 10, 3))
+            spec = NumberSpec(0.0, SETTING_MAX, step, 3)
+            self.number(key, label, float(value), spec, change, hint=hint)
 
     def pose_triple(self, keys, labels, pose, change, hint=None) -> None:
         """Three number rows for a pose - x and y in metres, the angle in degrees."""

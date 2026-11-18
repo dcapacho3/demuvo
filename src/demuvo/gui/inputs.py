@@ -106,6 +106,16 @@ class LineEdit(Widget):
         baseline = text_baseline(self.y, self.height, 13)
         canvas.text(face, shown, (left, baseline), size=13, color=color)
 
+    def on_press(self, event: Event) -> None:
+        """A click takes the focus, which starts editing; another puts the caret."""
+        super().on_press(event)
+        if not self.enabled:
+            return
+        if self.editing:
+            self.place_caret(event.x)
+        else:
+            self.host.set_focus(self)
+
     def draw_frame(self, canvas: Canvas) -> None:
         """Draw the white box, with a teal edge while editing."""
         box = (self.x, self.y, self.width, self.height)
@@ -214,16 +224,6 @@ class Spin(LineEdit):
         if changed and notify and self.on_change:
             self.on_change(value)
 
-    def on_press(self, event: Event) -> None:
-        """A click takes the focus, which starts editing; another puts the caret."""
-        super().on_press(event)
-        if not self.enabled:
-            return
-        if self.editing:
-            self.place_caret(event.x)
-        else:
-            self.host.set_focus(self)
-
     def on_focus_change(self, gained: bool) -> None:
         """Start editing with the number selected, or accept what was typed."""
         if gained and self.enabled:
@@ -304,16 +304,6 @@ class TextField(LineEdit):
         """Draw the box and its text."""
         self.draw_frame(canvas)
         self.draw_text(canvas, self.buffer)
-
-    def on_press(self, event: Event) -> None:
-        """A click takes the focus; a click while editing puts the caret."""
-        super().on_press(event)
-        if not self.enabled:
-            return
-        if self.editing:
-            self.place_caret(event.x)
-        else:
-            self.host.set_focus(self)
 
     def on_focus_change(self, gained: bool) -> None:
         """Start editing with the text selected, or stop."""
