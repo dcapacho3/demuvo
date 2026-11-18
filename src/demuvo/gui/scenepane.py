@@ -1,10 +1,11 @@
 """The scene pane - the world in the window, and what the mouse does to it.
 
 Click a robot or an obstacle to select it; drag it to move it while editing. With
-the goal tool, click the floor to give the selected robot a goal, or Shift and click
-to add a waypoint. With the box or circle tool, drag on the floor to draw an
-obstacle; with the polygon or line tool, click its corners. The playback pill floats
-over the bottom of the pane.
+the goal tool, press on the floor to give the selected robot a goal and drag to
+turn its arrow, or hold Shift to add a waypoint; a click alone aims it away from
+the robot. With the box or circle tool, drag on the floor to draw an obstacle;
+with the polygon or line tool, click its corners. The playback pill floats over
+the bottom of the pane.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from . import font, look
 from .look import TEAL
 from .panels import Pill
 from .raster import Canvas, rgba
+from .scenedraw import arrow
 from .session import Session
 from .strokes import polyline
 from .widgets import Event, Widget, text_baseline
@@ -33,6 +35,8 @@ CLOSE_PIXELS = 20.0
 # Two clicks within this many seconds and pixels are a double click, which ends a
 # polygon or line.
 DOUBLE_CLICK = (0.6, 12.0)
+# The length in pixels of the arrow shown while a goal is aimed.
+AIM_LENGTH = 48.0
 
 
 class ScenePane(Widget):
@@ -64,6 +68,10 @@ class ScenePane(Widget):
         self.sketch: tuple[float, float, float, float] | None = None
         self.outline: list[tuple[float, float]] = []
         self.cursor: tuple[float, float] | None = None
+        # The goal being aimed - robot, its place, and whether Shift was held -
+        # and the world point the pointer has dragged to.
+        self.aiming: tuple[str, float, float, bool] | None = None
+        self.aim_to: tuple[float, float] | None = None
         self._last_click: tuple[float, float, float] | None = None
 
     def on_hover(self, inside: bool) -> None:
@@ -87,6 +95,7 @@ class ScenePane(Widget):
         self._draw_sketch(canvas)
         self._draw_outline(canvas)
         self._draw_ghost(canvas)
+        self._draw_aim(canvas)
         self.pill.draw(canvas)
 
     def _draw_sketch(self, canvas: Canvas) -> None:
@@ -104,6 +113,15 @@ class ScenePane(Widget):
         else:
             box = (min(x0, x1), min(y0, y1), abs(x1 - x0), abs(y1 - y0))
             canvas.rect_outline(box, color, width=2, radius=0)
+
+    def _draw_aim(self, canvas: Canvas) -> None:
+        """Draw the arrow of the goal being aimed, along the drag."""
+        if self.aiming is None or self.aim_to is None:
+            return
+        _, x, y, _ = self.aiming
+        heading = math.atan2(self.aim_to[1] - y, self.aim_to[0] - x)
+        origin = tuple(float(v) for v in self.session.scene.view.to_screen(x, y))
+        arrow(canvas, origin, -heading, AIM_LENGTH, rgba(TEAL), outline=rgba("#ffffff"))
 
     def _draw_ghost(self, canvas: Canvas) -> None:
         """Outline the obstacle where the pointer holds it.
@@ -179,11 +197,7 @@ class ScenePane(Widget):
             and session.editable
         ):
             x, y = scene.view.to_world(event.x, event.y)
-            heading = scene.heading_to(scene.selected, x, y)
-            if event.shift:
-                self.actions.waypoint_added(scene.selected, x, y, heading)
-            else:
-                self.actions.goal_set(scene.selected, x, y, heading)
+            self.aiming, self.aim_to = (scene.selected, x, y, event.shift), None
             return
         if not name and session.editable and self._route_pressed(event):
             return
@@ -254,6 +268,9 @@ class ScenePane(Widget):
         if self.outline:
             self.cursor = self.session.scene.view.to_world(event.x, event.y)
             self.actions.sketch_changed()
+        elif self.aiming is not None:
+            self.aim_to = self.session.scene.view.to_world(event.x, event.y)
+            self.actions.sketch_changed()
         elif self.sketch is not None:
             x, y = self.session.scene.view.to_world(event.x, event.y)
             self.sketch = (*self.sketch[:2], x, y)
@@ -292,6 +309,8 @@ class ScenePane(Widget):
             self.ghost = None
             self.actions.sketch_changed()
         self.moving = None
+        if self.aiming is not None:
+            self._finish_aim()
         if self.sketch is not None:
             x0, y0, x1, y1 = self.sketch
             self.sketch = None
@@ -316,6 +335,23 @@ class ScenePane(Widget):
             self.actions.dropped(name, x, y, angle)
         self.session.history.end()
         self.down = False
+
+    def _finish_aim(self) -> None:
+        """Set the goal or waypoint where it was pressed, along the drag.
+
+        A drag shorter than a click's worth points it away from the robot.
+        """
+        name, x, y, shift = self.aiming
+        end, self.aiming, self.aim_to = self.aim_to, None, None
+        if end is not None and math.hypot(end[0] - x, end[1] - y) >= MIN_SIZE:
+            heading = math.atan2(end[1] - y, end[0] - x)
+        else:
+            heading = self.session.scene.heading_to(name, x, y)
+        if shift:
+            self.actions.waypoint_added(name, x, y, heading)
+        else:
+            self.actions.goal_set(name, x, y, heading)
+        self.actions.sketch_changed()
 
     def _finish_sketch(self, x0: float, y0: float, x1: float, y1: float) -> None:
         """Make the obstacle that was drawn, unless it is smaller than a click."""
