@@ -67,7 +67,7 @@ class FormBase:
 
     def switch(self, key: str, label: str, on: bool, change):
         """A labelled check box; `change` is called with the new state."""
-        field = Checkbox("on", on, on_change=self._only_when_editable(change))
+        field = Checkbox("", on, self._only_when_editable(change), states=("off", "on"))
         self.fields[key] = field
         self.column.add(FormRow(label, field))
 

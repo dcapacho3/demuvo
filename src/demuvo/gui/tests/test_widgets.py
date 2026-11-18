@@ -291,6 +291,22 @@ def test_a_checkbox_draws_a_filled_box_when_on_and_an_outline_when_off():
     assert ink(paint(True, enabled=False)) < ink(on)
 
 
+def test_a_checkbox_with_states_names_its_state_as_it_flips():
+    """The label reads "off" or "on" to match the box, however it was set."""
+
+    def label_ink(box):
+        hosted(box, (0, 0, 120, 28))
+        canvas = Canvas(120, 28)
+        box.draw(canvas)
+        return ink(canvas, (36, 0, 120, 28))
+
+    box = Checkbox("", False, states=("off", "on"))
+    off = label_ink(box)
+    box.set(True, notify=False)
+    assert label_ink(box) != off
+    assert label_ink(Checkbox("", False)) == 0.0
+
+
 def test_a_slider_sets_its_value_from_the_pointer_and_clamps_at_the_ends():
     """Press sets it, move drags only while down, and the ends hold."""
     values = []

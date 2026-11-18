@@ -457,12 +457,21 @@ class Checkbox(Widget):
         text: the label.
         checked: the starting state.
         on_change: called with the new state.
+        states: the label when off and when on, for a box that names its state
+            instead of what it controls; it replaces `text`.
     """
 
-    def __init__(self, text: str, checked: bool = False, on_change=None) -> None:
+    def __init__(
+        self,
+        text: str,
+        checked: bool = False,
+        on_change=None,
+        states: tuple[str, str] | None = None,
+    ) -> None:
         """Make a checkbox."""
         super().__init__()
         self.text, self.checked, self.on_change = text, checked, on_change
+        self.states = states
         self.focusable = True
 
     def activate(self) -> None:
@@ -492,7 +501,7 @@ class Checkbox(Widget):
         color = rgba(look.NAVY, fade(self.enabled))
         canvas.text(
             font.regular(),
-            self.text,
+            self.states[self.checked] if self.states else self.text,
             (left + size + 10, baseline),
             size=13,
             color=color,
