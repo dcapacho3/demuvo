@@ -15,6 +15,7 @@ def load_class(
     robot: str,
     kind: str,
     method: str | tuple[str, ...],
+    *,
     who: str = "robot",
 ):
     """Build the class `path` ("module:Class") with `params` as keyword arguments.

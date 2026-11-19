@@ -106,7 +106,7 @@ class _Maps(NamedTuple):
 
 
 @dataclass
-class DWB:
+class DWB:  # pylint: disable=too-many-instance-attributes
     """Choose the best safe velocity from the window of reachable ones.
 
     The window is what the accelerations allow from the last command over the
@@ -252,30 +252,20 @@ class DWB:
             return self._keep(Twist())
         if obs.goal is None:
             raise ValueError("DWB needs a goal to follow a path")
-        x, y, yaw = obs.pose.xyt
-        gx, gy, gyaw = obs.goal.xyt
-        xy_tolerance, yaw_tolerance = obs.goal_tolerance
+        x, y, _ = obs.pose.xyt
+        gx, gy, _ = obs.goal.xyt
         to_goal = math.hypot(gx - x, gy - y)
         car = car_limits(obs)
         obs, sign, last = self._run_of(obs, car)
-        if to_goal <= xy_tolerance and last:
-            if car is None:
-                return self._keep(self._turn_to_goal(gyaw - yaw, yaw_tolerance))
-            # A car arrives at the goal's angle or not at all, so it finishes
-            # its path instead of stopping at the first touch of the tolerance,
-            # which on an arc would leave the last of the turn undriven. Once
-            # the angle is met, or the goal is behind it, it stops where it is.
-            behind = (sign or 1.0) * (
-                (gx - x) * math.cos(yaw) + (gy - y) * math.sin(yaw)
-            ) <= 0.0
-            if abs(float(wrap_angle(gyaw - yaw))) <= yaw_tolerance or behind:
-                return self._keep(Twist())
+        if to_goal <= obs.goal_tolerance[0] and last:
+            arrived = self._arrive(obs, car, sign)
+            if arrived is not None:
+                return self._keep(arrived)
         vx, wz = self._window(obs.dt, sign)
         if car is not None:
             # Project the window onto the steering cone: a sample the model would
             # clip is scored as what the model would drive instead.
-            bound = np.array([car.max_w(float(v)) for v in vx])
-            wz = np.clip(wz, -bound, bound)
+            wz = _within_cone(vx, wz, car)
         vy = None
         speed = self.max_vel_x
         strafe = strafe_limits(obs)
@@ -290,30 +280,48 @@ class DWB:
         scores = self._score(
             poses, obs, align=to_goal > reach, car=car is not None, sign=sign
         )
-        still = (np.abs(vx) < 1e-9) & (np.abs(wz) < 1e-9)
-        if vy is not None:
-            still &= np.abs(vy) < 1e-9  # a pure strafe moves
-        scores[still] = np.inf  # standing still gets nowhere
+        scores[_standing(vx, vy, wz)] = np.inf  # standing still gets nowhere
         if car is not None:
             # Inching gets nowhere either: a car turns by driving, so it must.
             floor = min(self.car_min_vel_x, float(np.abs(vx).max()))
             scores[np.abs(vx) < floor - 1e-9] = np.inf
+        return self._keep(self._choose(scores, obs, (vx, vy, wz)))
+
+    def _arrive(self, obs: Observation, car, sign) -> Twist | None:
+        """The command at the goal's place, or None to go on along the path."""
+        x, y, yaw = obs.pose.xyt
+        gx, gy, gyaw = obs.goal.xyt
+        yaw_tolerance = obs.goal_tolerance[1]
+        if car is None:
+            return self._turn_to_goal(gyaw - yaw, yaw_tolerance)
+        # A car arrives at the goal's angle or not at all, so it finishes
+        # its path instead of stopping at the first touch of the tolerance,
+        # which on an arc would leave the last of the turn undriven. Once
+        # the angle is met, or the goal is behind it, it stops where it is.
+        behind = (sign or 1.0) * (
+            (gx - x) * math.cos(yaw) + (gy - y) * math.sin(yaw)
+        ) <= 0.0
+        if abs(float(wrap_angle(gyaw - yaw))) <= yaw_tolerance or behind:
+            return Twist()
+        return None
+
+    def _choose(self, scores: np.ndarray, obs: Observation, speeds) -> Twist:
+        """The command of the best-scoring sample, or a stop if none is free."""
+        vx, vy, wz = speeds
         best = int(np.argmin(scores))
         if not np.isfinite(scores[best]):
             if self._stuck_on != obs.path_changes:
                 LOGGER.warning(
                     "DWB: no trajectory from (%.2f, %.2f) is free and leads on "
                     "along the path; the robot stops until one is",
-                    x,
-                    y,
+                    obs.pose.xyt[0],
+                    obs.pose.xyt[1],
                 )
                 self._stuck_on = obs.path_changes
-            return self._keep(Twist())
+            return Twist()
         if vy is None:
-            return self._keep(Twist(vx=float(vx[best]), wz=float(wz[best])))
-        return self._keep(
-            Twist(vx=float(vx[best]), vy=float(vy[best]), wz=float(wz[best]))
-        )
+            return Twist(vx=float(vx[best]), wz=float(wz[best]))
+        return Twist(vx=float(vx[best]), vy=float(vy[best]), wz=float(wz[best]))
 
     def _run_of(self, obs: Observation, car) -> tuple[Observation, float | None, bool]:
         """The observation of the run being followed, its direction and if it is last.
@@ -455,30 +463,7 @@ class DWB:
         end = poses[:, -1, :2]
         total = 0.0
         if car and self.path_angle_scale > 0.0:
-            reach = self.max_vel_x * self.sim_time + self.forward_point_distance
-            aim = self._aim(maps, nearest, reach)
-            to_aim = np.arctan2(aim[1] - end[:, 1], aim[0] - end[:, 0])
-            if sign is not None:
-                to_aim = to_aim + (math.pi if sign < 0 else 0.0)
-            error = np.abs(wrap_angle(to_aim - poses[:, -1, 2]))
-            if sign is None and self.allow_reversing:
-                # The robot may back up, so facing away from the aim is as
-                # good as facing it, as MPPI's PathAngle critic allows a car.
-                error = np.minimum(error, math.pi - error)
-            total = self.path_angle_scale * error
-            # Near the path, face as it does: its headings end at the goal's angle,
-            # so this lands the car there. Where it may back up on a path with no
-            # cusp, facing against the path is as good as facing along it.
-            apart = end[:, None, :] - obs.path[None, :, :2]
-            gap = np.hypot(apart[..., 0], apart[..., 1])
-            near = np.argmin(gap, axis=1)
-            along = np.abs(wrap_angle(obs.path[near, 2] - poses[:, -1, 2]))
-            if sign is None and self.allow_reversing:
-                along = np.minimum(along, math.pi - along)
-            closeness = np.clip(
-                1.0 - gap.min(axis=1) / self.forward_point_distance, 0.0, 1.0
-            )
-            total = total + HEADING_WEIGHT * self.path_angle_scale * closeness * along
+            total = self._angle_cost(obs, maps, (nearest, end, poses), sign)
         ahead = end + (sign or 1.0) * self.forward_point_distance * np.column_stack(
             [np.cos(poses[:, -1, 2]), np.sin(poses[:, -1, 2])]
         )
@@ -493,8 +478,8 @@ class DWB:
                     maps.to_goal,
                     ahead,
                     goal_end,
-                    self.forward_point_distance,
-                    end,
+                    step=self.forward_point_distance,
+                    end=end,
                 )
         else:
             # Follow the path: keep near it and get along it.
@@ -509,12 +494,49 @@ class DWB:
                     maps.to_path,
                     ahead,
                     path_end,
-                    self.forward_point_distance,
-                    end,
+                    step=self.forward_point_distance,
+                    end=end,
                 )
                 total += self.goal_align_scale * left_along(ahead, maps, ahead_of_robot)
         total += self.obstacle_scale * obstacle_cost(poses, maps.grid, maps.free)
         return np.nan_to_num(total, nan=np.inf, posinf=np.inf)
+
+    def _angle_cost(self, obs: Observation, maps: _Maps, where, sign) -> np.ndarray:
+        """The path angle critic: face the point ahead, and the path's own heading.
+
+        Args:
+            obs: the observation.
+            maps: the grids of this window.
+            where: the path point nearest the robot, the end point of each
+                trajectory and the trajectories themselves.
+            sign: the direction of the run being driven, or None.
+        """
+        nearest, end, poses = where
+        reach = self.max_vel_x * self.sim_time + self.forward_point_distance
+        aim = self._aim(maps, nearest, reach)
+        to_aim = np.arctan2(aim[1] - end[:, 1], aim[0] - end[:, 0])
+        if sign is not None:
+            to_aim = to_aim + (math.pi if sign < 0 else 0.0)
+        error = np.abs(wrap_angle(to_aim - poses[:, -1, 2]))
+        if sign is None and self.allow_reversing:
+            # The robot may back up, so facing away from the aim is as
+            # good as facing it, as MPPI's PathAngle critic allows a car.
+            error = np.minimum(error, math.pi - error)
+        total = self.path_angle_scale * error
+        # Near the path, face as it does: its headings end at the goal's angle,
+        # so this lands the car there. Where it may back up on a path with no
+        # cusp, facing against the path is as good as facing along it.
+        apart = end[:, None, :] - obs.path[None, :, :2]
+        gap = np.hypot(apart[..., 0], apart[..., 1])
+        near = np.argmin(gap, axis=1)
+        along = np.abs(wrap_angle(obs.path[near, 2] - poses[:, -1, 2]))
+        if sign is None and self.allow_reversing:
+            along = np.minimum(along, math.pi - along)
+        closeness = np.clip(
+            1.0 - gap.min(axis=1) / self.forward_point_distance, 0.0, 1.0
+        )
+        total = total + HEADING_WEIGHT * self.path_angle_scale * closeness * along
+        return total
 
     def _aim(self, maps: _Maps, nearest: int, reach: float) -> np.ndarray:
         """The path point the path angle critic points at.
@@ -559,6 +581,7 @@ def rollout(
     wz: np.ndarray,
     sim_time: float,
     step: float,
+    *,
     vy: np.ndarray | None = None,
 ) -> np.ndarray:
     """The poses of a robot under each constant body twist, every `step`.
@@ -641,6 +664,22 @@ def wavefront(
     return distance
 
 
+def _blend(values, r0, c0, fx, fy):
+    """The cell centres round each point mixed by distance, and where all are known."""
+    corners = np.stack(
+        [
+            values[r0, c0],
+            values[r0, c0 + 1],
+            values[r0 + 1, c0],
+            values[r0 + 1, c0 + 1],
+        ]
+    )
+    weights = np.stack([(1 - fx) * (1 - fy), fx * (1 - fy), (1 - fx) * fy, fx * fy])
+    known = np.isfinite(corners).all(axis=0)
+    blend = (np.where(np.isfinite(corners), corners, 0.0) * weights).sum(axis=0)
+    return blend, known
+
+
 def lookup(grid: Costmap, values: np.ndarray, xy: np.ndarray) -> np.ndarray:
     """The map at each point (..., 2), between cell centres; inf outside the grid.
 
@@ -659,18 +698,7 @@ def lookup(grid: Costmap, values: np.ndarray, xy: np.ndarray) -> np.ndarray:
     frac = at - low
     c0, r0 = low[:, 0], low[:, 1]
     ok = inside & (r0 >= 0) & (r0 + 1 < height) & (c0 >= 0) & (c0 + 1 < width)
-    r0, c0, fx, fy = r0[ok], c0[ok], frac[ok, 0], frac[ok, 1]
-    corners = np.stack(
-        [
-            values[r0, c0],
-            values[r0, c0 + 1],
-            values[r0 + 1, c0],
-            values[r0 + 1, c0 + 1],
-        ]
-    )
-    weights = np.stack([(1 - fx) * (1 - fy), fx * (1 - fy), (1 - fx) * fy, fx * fy])
-    known = np.isfinite(corners).all(axis=0)
-    blend = (np.where(np.isfinite(corners), corners, 0.0) * weights).sum(axis=0)
+    blend, known = _blend(values, r0[ok], c0[ok], frac[ok, 0], frac[ok, 1])
     out[np.flatnonzero(ok)[known]] = blend[known]
     return out.reshape(xy.shape[:-1])
 
@@ -712,7 +740,21 @@ def downhill(grid: Costmap, values: np.ndarray, xy: np.ndarray) -> np.ndarray:
     return heading
 
 
-def _ahead(grid, values, ahead, at_end, step, end) -> np.ndarray:
+def _within_cone(vx, wz, car) -> np.ndarray:
+    """The turn rates cut to what the car can steer at each speed."""
+    bound = np.array([car.max_w(float(v)) for v in vx])
+    return np.clip(wz, -bound, bound)
+
+
+def _standing(vx, vy, wz) -> np.ndarray:
+    """Which samples do not move the robot at all."""
+    still = (np.abs(vx) < 1e-9) & (np.abs(wz) < 1e-9)
+    if vy is not None:
+        still &= np.abs(vy) < 1e-9  # a pure strafe moves
+    return still
+
+
+def _ahead(grid, values, ahead, at_end, *, step, end) -> np.ndarray:
     """The map under each point ahead, and a fair price for one that is blocked.
 
     A point ahead in an obstacle makes a heading bad, not the whole trajectory,

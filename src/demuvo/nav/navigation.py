@@ -344,7 +344,7 @@ class Navigation:
         if plan is None:
             plan = self._plans[name] = _Plan(current, sim.time)
             self.paths[name] = np.empty((0, 3))
-            if task is None or not self._plan(name, sim, pose, task, plan, None):
+            if task is None or not self._plan(name, sim, pose, task, plan, reason=None):
                 self._path_changes[name] += 1  # the empty path is a new path too
         elif task is not None and not plan.outside:
             sight = Sight(
@@ -359,7 +359,7 @@ class Navigation:
             )
             reason = self.replanner.reason(name, sight)
             if reason is not None:
-                self._plan(name, sim, pose, task, plan, reason)
+                self._plan(name, sim, pose, task, plan, reason=reason)
 
     def _plan(
         self,
@@ -368,6 +368,7 @@ class Navigation:
         pose: Transform2D,
         task: Task,
         plan: _Plan,
+        *,
         reason: str | None,
     ) -> bool:
         """Plan from the pose to the task's goal and hand the path to the robot.

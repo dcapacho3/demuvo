@@ -391,7 +391,7 @@ class SceneDraw:
                 canvas.convex(
                     np.column_stack([sx, sy]), fill=fill, stroke=edge, width=2
                 )
-            self._actor_nose(canvas, spec, x, y, angle, edge)
+            self._actor_nose(canvas, spec, (x, y, angle), edge)
 
     def route(self, index: int) -> np.ndarray:
         """The start and waypoints of an actor as drawn, with a dragged point moved."""
@@ -456,8 +456,9 @@ class SceneDraw:
                     color=rgba(look.NAVY, faint),
                 )
 
-    def _actor_nose(self, canvas: Canvas, spec, x, y, angle, color) -> None:
+    def _actor_nose(self, canvas: Canvas, spec, pose, color) -> None:
         """A short tick from the middle, so which way an actor faces can be seen."""
+        x, y, angle = pose
         reach = _actor_reach(spec.shape)
         tip = (x + reach * math.cos(angle), y + reach * math.sin(angle))
         start = self.view.to_screen(x, y)

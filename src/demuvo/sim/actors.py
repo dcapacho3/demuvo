@@ -50,7 +50,7 @@ class Actors:
                     spec.name,
                     "motion",
                     METHODS,
-                    "actor",
+                    who="actor",
                 )
             )
             try:

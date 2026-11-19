@@ -108,34 +108,19 @@ class PurePursuit:
             raise ValueError("PurePursuit needs a goal to follow a path")
         to_robot = obs.pose.inverse()
         distance = float(np.hypot(*(to_robot @ obs.goal.translation)))
-        xy_tolerance, yaw_tolerance = obs.goal_tolerance
         car = car_limits(obs)
         reverses = self.allow_reversing or any(s < 0.0 for *_, s in path_runs(obs.path))
-        if distance <= xy_tolerance:
-            if car is None:
-                return self._turn_to_goal(obs, yaw_tolerance)
-            # A car cannot turn to the goal's angle on the spot: it arrives
-            # aligned or not at all, so it finishes its path instead of
-            # stopping at the first touch of the tolerance, which on an arc
-            # would leave the last of the turn undriven. Once the angle is
-            # met, or the goal is behind it, it stops where it is.
-            error = float(wrap_angle(obs.goal.xyt[2] - obs.pose.xyt[2]))
-            passed = (to_robot @ obs.goal.translation)[0] <= 0.0
-            if abs(error) <= yaw_tolerance:
-                return Twist()
-            # With reversing, whether the goal is passed depends on which way
-            # the last run drives; `_follow_runs` judges it.
-            if passed and not reverses:
-                return Twist()
+        if distance <= obs.goal_tolerance[0]:
+            arrived = self._arrive(obs, car, to_robot, reverses)
+            if arrived is not None:
+                return arrived
         if car is not None and reverses:
             return self._follow_runs(obs, car, to_robot, distance)
         x, y = self._target(to_robot @ obs.path[:, :2], car is not None)
         bearing = math.atan2(y, x)
         vx = min(self.speed, self.approach_gain * distance)
         if abs(bearing) > self.turn_in_place_angle:
-            if car is None:
-                return Twist(wz=self._turn(bearing))
-            return self._swing(car, vx, bearing)
+            return self._spin(car, vx, bearing)
         if x == 0.0 and y == 0.0:
             # On the path's last point but short of the goal - no direction to
             # steer, so stand still instead of dividing by zero.
@@ -145,6 +130,32 @@ class PurePursuit:
             bound = car.max_w(vx)
             wz = max(-bound, min(bound, wz))
         return Twist(vx=vx, wz=wz)
+
+    def _arrive(self, obs, car, to_robot, reverses) -> Twist | None:
+        """The command at the goal's place, or None to go on along the path."""
+        yaw_tolerance = obs.goal_tolerance[1]
+        if car is None:
+            return self._turn_to_goal(obs, yaw_tolerance)
+        # A car cannot turn to the goal's angle on the spot: it arrives
+        # aligned or not at all, so it finishes its path instead of
+        # stopping at the first touch of the tolerance, which on an arc
+        # would leave the last of the turn undriven. Once the angle is
+        # met, or the goal is behind it, it stops where it is.
+        error = float(wrap_angle(obs.goal.xyt[2] - obs.pose.xyt[2]))
+        passed = (to_robot @ obs.goal.translation)[0] <= 0.0
+        if abs(error) <= yaw_tolerance:
+            return Twist()
+        # With reversing, whether the goal is passed depends on which way
+        # the last run drives; `_follow_runs` judges it.
+        if passed and not reverses:
+            return Twist()
+        return None
+
+    def _spin(self, car: Limits | None, vx: float, bearing: float) -> Twist:
+        """Turn toward a target far off the heading: on the spot, or by a swing."""
+        if car is None:
+            return Twist(wz=self._turn(bearing))
+        return self._swing(car, vx, bearing)
 
     def _target(self, path: np.ndarray, car: bool = False) -> np.ndarray:
         """The point to steer toward, from the path in the robot's frame.
