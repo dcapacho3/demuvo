@@ -640,28 +640,37 @@ def wavefront(
     if price is None:
         price = np.ones(free.shape)
     height, width = free.shape
-    distance = np.full(free.shape, np.inf)
+    # cells are numbered along the rows and the grids are plain lists, since this loop
+    # runs once for every cell it reaches and numpy indexing is slow one cell at a time
+    open_cell, cost_of = free.ravel().tolist(), price.ravel().tolist()
+    distance = [math.inf] * (height * width)
     heap = []
     for row, col in sorted(set(zip(seeds[0].tolist(), seeds[1].tolist()))):
         if free[row, col]:
-            distance[row, col] = 0.0
-            heap.append((0.0, row, col))
+            distance[row * width + col] = 0.0
+            heap.append((0.0, row * width + col))
     heapq.heapify(heap)
+    moves = [
+        (dr * width + dc, dr, dc, length, bool(dr and dc)) for dr, dc, length in _MOVES
+    ]
     while heap:
-        here, row, col = heapq.heappop(heap)
-        if here > distance[row, col]:
+        here, cell = heapq.heappop(heap)
+        if here > distance[cell]:
             continue
-        for dr, dc, length in _MOVES:
-            r, c = row + dr, col + dc
-            if not (0 <= r < height and 0 <= c < width and free[r, c]):
+        row, col = divmod(cell, width)
+        for offset, dr, dc, length, corner in moves:
+            if not (0 <= row + dr < height and 0 <= col + dc < width):
                 continue
-            if dr and dc and not (free[row + dr, col] and free[row, col + dc]):
+            ahead = cell + offset
+            if not open_cell[ahead]:
                 continue
-            there = here + length * price[r, c]
-            if there < distance[r, c]:
-                distance[r, c] = there
-                heapq.heappush(heap, (there, r, c))
-    return distance
+            if corner and not (open_cell[cell + dr * width] and open_cell[cell + dc]):
+                continue
+            there = here + length * cost_of[ahead]
+            if there < distance[ahead]:
+                distance[ahead] = there
+                heapq.heappush(heap, (there, ahead))
+    return np.array(distance).reshape(free.shape)
 
 
 def _blend(values, r0, c0, fx, fy):
