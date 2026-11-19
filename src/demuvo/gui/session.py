@@ -142,7 +142,7 @@ class Session:  # pylint: disable=too-many-public-methods
         if rebuild:
             old = self.scene
             self.scene = SceneDraw(self.run)
-            self.scene.layers, self.scene.palette = old.layers, old.palette
+            self.scene.take_over(old)
         else:
             self.scene.set_run(self.run)
         self._seen = 0.0

@@ -109,6 +109,7 @@ class Camera:
     def view(self, base: View, room: float) -> View:
         """The fitted view with this zoom and shift, kept so the board stays seen."""
         self.zoom = min(max(self.zoom, MIN_ZOOM), self._limit(base))
+        moved = self.moved
         cx, cy = self.centre(base.rect, room)
         sx, sy = self.shift
         zoomed = replace(
@@ -122,7 +123,8 @@ class Camera:
         dx = max(x + KEEP - right, 0.0) - max(left - (x + width - KEEP), 0.0)
         dy = max(y + KEEP - bottom, 0.0) - max(top - (y + height - KEEP), 0.0)
         if dx or dy:
-            self.shift = (sx + dx, sy + dy)
+            if moved:  # a view the user has not touched is held only on the screen
+                self.shift = (sx + dx, sy + dy)
             zoomed = zoomed.shifted(dx, dy)
         return zoomed
 
@@ -146,6 +148,23 @@ class Camera:
     def reset(self) -> None:
         """Show the whole board again."""
         self.zoom, self.shift = 1.0, (0.0, 0.0)
+
+    @property
+    def moved(self) -> bool:
+        """True if the user has zoomed or moved the view from the fitted one."""
+        return self.zoom != 1.0 or self.shift != (0.0, 0.0)
+
+    def hold(self, base: View, room: float, scale: float, point) -> None:
+        """Keep a scale and the world point (x, y) at the middle of a window.
+
+        It is how a window that has changed size keeps what the user is looking at.
+        """
+        self.zoom = min(max(scale / base.scale, MIN_ZOOM), self._limit(base))
+        cx, cy = self.centre(base.rect, room)
+        self.shift = (
+            -self.zoom * (base.ox - cx + point[0] * base.scale),
+            -self.zoom * (base.oy - cy - point[1] * base.scale),
+        )
 
     def frame(self, box, base: View, room: float, margin: float = 1.4) -> None:
         """Zoom and move so a box of world metres (x0, y0, x1, y1) fills the window."""

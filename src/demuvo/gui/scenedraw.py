@@ -195,12 +195,32 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
         self._local.clear()
         self.sprites.clear()
 
+    def take_over(self, old: SceneDraw) -> None:
+        """Show what an older scene of the same window showed, as an edit rebuilds it.
+
+        The layers, the palette, the zoom and where the view is, and what it has
+        drawn, stay as they were, so an edit does not move or redraw the picture.
+        The zoom is kept only if the world is the same size.
+        """
+        self.layers, self.palette = old.layers, old.palette
+        if old.view.bounds == self.world.bounds:
+            self.camera = old.camera
+        self.view = replace(self.view, rect=old.view.rect)  # no change of size to hold
+        self._picture_of = old._picture_of  # pylint: disable=protected-access
+        self._cutout = old._cutout  # pylint: disable=protected-access
+        self.fit(old.view.rect, old._room)  # pylint: disable=protected-access
+
     def fit(
         self, rect: tuple[float, float, float, float], bottom_room: float = 60.0
     ) -> None:
         """Fit the board into a window rectangle, then apply the user's zoom."""
+        before, room = self.view, self._room
         self._room = bottom_room
         self._base = View(self.world.bounds).fit(rect, bottom_room)
+        if before.rect != rect and self.camera.moved:
+            # a window of another size: keep the scale and the place in its middle
+            middle = before.to_world(*Camera.centre(before.rect, room))
+            self.camera.hold(self._base, bottom_room, before.scale, middle)
         fitted = self.camera.view(self._base, bottom_room)
         if fitted != self.view:  # the same view keeps the cached layers
             self.view = fitted

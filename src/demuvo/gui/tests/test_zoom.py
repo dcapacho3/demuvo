@@ -257,16 +257,97 @@ def test_a_zoom_survives_an_edit_and_a_world_of_another_size_is_shown_whole():
     assert scene.camera.zoom == 1.0
 
 
-def test_the_zoom_is_kept_when_the_window_is_resized():
-    """The pane changes size and the zoom does not."""
+def test_a_moved_view_keeps_its_scale_and_its_middle_when_the_window_changes_size():
+    """What the user looks at stays as large, and its middle stays in the middle."""
     window, program = start()
     scene = program.session.scene
     x, y = scene_middle(program)
     window.mouse_move(x, y)
-    window.mouse_scroll(2.0)
-    zoomed = scene.camera.zoom
+    window.mouse_scroll(3.0)
+    scene.pan_by(40, -25)
+    window.render()
+    before = scene.view
+    middle = before.to_world(*Camera.centre(before.rect, 60.0))
     window.render(1000, 700)
-    assert scene.camera.zoom == pytest.approx(zoomed)
+    after = scene.view
+    assert after.rect != before.rect and after.scale == pytest.approx(before.scale)
+    assert after.to_world(*Camera.centre(after.rect, 60.0)) == pytest.approx(middle)
+
+
+def test_a_view_that_was_not_moved_is_fitted_again_when_the_window_changes_size():
+    """The whole board stays in view, and the zoom stays at 100 percent."""
+    window, program = start()
+    scene = program.session.scene
+    window.render(1000, 700)
+    assert scene.camera.zoom == 1.0 and not scene.camera.moved
+    left, top, right, bottom = scene.view.board()
+    assert left > 0 and top > 0 and right < 1000 and bottom < 700
+
+
+def test_the_camera_holds_a_scale_and_a_world_point_at_the_middle():
+    """The shift that puts a point in the middle at a chosen scale."""
+    base, camera = base_view(), Camera()
+    assert not camera.moved
+    camera.hold(base, ROOM, 2 * base.scale, (3.0, 4.0))
+    view = camera.view(base, ROOM)
+    assert camera.moved and view.scale == pytest.approx(2 * base.scale)
+    sx, sy = view.to_screen(3.0, 4.0)
+    assert (float(sx), float(sy)) == pytest.approx(Camera.centre(RECT, ROOM))
+
+
+def test_a_view_nobody_touched_is_not_shifted_by_a_window_that_hides_the_board():
+    """Only the picture is held in sight; the camera is not marked as moved."""
+    base = View((0.0, 0.0, 10.0, 6.0)).fit((0.0, 0.0, 100.0, 100.0), 60.0)
+    camera = Camera()
+    camera.view(base, 60.0)
+    assert not camera.moved
+
+
+def test_edits_keep_the_zoom_and_the_place_you_look_at():
+    """A goal, another robot, a rename, a setting, undo and redo keep the view."""
+    world = edit.add_obstacle(edit.new_world(), "box", (2.0, 2.0, 0.0), (0.5, 0.5))
+    window, program = start(world)
+    session = program.session
+    x, y = scene_middle(program)
+    window.mouse_move(x, y)
+    window.mouse_scroll(4.0)
+    session.scene.pan_by(30, 12)
+    window.render()
+    seen = (session.scene.view, session.scene.camera.zoom)
+
+    def kept():
+        window.render()
+        assert (session.scene.view, session.scene.camera.zoom) == seen
+
+    assert session.set_goal("r1", (5.0, 2.0, 0.0)) is None
+    kept()
+    assert session.set_settings("r1", "controller", {"lookahead": 0.7}) is None
+    kept()
+    program._add_robot()
+    kept()
+    program._add_actor()
+    kept()
+    assert session.edits.rename_robot("r1", "robo") is None
+    kept()
+    program._undo()
+    kept()
+    program._redo()
+    kept()
+    program.reset_run()
+    kept()
+
+
+def test_a_rebuilt_scene_of_another_size_is_shown_whole():
+    """The zoom is kept only while the world is the same size."""
+    window, program = start()
+    session = program.session
+    x, y = scene_middle(program)
+    window.mouse_move(x, y)
+    window.mouse_scroll(3.0)
+    bigger = edit.set_size(session.world, (14.0, 9.0))
+    assert session.apply(bigger, rebuild=True) is None
+    window.render()
+    assert session.scene.camera.zoom == 1.0
 
 
 def test_the_scene_is_drawn_roughly_while_the_view_moves_and_in_full_after():
