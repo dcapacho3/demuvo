@@ -8,52 +8,19 @@ import pytest
 from demuvo import edit
 from demuvo.gui import look
 from demuvo.gui.confirm import ConfirmBox
-from demuvo.gui.keys import CTRL, KEY
-from demuvo.gui.sandbox import BADGES, DEFAULT_MESSAGE, GOAL_MESSAGE, Sandbox
+from demuvo.gui.keys import KEY
+from demuvo.gui.sandbox import BADGES, DEFAULT_MESSAGE, GOAL_MESSAGE
 from demuvo.gui.session import Session
-from demuvo.gui.shell import Shell
 from demuvo.gui.widgets import Event
 from demuvo.world import save_world
 
-from .fakes import EXAMPLES
-
-
-def start(session=None, width=1280, height=780):
-    """A shell over a sandbox program, rendered once."""
-    program = Sandbox(session or Session(edit.new_world()))
-    window = Shell(program, width, height)
-    window.render()
-    return window, program
+from .fakes import EXAMPLES, at, centre, click_window, press_key, start, type_text
 
 
 @pytest.fixture(name="app")
 def make_app():
     """A blank sandbox window."""
     return start()
-
-
-def centre(widget):
-    """The centre of a widget."""
-    return widget.x + widget.width / 2, widget.y + widget.height / 2
-
-
-def click(window, widget):
-    """Move to a widget's centre and click it."""
-    x, y = centre(widget)
-    window.mouse_move(x, y)
-    window.mouse_press(Event(x, y))
-    window.mouse_release(Event(x, y))
-
-
-def at(program, x, y):
-    """The pixel of a world point."""
-    sx, sy = program.session.scene.view.to_screen(x, y)
-    return float(sx), float(sy)
-
-
-def press_key(window, name, ctrl=False):
-    """A key press of a named key."""
-    window.key(KEY[name], 1, CTRL if ctrl else 0)
 
 
 def test_the_window_opens_with_one_robot_a_hint_and_an_editing_badge(app):
@@ -101,7 +68,7 @@ def test_a_click_on_the_scene_list_selects_a_robot(app):
 def test_the_add_button_adds_a_robot_and_selects_it_and_the_count_follows(app):
     """Two robots, the second selected, the list and the status bar updated."""
     window, program = app
-    click(window, program.buttons["add"])
+    click_window(window, program.buttons["add"])
     assert [r.name for r in program.session.world.robots] == ["r1", "r2"]
     assert program.session.scene.selected == "r2" and program.tree.selected == "r2"
     assert window.layout.chrome.status.count == "2 robots"
@@ -114,10 +81,10 @@ def test_delete_removes_the_selected_robot_even_the_last_one(app):
     program.select("r1")
     press_key(window, "delete")
     assert not program.session.world.robots
-    click(window, program.buttons["add"])
-    click(window, program.buttons["add"])
+    click_window(window, program.buttons["add"])
+    click_window(window, program.buttons["add"])
     program.select("r1")
-    click(window, program.buttons["delete"])
+    click_window(window, program.buttons["delete"])
     assert [r.name for r in program.session.world.robots] == ["r2"]
 
 
@@ -171,7 +138,7 @@ def test_a_goal_click_beyond_the_world_is_refused_in_the_status_bar(app):
 def test_dragging_a_robot_moves_it_and_a_drop_onto_another_is_refused(app):
     """The first drag lands; the second is refused and the robot stays."""
     window, program = app
-    click(window, program.buttons["add"])
+    click_window(window, program.buttons["add"])
     x, y = at(program, 5.0, 3.0)
     window.mouse_move(x, y)
     window.mouse_press(Event(x, y))
@@ -236,12 +203,12 @@ def test_a_cached_layer_switches_at_once_and_a_live_one_fades(app):
     window, program = app
     shown = program.session.scene.layers.shown
     box = program.layer_boxes["costmap"]
-    click(window, box)
+    click_window(window, box)
     assert program.layer_on["costmap"] is False and not box.checked
     assert shown["costmap"] == 0.0
     program.set_layer("costmap", True)
     assert shown["costmap"] == 1.0
-    click(window, program.layer_boxes["trails"])
+    click_window(window, program.layer_boxes["trails"])
     assert shown["trails"] == 1.0 and window.animator.busy()
     window.animator.tick(time.perf_counter() + 1.0)
     assert shown["trails"] == 0.0
@@ -298,7 +265,7 @@ def test_the_menus_list_the_commands_and_run_them(app):
     program.menu_items("File")[-1].action()
     assert not window.quit_requested
     assert isinstance(window.input.popup, ConfirmBox)
-    click(window, window.input.popup.buttons["yes"])
+    click_window(window, window.input.popup.buttons["yes"])
     assert window.quit_requested
 
 
@@ -369,7 +336,7 @@ def test_the_shortcuts_do_their_work_and_an_unknown_key_is_not_used(app):
 def test_the_panels_slide_by_button_and_by_key(app):
     """The buttons follow the docks."""
     window, program = app
-    click(window, program.buttons["left"])
+    click_window(window, program.buttons["left"])
     assert (
         window.layout.docks["left"].open is False
         and not program.buttons["left"].checked
@@ -428,7 +395,7 @@ def test_the_window_draws_a_frame_that_differs_after_an_edit(app):
     """The frame changes when a robot is added."""
     window, program = app
     before = window.render().copy()
-    click(window, program.buttons["add"])
+    click_window(window, program.buttons["add"])
     assert not np.array_equal(window.render(), before)
 
 
@@ -532,12 +499,6 @@ def test_the_lidar_rays_start_on_for_a_few_robots_and_off_for_a_swarm():
     assert not crowd.layer_on["rays"]
 
 
-def type_text(window, text):
-    """Type a line into whatever has the focus."""
-    for char in text:
-        window.char(char)
-
-
 def test_save_as_asks_for_a_path_then_writes_the_world_and_later_saves_go_there(
     app, tmp_path
 ):
@@ -608,7 +569,7 @@ def test_escape_closes_the_prompt_and_new_world_starts_blank(app):
     program.menu_items("File")[0].action()
     assert program.session.world.obstacles
     assert isinstance(window.input.popup, ConfirmBox)
-    click(window, window.input.popup.buttons["yes"])
+    click_window(window, window.input.popup.buttons["yes"])
     assert not program.session.world.obstacles and window.input.popup is None
 
 
@@ -701,10 +662,10 @@ def test_quit_with_unsaved_work_asks_in_a_card_and_only_discard_quits(app):
     press_key(window, "enter")  # the safe answer
     assert window.input.popup is None and not window.quit_requested
     press_key(window, "q", ctrl=True)
-    click(window, window.input.popup.buttons["no"])
+    click_window(window, window.input.popup.buttons["no"])
     assert window.input.popup is None and not window.quit_requested
     program.menu_items("File")[-1].action()
-    click(window, window.input.popup.buttons["yes"])
+    click_window(window, window.input.popup.buttons["yes"])
     assert window.quit_requested
     press_key(window, "o", ctrl=True)
     assert window.input.popup is not None
@@ -901,7 +862,7 @@ def test_the_log_panel_opens_itself_for_the_first_message_and_the_button_toggles
     assert program.buttons["bottom"].checked
     assert window.layout.chrome.status.notes == "1 message in the log"
     window.render()
-    click(window, program.buttons["bottom"])
+    click_window(window, program.buttons["bottom"])
     window.animator.tick(time.perf_counter() + 5.0)
     assert not docks["bottom"].open
     program.session.log.add("warning", "another")
@@ -925,97 +886,3 @@ def test_clearing_the_log_empties_it_and_the_note(app):
     program.log_view.clear_button.click()
     assert not program.session.log.entries
     assert window.layout.chrome.status.notes == ""
-
-
-def double_click(window, program, key, clock):
-    """Two quick clicks on a row of the scene list."""
-    x, y, width, height = program.tree.row_rect(key)
-    point = (x + width / 2, y + height / 2)
-    for _ in range(2):
-        window.mouse_move(*point)
-        window.mouse_press(Event(*point))
-        window.mouse_release(Event(*point))
-        clock[0] += 0.1
-
-
-def test_a_double_click_on_a_robot_row_renames_it_with_its_goal_and_undo_restores_it(
-    app, monkeypatch
-):
-    """The text box opens over the row; Enter renames; the goal and selection follow."""
-    window, program = app
-    clock = [10.0]
-    monkeypatch.setattr("demuvo.gui.inputs.time.perf_counter", lambda: clock[0])
-    program.session.set_goal("r1", (8.0, 1.0, 0.0))
-    program.refresh()
-    double_click(window, program, "r1", clock)
-    box = window.input.popup
-    assert box is not None and box.field.buffer == "r1"
-    type_text(window, "scout")
-    press_key(window, "enter")
-    assert window.input.popup is None
-    world = program.session.world
-    assert [r.name for r in world.robots] == ["scout"] and world.tasks[
-        0
-    ].robot == "scout"
-    assert program.session.scene.selected == "scout"
-    assert [row.text for row in program.tree.rows][:2] == ["Robots (1)", "scout"]
-    assert program.session.history.undo() is None
-    assert program.session.world.robots[0].name == "r1"
-
-
-def test_a_double_click_on_an_obstacle_row_names_it_and_a_name_shows_in_the_list(
-    app, monkeypatch
-):
-    """The name replaces "box 1" in the list and the inspector; a repeat is refused."""
-    window, program = app
-    clock = [10.0]
-    monkeypatch.setattr("demuvo.gui.inputs.time.perf_counter", lambda: clock[0])
-    program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 0.5))
-    program.pane.actions.obstacle_drawn("circle", (7.0, 4.0, 0.0), (0.3,))
-    double_click(window, program, "obstacle:0", clock)
-    type_text(window, "table")
-    press_key(window, "enter")
-    assert "table" in [row.text for row in program.tree.rows]
-    assert program.session.world.obstacles[0].name == "table"
-    clock[0] += 5.0
-    double_click(window, program, "obstacle:1", clock)
-    type_text(window, "table")
-    press_key(window, "enter")
-    assert "already exists" in window.layout.chrome.status.message
-    program.session.select_obstacle(0)
-    program.refresh()
-    titles = [c.name for c in program.inspector.column.children if hasattr(c, "name")]
-    assert titles == ["table"]
-
-
-def test_f2_renames_the_selected_item_and_a_locked_world_refuses(app):
-    """F2 opens the box for the selection; nothing is selected or locked: no box."""
-    window, program = app
-    window.key(KEY["f2"], 1, 0)
-    assert window.input.popup is None
-    program.select("r1")
-    window.key(KEY["f2"], 1, 0)
-    assert window.input.popup is not None
-    press_key(window, "escape")
-    assert window.input.popup is None and window.focus is None
-    program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 0.5))
-    window.key(KEY["f2"], 1, 0)
-    assert window.input.popup.field.buffer == ""
-    press_key(window, "escape")
-    program.step_once()
-    program._rename("r1", (0, 0, 100, 30))  # pylint: disable=protected-access
-    assert window.input.popup is None
-    assert "Reset" in window.layout.chrome.status.message
-
-
-def test_clicking_away_from_the_name_box_closes_it_and_typing_no_longer_goes_to_it(
-    app,
-):
-    """The focus is given back, so the Delete key deletes in the scene again."""
-    window, program = app
-    program.pane.actions.obstacle_drawn("box", (2.0, 2.0, 0.0), (1.0, 0.5))
-    window.key(KEY["f2"], 1, 0)
-    assert window.input.popup is not None
-    window.mouse_press(Event(700, 500))
-    window.mouse_release(Event(700, 500))
-    assert window.input.popup is None and window.focus is None

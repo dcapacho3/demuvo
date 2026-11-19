@@ -8,6 +8,11 @@ from pathlib import Path
 
 import pytest
 
+from demuvo import edit
+from demuvo.gui.keys import CTRL, KEY
+from demuvo.gui.sandbox import Sandbox
+from demuvo.gui.session import Session
+from demuvo.gui.shell import Shell
 from demuvo.gui.widgets import Event
 
 SRC = Path(__file__).resolve().parents[3]
@@ -111,3 +116,41 @@ def on_virtual_display(snippet):
         env={**os.environ, "PYTHONPATH": ""},
         check=False,
     )
+
+
+def start(session=None, width=1280, height=780):
+    """A shell over a sandbox program, rendered once."""
+    program = Sandbox(session or Session(edit.new_world()))
+    window = Shell(program, width, height)
+    window.render()
+    return window, program
+
+
+def centre(widget):
+    """The centre of a widget."""
+    return widget.x + widget.width / 2, widget.y + widget.height / 2
+
+
+def click_window(window, widget):
+    """Move to a widget's centre and click it through the window."""
+    x, y = centre(widget)
+    window.mouse_move(x, y)
+    window.mouse_press(Event(x, y))
+    window.mouse_release(Event(x, y))
+
+
+def at(program, x, y):
+    """The pixel of a world point."""
+    sx, sy = program.session.scene.view.to_screen(x, y)
+    return float(sx), float(sy)
+
+
+def press_key(window, name, ctrl=False):
+    """A key press of a named key."""
+    window.key(KEY[name], 1, CTRL if ctrl else 0)
+
+
+def type_text(window, text):
+    """Type a line into whatever has the focus."""
+    for char in text:
+        window.char(char)

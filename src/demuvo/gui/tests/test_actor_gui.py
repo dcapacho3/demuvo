@@ -12,11 +12,12 @@ from demuvo import edit
 from demuvo.gui import look, scenedraw
 from demuvo.gui.keys import CTRL, KEY
 from demuvo.gui.raster import Canvas
-from demuvo.gui.sandbox import ACTOR_KEY, Sandbox
+from demuvo.gui.sandbox import ACTOR_KEY
 from demuvo.gui.session import Session
-from demuvo.gui.shell import Shell
 from demuvo.gui.widgets import Event, Section
 from demuvo.verify import WorldError
+
+from .fakes import start
 
 # A motion named by a test, to see a form built for a class demuvo does not ship.
 PLAIN = "demuvo.gui.tests.test_actor_gui:Plain"
@@ -58,14 +59,6 @@ class Counted:
 
 
 COUNTED = "demuvo.gui.tests.test_actor_gui:Counted"
-
-
-def start(session=None, width=1280, height=780):
-    """A shell over a sandbox program, rendered once."""
-    program = Sandbox(session or Session(edit.new_world()))
-    window = Shell(program, width, height)
-    window.render()
-    return window, program
 
 
 @pytest.fixture(name="app")
