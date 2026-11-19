@@ -252,7 +252,14 @@ and a table over seeds, with docs that stand alone.
 
 | Item | Size |
 |------|------|
-| A faster core in C++ or Rust under the same Python interface; see below. | L |
+| A faster core in C++ or Rust under the same Python interface: the search loops of A*, Hybrid A* and the DWB wavefront first, then the collision check. | L |
+| Jump Point Search for A*, which skips the cells of an open grid. A plan across the Depot takes 0.4 s today, and every replan pays it. | M |
+| Hybrid A*: vectorise the arcs of each pose, and stop a search that has no path sooner than 20,000 poses (3 s on the Depot). | M |
+| Batched pose maths in robomath: move many poses by a body step at once. DWB calls `rplus_se2` for every point of every candidate trajectory. | M |
+| Build the simulation once for an edit; today one build checks the edit and another runs it. | S |
+| Keep the scene of fixed obstacles between edits, as the global costmap now is. | S |
+| Open a big Gazebo file faster: the mesh cut takes 1.3 s for the Depot, and could be kept beside the file. | S |
+| Lidar for many robots: batch the ray casting across robots. | M |
 | Property tests: a planner's path is valid, and Dijkstra never costs more than A*. | M |
 | Fuzz the world loader. | S |
 | Mutation tests on the planners. | S |
