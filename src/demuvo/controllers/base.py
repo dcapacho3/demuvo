@@ -76,6 +76,18 @@ def car_limits(obs: Observation) -> Limits | None:
     return limits
 
 
+def strafe_limits(obs: Observation) -> Limits | None:
+    """The limits of a robot that can move sideways, or None.
+
+    A built-in controller tries or sends a sideways speed only for such a robot,
+    a mecanum robot, so every other robot is driven exactly as before.
+    """
+    limits = obs.limits
+    if limits is None or not limits.strafes:
+        return None
+    return limits
+
+
 def path_runs(path: np.ndarray) -> list[tuple[int, int, float]]:
     """The path split where its direction of travel changes.
 

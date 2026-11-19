@@ -120,6 +120,18 @@ def test_settings_that_do_nothing_for_the_robot_are_not_shown():
     assert not {"turn_gain", "rotate_speed", "rotate_to_goal"} & set(controller)
 
 
+def test_a_mecanum_robot_shows_its_sideways_limit_and_spot_turn_settings():
+    """It turns in place, so it keeps the spot-turn settings, and adds max_vy."""
+    inspector, session, _, _ = build()
+    session.choose("r1", "model", "mecanum")
+    inspector.show("r1")
+    model = inspector.settings["model"]
+    assert {"max_v", "max_vy", "max_w"} <= set(model)
+    assert not {"wheel_radius", "wheelbase", "track"} & set(model)
+    controller = inspector.settings["controller"]
+    assert "rotate_to_goal" in controller and "allow_reversing" not in controller
+
+
 def test_the_wheel_settings_show_once_the_robot_reads_its_encoders():
     """Wheel radius and track only matter to dead reckoning."""
     inspector, session, _, _ = build()

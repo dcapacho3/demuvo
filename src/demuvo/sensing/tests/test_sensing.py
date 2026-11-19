@@ -12,6 +12,7 @@ from robomath import Transform2D
 from demuvo import (
     MODELS,
     DiffDrive,
+    Limits,
     Navigation,
     Simulation,
     Twist,
@@ -241,8 +242,12 @@ class Plain:
     name: ClassVar[str] = "plain"
     uses: ClassVar[tuple[str, ...]] = ("vx", "wz")
 
+    def limits(self):
+        """A diff drive's box; every model offers its limits."""
+        return Limits(max_v=1.0, cap=1.0)
+
     def clip(self, command):
-        """No limits."""
+        """No clipping of its own."""
         return command
 
     def step(self, pose, command, dt):

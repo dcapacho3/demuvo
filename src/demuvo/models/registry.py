@@ -8,9 +8,12 @@ from ..verify import check_keys, number, table
 from .ackermann import Ackermann
 from .base import Model
 from .diff_drive import DiffDrive
+from .mecanum import Mecanum
 
 # The one place that lists the models, a new model class needs only an entry here.
-MODELS: dict[str, type[Model]] = {cls.name: cls for cls in (DiffDrive, Ackermann)}
+MODELS: dict[str, type[Model]] = {
+    cls.name: cls for cls in (DiffDrive, Ackermann, Mecanum)
+}
 
 
 def parse_params(value, model: str, label: str) -> dict[str, float]:

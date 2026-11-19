@@ -1,8 +1,8 @@
 """A small, deterministic 2D world for robots."""
 
-from .controllers import DWB, Controller, Observation, PurePursuit
+from .controllers import DWB, Controller, Observation, OmniPursuit, PurePursuit
 from .costmap import Costmap
-from .models import MODELS, Ackermann, DiffDrive, Limits, Twist
+from .models import MODELS, Ackermann, DiffDrive, Limits, Mecanum, Twist
 from .nav import Navigation
 from .planners import AStar, Planner, StraightLine
 from .runner import Run
@@ -27,7 +27,9 @@ __all__ = [
     "Estimator",
     "Limits",
     "LineString",
+    "Mecanum",
     "Observation",
+    "OmniPursuit",
     "Obstacle",
     "Planner",
     "Polygon",

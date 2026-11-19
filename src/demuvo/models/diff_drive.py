@@ -8,7 +8,7 @@ from typing import ClassVar
 from robomath import Transform2D
 
 from ..plugins import check_positive
-from .base import Limits, RollingWheels, Twist
+from .base import Limits, RollingWheels, Twist, move
 
 
 @dataclass(frozen=True)
@@ -48,4 +48,4 @@ class DiffDrive(RollingWheels):
 
     def step(self, pose: Transform2D, command: Twist, dt: float) -> Transform2D:
         """The pose after dt seconds of command."""
-        return self.move(pose, self.clip(command), dt)
+        return move(pose, self.clip(command), dt)

@@ -8,11 +8,22 @@ import numpy as np
 import pytest
 from robomath import Transform2D
 
-from demuvo import DWB, Ackermann, DiffDrive, Observation, Run, StraightLine, Twist
+from demuvo import (
+    DWB,
+    Ackermann,
+    DiffDrive,
+    Mecanum,
+    Observation,
+    Run,
+    StraightLine,
+    Twist,
+    edit,
+    load_world,
+)
 from demuvo.controllers import dwb
 from demuvo.costmap import LETHAL, Costmap
 from demuvo.costmap.layers import inflate
-from demuvo.options import controllers, settings_of
+from demuvo.options import controllers, hidden_settings, settings_of
 
 EXAMPLE = Path(__file__).resolve().parents[4] / "examples" / "worlds" / "dwb.toml"
 
@@ -378,3 +389,104 @@ def test_a_reversing_car_backs_toward_a_goal_behind():
     assert any(c.vx < 0.0 for c in commands)
     assert all(model.clip(c) == c for c in commands)
     assert poses[-1].xyt[0] < 1.0  # it went backwards, toward the goal
+
+
+# A robot that can move sideways: DWB's window gets a third axis, vy.
+MECANUM_EXAMPLE = EXAMPLE.parent / "mecanum_dwb.toml"
+
+
+@pytest.mark.parametrize("model", [DiffDrive(), Ackermann()], ids=["diff", "car"])
+@pytest.mark.parametrize(
+    ("pose", "goal"),
+    [((1.0, 1.0, 0.0), (5.0, 1.0, 0.0)), ((1.0, 1.0, 0.0), (1.0, 4.0, 1.57))],
+)
+def test_a_robot_that_cannot_strafe_ignores_the_sideways_settings(model, pose, goal):
+    """No vy is tried or sent, so the commands are those of DWB without the axis."""
+    obs = see(pose, goal, model.limits())
+    plain = steer(DWB(), obs, model, 20)[1]
+    other = steer(DWB(max_vel_y=0.9, acc_lim_y=9.0, vy_samples=9), obs, model, 20)[1]
+    assert other == plain
+    assert all(c.vy == 0.0 for c in plain)
+
+
+def test_a_strafing_robot_slides_toward_a_path_at_its_side():
+    """Goal to the left: it strafes from the first run, at acc_lim_y per run."""
+    model = Mecanum()
+    poses, commands = steer(
+        DWB(), see((1.0, 1.0, 0.0), (1.0, 4.0, 1.57), model.limits()), model, 40
+    )
+    assert [c.vy for c in commands[:4]] == pytest.approx([0.125, 0.25, 0.375, 0.5])
+    assert poses[-1].xyt[1] > 2.0
+
+
+def test_a_strafing_robot_is_only_given_commands_it_will_follow():
+    """Every command is inside the robot's limits, so the scored arc is the driven."""
+    model = Mecanum(max_vy=0.2)
+    _, commands = steer(
+        DWB(max_vel_y=0.5),
+        see((1.0, 1.0, 0.0), (1.0, 4.0, 0.0), model.limits()),
+        model,
+        40,
+    )
+    assert all(model.clip(c) == c for c in commands)
+    assert max(abs(c.vy) for c in commands) == pytest.approx(0.2)
+
+
+def test_the_sideways_speed_grows_no_faster_than_its_acceleration_limit():
+    """From rest the first sideways speed is at most acc_lim_y * dt."""
+    obs = see((1.0, 1.0, 0.0), (1.0, 4.0, 0.0), Mecanum().limits())
+    assert abs(DWB(acc_lim_y=1.0).command(obs).vy) <= 1.0 * obs.dt + 1e-12
+
+
+def test_a_rollout_with_a_sideways_speed_lands_where_the_mecanum_model_moves():
+    """Each rolled-out pose is the mecanum model's exact step for that time."""
+    start = np.array([1.0, 2.0, 0.3])
+    vx, vy = np.array([0.4, 0.0, -0.2]), np.array([0.0, 0.5, 0.3])
+    wz = np.array([0.6, -0.7, 0.0])
+    poses = dwb.rollout(start, vx, wz, 1.0, 0.25, vy=vy)
+    for k in range(3):
+        end = Mecanum().step(
+            Transform2D.from_xyt(start), Twist(vx=vx[k], vy=vy[k], wz=wz[k]), 1.0
+        )
+        assert poses[k, -1] == pytest.approx(end.xyt)
+
+
+@pytest.mark.parametrize("name", ["max_vel_y", "acc_lim_y"])
+@pytest.mark.parametrize("bad", [0.0, -1.0, math.nan, math.inf, True])
+def test_a_bad_sideways_number_is_refused_when_the_controller_is_built(name, bad):
+    """The sideways speed and acceleration limits must be positive and finite."""
+    with pytest.raises(ValueError, match=name):
+        DWB(**{name: bad})
+
+
+@pytest.mark.parametrize("bad", [0, 2.5, True])
+def test_the_sideways_samples_are_a_count(bad):
+    """Vy_samples is a whole number of 1 or more."""
+    with pytest.raises(ValueError, match="vy_samples"):
+        DWB(vy_samples=bad)
+
+
+def test_the_sideways_settings_show_only_for_a_robot_that_strafes():
+    """A form hides max_vel_y, acc_lim_y and vy_samples unless the robot strafes."""
+    world = edit.set_part(
+        load_world(EXAMPLE), "r1", "controller", "demuvo.controllers:DWB"
+    )
+    sideways = set(DWB.strafe_only)
+    assert sideways <= hidden_settings(world.robots[0], "controller")
+    for model in ("ackermann", "mecanum"):
+        spec = edit.set_model(world, "r1", model).robots[0]
+        hidden = hidden_settings(spec, "controller")
+        assert (sideways <= hidden) == (model != "mecanum")
+
+
+def test_the_mecanum_example_slides_round_what_only_the_lidar_sees():
+    """It reaches the goal past both obstacles, unhurt, strafing on the way."""
+    run = Run(MECANUM_EXAMPLE)
+    sideways = []
+    while not run.until_done(run.time + 0.5) and run.time < 60.0:
+        sideways.append(abs(run.sim.velocity["r1"][1]))
+    assert run.finished
+    lines = run.result()
+    assert lines[0].startswith("r1 task 1: reached")
+    assert lines[-1] == "0 collisions"
+    assert max(sideways) > 0.3

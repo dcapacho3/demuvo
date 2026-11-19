@@ -56,9 +56,10 @@ latest scan of each lidar), `obs.costmap` (the local costmap), `obs.path_changes
 (a count that grows when the path is replaced, by a new task, `set_path` or a
 [replan](world-file.md#replanning), so a controller that keeps state knows to start
 over) and `obs.limits` (what commands the robot's model can follow: `max_v`,
-`max_w(vx)` and `turns_in_place`; an `ackermann` robot's turn rate is bounded in
-proportion to its speed, so a controller that ignores the limits may command a turn
-the robot cannot make). It does not see the simulation.
+`max_w(vx)`, `turns_in_place`, and `max_vy` with `strafes` for sideways speed; an
+`ackermann` robot's turn rate is bounded in proportion to its speed, so a controller that
+ignores the limits may command a turn the robot cannot make, and only a `mecanum` robot
+has a `max_vy` above 0, so only it follows a `vy`). It does not see the simulation.
 
 **A motion** moves an [actor](world-file.md#actors), not a robot, and is named as
 `motion = "module:Class"` with `motion_params`. It has `configure(start, rng)`, called once
@@ -120,6 +121,17 @@ breadth_first = "mypackage.planners:BreadthFirst"
 
 The groups are `demuvo.planners`, `demuvo.smoothers` and `demuvo.controllers`. Only the
 `module:Class` text is read at start; the class is loaded when a robot uses it.
+
+A form leaves out a setting that does nothing for the selected robot when the class
+names it in a tuple class attribute: `car_only` for a setting only a robot that cannot
+turn in place uses, `spot_only` for one only a robot that can turn in place uses, and
+`strafe_only` for one only a robot that moves sideways uses. `DWB` lists its sideways
+speeds in `strafe_only`, so they show for a `mecanum` robot alone:
+
+```python
+class MyController:
+    strafe_only = ("max_vel_y",)
+```
 
 ## From Python
 

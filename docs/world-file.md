@@ -29,7 +29,7 @@ shape = { name = "linestring", vertices = [[2.0, 5.0], [2.0, 3.5]] }
 
 [[robot]]
 name = "r1"
-model = "diff_drive"      # or "ackermann", a car; see Robots
+model = "diff_drive"      # or "ackermann", a car, or "mecanum"; see below
 shape = { name = "circle", radius = 0.2 }     # or a box or a polygon
 pose = [1.0, 1.0, 0.0]    # where it starts: x, y, angle
 # params = { max_v = 0.8, max_w = 2.0 }       # optional: model values to replace
@@ -54,7 +54,7 @@ robot start and goal must lie inside the world. A robot's body is a `circle`, a 
 a `polygon`. Obstacle names are for people: two obstacles cannot share one.
 
 A robot's `model` is the name of a kinematic model, moved by a ROS-style `Twist`.
-There are two. `diff_drive` is a differential drive, two wheels on one axle, which can
+There are three. `diff_drive` is a differential drive, two wheels on one axle, which can
 turn in place. Its `params` are `max_v` and `max_w` (the speed and turn-rate limits,
 1.0 m/s and 1.0 rad/s), and `wheel_radius` and `track` (0.05 m and 0.3 m), which the
 encoders read. `ackermann` is a car: the front wheels steer and the rear wheels drive, so
@@ -63,8 +63,16 @@ rear axle. Its `params` are `max_v` (1.0 m/s), `max_steer` (the largest steering
 0.5 rad), `wheelbase` (rear axle to front axle, 0.3 m), and `wheel_radius` and `track`
 (0.05 m and 0.25 m, the rear wheels) for the encoders. A turn rate the steering cannot
 reach at the commanded speed is cut to the one it can, so a controller that spins in
-place gets nowhere with this model. A robot that would enter an obstacle, the border or
-another robot is pushed back out and slides along it, and the run counts a collision.
+place gets nowhere with this model. `mecanum` has four mecanum wheels: it moves along x,
+along y (a `Twist` with `vy`) and turns, all at once, and its pose is the centre of the
+four wheels. Its `params` are `max_v`, `max_vy` and `max_w` (1.0 m/s, 1.0 m/s and
+1.0 rad/s), and `wheel_radius`, `wheelbase` and `track` (0.05 m, 0.3 m and 0.3 m) for
+its four encoders. A command too fast for `max_v` or `max_vy` is slowed as a whole, so it
+keeps its direction of travel. `PurePursuit` drives it as a diff drive
+(`examples/worlds/mecanum.toml` does a lap that way, on dead reckoning); `OmniPursuit`
+and `DWB` move it sideways too, see [Controllers](#controllers). A robot that would
+enter an obstacle, the border or another robot is pushed back out and slides along it,
+and the run counts a collision.
 
 Wheel encoders have a `noise` and `ticks_per_rev`. The `dead_reckoning` estimator adds
 the wheel increments to a pose, so its error grows as the robot drives. A robot uses it
@@ -195,16 +203,16 @@ going round two boxes: 8-neighbour A* with a smoother, and 4-neighbour A* withou
 
 ## Controllers
 
-The controller turns the path into a command at each run. `PurePursuit` steers toward a
-point of the path `lookahead` metres ahead and does not look at the lidar. On an
-`ackermann` robot, which cannot turn in place, it keeps the turn rate inside the
-steering, drives out of a large bearing error on full lock instead of turning on the
-spot, and does not turn to the goal's angle; with `allow_reversing` it backs toward a
-target behind it instead of going round forwards, a real car's way out of a tight
-spot. `DWB`
-(`demuvo.controllers:DWB`), the Dynamic Window Approach as Nav2's DWB controller does it,
-is a local planner: it steers round what the robot's lidar sees, even what the planner's
-map does not show.
+The controller turns the path into a command at each run. Three come with demuvo:
+`PurePursuit` and `DWB` for any robot, and `OmniPursuit` for a robot that moves
+sideways. `PurePursuit` steers toward a point of the path `lookahead` metres ahead and
+does not look at the lidar. On an `ackermann` robot, which cannot turn in place, it
+keeps the turn rate inside the steering, drives out of a large bearing error on full
+lock instead of turning on the spot, and does not turn to the goal's angle; with
+`allow_reversing` it backs toward a target behind it instead of going round forwards, a
+real car's way out of a tight spot. `DWB` (`demuvo.controllers:DWB`), the Dynamic Window
+Approach as Nav2's DWB controller does it, is a local planner: it steers round what the
+robot's lidar sees, even what the planner's map does not show.
 
 ```toml
 controller = "demuvo.controllers:DWB"
@@ -251,6 +259,30 @@ a new path.
 
 `examples/worlds/dwb.toml` gives a robot a straight-line path through a box and a
 circle. Only its lidar shows them, and DWB takes it round both.
+
+A robot that can move sideways, a `mecanum` robot, gets a third axis in DWB's window:
+`vy_samples` sideways speeds (5 by default), reachable within `acc_lim_y` and no faster
+than `max_vel_y` (0.5 m/s) or the robot's own `max_vy`. Every trajectory is pulled
+inside the robot's limits as its model would pull it, so the scored trajectory is the
+driven one. The critics are the same, so it still faces along the path, but it slides
+onto the path and round what blocks it instead of turning off and back
+(`examples/worlds/mecanum_dwb.toml`). The window then holds about `vy_samples` times as
+many trajectories (a sideways speed of 0 is always among them), and a trajectory reaches `hypot(max_vel_x, max_vel_y) * sim_time +
+forward_point_distance`. Every other robot tries no sideways speed and is driven exactly
+as before; a form shows these three settings only for a robot that strafes.
+
+`OmniPursuit` (`demuvo.controllers:OmniPursuit`) is a path follower for a robot that
+moves sideways. It moves straight at the point of the path `lookahead` metres ahead, at
+`speed`, slower near the goal by `approach_gain`, and turns apart, toward the goal's
+angle, at `turn_gain` per radian up to `rotate_speed` and the robot's `max_w`; with
+`face_path` it faces along
+the path instead until the goal is within `lookahead`. Its command is held for a
+control period, along an arc, so it is aimed for the heading the robot will have
+halfway through, which keeps the robot exactly on its aim while it turns. It lines up
+on the way, so it seldom has to turn on the spot at the goal. Like `PurePursuit` it
+does not look at the lidar. A robot that cannot move sideways stands still with it,
+and the log says why. `examples/worlds/omni_pursuit.toml` laps a box facing the same
+way all round.
 
 To use your own, write a class and name it in the file; see [your own
 algorithms](plugins.md).
@@ -453,7 +485,9 @@ controller = "demuvo.controllers:PurePursuit"
 control_period = 0.05      # optional: seconds between controller runs
 ```
 
-`demuvo file.toml --dt 0.02` replaces the file's `dt`. A period shorter than `dt` is an
+`demuvo file.toml --dt 0.02` replaces the file's `dt`. A `dt` so large that a robot's
+limits let it turn half a circle or more in one step is refused: the velocity such a
+step reports is ambiguous, so the run could lie. A period shorter than `dt` is an
 error, since a controller cannot run twice in one step. A period that is not a whole
 number of steps works, with one warning: the gaps then alternate between two lengths,
 one step apart, and their mean is the period. A new goal or path takes effect at the

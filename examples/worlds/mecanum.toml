@@ -1,0 +1,48 @@
+version = 1
+
+# A mecanum robot: four wheels with rollers at 45 degrees, so it can move along
+# x, along y and turn, all at once. Its pose is the centre of the four wheels.
+# PurePursuit drives it like a diff drive, turning on the spot at each corner of
+# a lap round the box. Its pose comes from dead reckoning on its four wheel
+# encoders. omni_pursuit.toml laps the same box strafing instead, and
+# mecanum_dwb.toml slides one round obstacles with DWB. A script can strafe it
+# too: `Twist(vy=0.5)` moves it 0.5 m/s to its left.
+
+[world]
+size = [8.0, 6.0]
+seed = 5
+
+[[obstacle]]
+pose = [4.0, 3.0, 0.0]
+shape = { name = "box", size = [2.0, 1.5] }
+
+[[robot]]
+name = "omni"
+model = "mecanum"
+shape = { name = "box", size = [0.4, 0.3] }
+pose = [1.5, 1.5, 0.0]
+params = { max_v = 0.8, max_vy = 0.5, max_w = 1.5, wheelbase = 0.3, track = 0.25 }
+controller = "demuvo.controllers:PurePursuit"
+controller_params = { speed = 0.5, lookahead = 0.4 }
+estimator = "dead_reckoning"
+sensors = { encoders = { noise = 0.002, ticks_per_rev = 4096 } }
+
+[[task]]
+robot = "omni"
+goal = [6.5, 1.5, 1.57]
+goal_tolerance = [0.15, 0.15]
+
+[[task]]
+robot = "omni"
+goal = [6.5, 4.5, 3.14]
+goal_tolerance = [0.15, 0.15]
+
+[[task]]
+robot = "omni"
+goal = [1.5, 4.5, -1.57]
+goal_tolerance = [0.15, 0.15]
+
+[[task]]
+robot = "omni"
+goal = [1.5, 1.5, 0.0]
+goal_tolerance = [0.15, 0.15]

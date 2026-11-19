@@ -2,10 +2,11 @@
 
 import math
 
+import numpy as np
 import pytest
 from robomath import Transform2D
 
-from demuvo import MODELS, Ackermann, DiffDrive, Limits, Twist
+from demuvo import MODELS, Ackermann, DiffDrive, Limits, Mecanum, Twist
 
 TURN = 2 * math.pi
 
@@ -275,10 +276,19 @@ def test_an_ackermann_limit_is_a_wedge_and_cannot_turn_in_place():
     assert limits.max_w(-1.0) == pytest.approx(2.0)
 
 
-@pytest.mark.parametrize("model", [DiffDrive(), Ackermann(), DiffDrive(max_w=0.3)])
+@pytest.mark.filterwarnings("ignore:.* ignores vy")
+@pytest.mark.parametrize(
+    "model", [DiffDrive(), Ackermann(), DiffDrive(max_w=0.3), Mecanum(max_vy=0.4)]
+)
 @pytest.mark.parametrize(
     "command",
-    [Twist(), Twist(vx=5.0, wz=-5.0), Twist(vx=-0.4, wz=2.0), Twist(wz=1.0)],
+    [
+        Twist(),
+        Twist(vx=5.0, wz=-5.0),
+        Twist(vx=-0.4, wz=2.0),
+        Twist(wz=1.0),
+        Twist(vx=0.3, vy=-2.0, wz=0.5),
+    ],
 )
 def test_the_limits_clip_as_the_model_does(model, command):
     """Limits.clip is the model's clip, so there is one source of truth."""
@@ -299,3 +309,45 @@ def test_a_limit_bound_must_be_above_zero(name, bad):
     values[name] = bad
     with pytest.raises(ValueError, match=name):
         Limits(**values)
+
+
+def old_clip(limits, command):
+    """Limits.clip as it was before max_vy: vx clamped, then wz at that vx."""
+    vx = max(-limits.max_v, min(limits.max_v, command.vx))
+    bound = limits.max_w(vx)
+    return Twist(vx=vx, wz=max(-bound, min(bound, command.wz)))
+
+
+@pytest.mark.parametrize(
+    "model", [DiffDrive(), DiffDrive(max_v=0.7, max_w=0.3), Ackermann()]
+)
+def test_a_robot_that_cannot_strafe_clips_as_before_bit_for_bit(model):
+    """Max_vy changed nothing for diff drive and Ackermann, to the last bit."""
+    limits = model.limits()
+    assert limits.max_vy == 0.0
+    assert not limits.strafes
+    rng = np.random.default_rng(7)
+    for vx, vy, wz in rng.uniform(-5, 5, (2000, 3)):
+        command = Twist(vx=vx, vy=vy, wz=wz)
+        assert limits.clip(command) == old_clip(limits, command)
+
+
+def test_the_limits_keep_vy_only_for_a_robot_that_strafes():
+    """With max_vy above 0, vy is cut to it; with 0, it is dropped."""
+    command = Twist(vx=0.2, vy=0.3, wz=0.1)
+    assert Limits(max_v=1.0, cap=1.0).clip(command) == Twist(vx=0.2, wz=0.1)
+    assert Limits(max_v=1.0, cap=1.0, max_vy=0.5).clip(command) == command
+
+
+def test_the_limits_shrink_vx_and_vy_by_one_factor():
+    """A command toward (2, 2) with bounds (1, 0.5) keeps its 45 degrees."""
+    limits = Limits(max_v=1.0, cap=1.0, max_vy=0.5)
+    assert limits.clip(Twist(vx=2.0, vy=2.0)) == Twist(vx=0.5, vy=0.5)
+    assert limits.clip(Twist(vx=-4.0, vy=1.0)) == Twist(vx=-1.0, vy=0.25)
+
+
+@pytest.mark.parametrize("bad", [-0.1, math.nan, math.inf])
+def test_a_sideways_bound_must_be_finite_and_not_negative(bad):
+    """Max_vy may be 0, a robot that cannot strafe, but not less, nan or infinite."""
+    with pytest.raises(ValueError, match="max_vy"):
+        Limits(max_v=1.0, cap=1.0, max_vy=bad)

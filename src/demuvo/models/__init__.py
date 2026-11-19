@@ -7,9 +7,10 @@ A command is a `Twist`, the six numbers of a ROS `cmd_vel`. A model follows the
 parts it can use and ignores the rest, with one warning. The world is flat, so
 today every model uses vx, vy and wz at most.
 
-The models are "diff_drive" (two wheels on one axle, which can turn in place)
-and "ackermann" (a car: steered front wheels, so it has a least turning
-radius and cannot turn in place).
+The models are "diff_drive" (two wheels on one axle, which can turn in place),
+"ackermann" (a car: steered front wheels, so it has a least turning
+radius and cannot turn in place) and "mecanum" (four mecanum wheels, so it
+moves sideways as well, and turns in place).
 
 Each model class includes:
     name: the word used in the world file
@@ -25,13 +26,16 @@ A model that can also give its wheel increments has `encoders` and
 from .ackermann import Ackermann
 from .base import Limits, Model, Twist, WheeledModel
 from .diff_drive import DiffDrive
+from .mecanum import WHEELS, Mecanum
 from .registry import MODELS, parse_params
 
 __all__ = [
     "MODELS",
+    "WHEELS",
     "Ackermann",
     "DiffDrive",
     "Limits",
+    "Mecanum",
     "Model",
     "Twist",
     "WheeledModel",

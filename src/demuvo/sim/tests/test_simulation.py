@@ -177,3 +177,76 @@ def test_an_ackermann_robot_arcs_and_cannot_spin(world):
     x, y, angle = sim.poses["r1"].xyt
     assert (x, y) != pytest.approx((1.0, 1.0))
     assert angle == pytest.approx(0.2)
+
+
+def test_a_mecanum_robot_strafes_and_reports_its_sideways_velocity(world):
+    """Vy alone moves it to its left; velocity and driven see the sideways motion."""
+    sim = Simulation(edit.set_model(world, "r1", "mecanum"), dt=0.1)
+    for _ in range(10):
+        sim.step({"r1": Twist(vy=0.5)})
+    assert tuple(sim.poses["r1"].xyt) == pytest.approx((1.0, 1.5, 0.0))
+    assert sim.velocity["r1"] == pytest.approx([0.0, 0.5, 0.0])
+    assert sim.driven["r1"] == pytest.approx(0.5)
+
+
+def test_a_mecanum_robot_spins_in_place_and_drives_nothing(world):
+    """It turns about its centre, so the position stays and driven stays 0."""
+    sim = Simulation(edit.set_model(world, "r1", "mecanum"), dt=0.1)
+    for _ in range(10):
+        sim.step({"r1": Twist(wz=1.0)})
+    assert tuple(sim.poses["r1"].xyt) == pytest.approx((1.0, 1.0, 1.0))
+    assert sim.driven["r1"] == pytest.approx(0.0, abs=1e-12)
+
+
+def test_a_mecanum_robot_dead_reckons_on_its_four_wheels(world):
+    """Noiseless encoders on four wheels give back the true pose."""
+    world = edit.set_estimator(
+        edit.set_model(world, "r1", "mecanum"), "r1", "dead_reckoning"
+    )
+    sim = Simulation(world, dt=0.05)
+    for _ in range(40):
+        sim.step({"r1": Twist(vx=0.4, vy=0.3, wz=0.5)})
+    truth, estimate = sim.poses["r1"].xyt, sim.estimates["r1"].pose.xyt
+    assert tuple(estimate) == pytest.approx(tuple(truth), abs=1e-12)
+    assert tuple(truth) != pytest.approx((1.0, 1.0, 0.0))
+
+
+def with_params(world, **params):
+    """The world with r1's model params replaced."""
+    import dataclasses  # pylint: disable=import-outside-toplevel
+
+    robots = tuple(
+        dataclasses.replace(r, params=params) if r.name == "r1" else r
+        for r in world.robots
+    )
+    return dataclasses.replace(world, robots=robots)
+
+
+def test_a_turn_of_half_a_circle_per_step_is_refused(world):
+    """Past pi the velocity read back from a step aliases, so the world is refused.
+
+    The message names the robot, the turn it may make and the way out.
+    """
+    fast = with_params(world, max_w=35.0)
+    with pytest.raises(ValueError, match=r"'r1' may turn 3\.5 rad.*half a circle"):
+        Simulation(fast, dt=0.1)
+    assert Simulation(fast, dt=0.01).dt == 0.01  # the same world, 0.35 rad a step
+
+
+def test_the_turn_per_step_bound_is_strict_at_pi(world):
+    """Exactly pi is refused, the sign of the read-back turn is ambiguous there."""
+    import math  # pylint: disable=import-outside-toplevel
+
+    with pytest.raises(ValueError, match="half a circle"):
+        Simulation(with_params(world, max_w=math.pi), dt=1.0)
+    Simulation(with_params(world, max_w=3.14), dt=1.0)
+
+
+def test_a_car_turn_per_step_is_bounded_through_its_steering(world):
+    """An ackermann robot's largest turn rate is slope * max_v, not a flat cap."""
+    car = edit.set_model(world, "r1", "ackermann")
+    # tan(1.5) / 0.1 * 3.0 = 423 rad/s at full speed: 4.2 rad in one 0.01 s step.
+    fast = with_params(car, max_v=3.0, max_steer=1.5, wheelbase=0.1)
+    with pytest.raises(ValueError, match="'r1' may turn"):
+        Simulation(fast, dt=0.01)
+    assert Simulation(fast, dt=0.001).steps == 0  # a tenth of the step is fine

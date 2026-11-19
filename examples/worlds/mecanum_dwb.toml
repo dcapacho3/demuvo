@@ -1,0 +1,36 @@
+version = 1
+
+# The DWB world with a mecanum robot. The planner draws a straight line through two
+# obstacles that only the lidar sees. A robot that can move sideways gets a third
+# axis in DWB's window, sideways speeds, so instead of turning off the line and back
+# it slides round each obstacle: left past the box, right past the circle.
+
+[world]
+size = [10.0, 6.0]        # metres
+seed = 3
+
+[[obstacle]]
+pose = [3.5, 3.0, 0.0]
+shape = { name = "box", size = [0.6, 1.0] }
+
+[[obstacle]]
+pose = [6.5, 2.85, 0.0]
+shape = { name = "circle", radius = 0.4 }
+
+[[robot]]
+name = "r1"
+model = "mecanum"
+shape = { name = "circle", radius = 0.2 }
+pose = [1.0, 3.0, 0.0]
+params = { max_vy = 0.6 }
+planner = "demuvo.planners:StraightLine"     # straight through both obstacles
+controller = "demuvo.controllers:DWB"
+# max_vel_y and vy_samples give the sideways axis; a rollout and its point ahead,
+# hypot(max_vel_x, max_vel_y) * sim_time + forward_point_distance, should stay
+# inside the local costmap's window, 1.5 m each way by default.
+controller_params = { max_vel_x = 0.5, max_vel_y = 0.5, vy_samples = 5, sim_time = 1.0 }
+sensors = { lidar = { beams = 180, max_range = 4.0, noise = 0.01 } }
+
+[[task]]
+robot = "r1"
+goal = [9.0, 3.0, 0.0]

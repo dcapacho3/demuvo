@@ -1,0 +1,40 @@
+version = 1
+
+# A mecanum robot moves sideways, so it can follow a path without facing along it.
+# OmniPursuit moves it straight at a point of the path ahead and turns it apart:
+# here every goal faces +x, so it laps the box without turning at all. It goes
+# forward along the bottom, strafes left up the right side, backs along the top
+# and strafes right down the left side, always facing the same way.
+
+[world]
+size = [8.0, 6.0]
+seed = 5
+
+[[obstacle]]
+pose = [4.0, 3.0, 0.0]
+shape = { name = "box", size = [2.0, 1.5] }
+
+[[robot]]
+name = "omni"
+model = "mecanum"
+shape = { name = "box", size = [0.4, 0.3] }
+pose = [1.5, 1.5, 0.0]
+params = { max_v = 0.8, max_vy = 0.6, max_w = 1.5 }
+controller = "demuvo.controllers:OmniPursuit"
+controller_params = { speed = 0.5, lookahead = 0.4 }
+
+[[task]]
+robot = "omni"
+goal = [6.5, 1.5, 0.0]
+
+[[task]]
+robot = "omni"
+goal = [6.5, 4.5, 0.0]
+
+[[task]]
+robot = "omni"
+goal = [1.5, 4.5, 0.0]
+
+[[task]]
+robot = "omni"
+goal = [1.5, 1.5, 0.0]

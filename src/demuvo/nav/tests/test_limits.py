@@ -190,3 +190,40 @@ def test_the_parking_world_is_parked_with_the_default_lookahead_too():
     run = Run(world)
     assert run.until_done(90.0)
     assert all("reached" in line for line in run.result()[:3])
+
+
+def test_a_mecanum_controller_gets_the_sideways_bound(tmp_path, monkeypatch):
+    """The observation says a mecanum robot turns in place and strafes."""
+    spy, world = spy_world(tmp_path, monkeypatch, "mecanum")
+    observe(world)
+    limits = spy.seen[-1].limits
+    assert limits is not None
+    assert limits.turns_in_place
+    assert limits.strafes
+    assert (limits.max_v, limits.max_vy, limits.max_w(0.0)) == (1.0, 1.0, 1.0)
+
+
+@pytest.mark.parametrize(
+    "controller",
+    [
+        "demuvo.controllers:PurePursuit",
+        "demuvo.controllers:DWB",
+        "demuvo.controllers:OmniPursuit",
+    ],
+)
+@pytest.mark.parametrize("goal", list(GOALS), ids=list(GOALS))
+def test_a_mecanum_robot_reaches_the_goals_a_diff_drive_reaches(controller, goal):
+    """Pure pursuit drives it as a diff drive; DWB and omni pursuit strafe it."""
+    world = edit.set_part(load_world(DEMO), "r1", "controller", controller)
+    assert drive_to(edit.set_model(world, "r1", "mecanum"), GOALS[goal]) is not None
+
+
+MECANUM = Path(__file__).resolve().parents[4] / "examples" / "worlds" / "mecanum.toml"
+
+
+def test_the_mecanum_example_finishes_its_lap():
+    """Four waypoints round the box, on dead reckoning, with no collision."""
+    from demuvo import Run  # pylint: disable=import-outside-toplevel
+
+    run = Run(load_world(MECANUM))
+    assert run.until_done(90.0)

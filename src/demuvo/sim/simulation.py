@@ -70,8 +70,10 @@ class Simulation:
             dt: length of a step in seconds, positive; None takes the world's.
 
         Raises:
-            ValueError: if dt is not positive, or if a robot starts inside an
-                obstacle, the border or another robot.
+            ValueError: if dt is not positive, if a robot's limits let it turn
+                half a circle or more in one step (`velocity` and `driven`
+                would then read such a step back wrongly), or if a robot
+                starts inside an obstacle, the border or another robot.
         """
         if dt is None:
             dt = world.dt
@@ -81,6 +83,16 @@ class Simulation:
         self.dt = dt
         self.rng = np.random.default_rng(world.seed)
         self.models = {r.name: MODELS[r.model](**r.params) for r in world.robots}
+        for name, model in self.models.items():
+            limits = model.limits()
+            turn = limits.max_w(limits.max_v) * dt
+            if turn >= math.pi:
+                raise ValueError(
+                    f"robot '{name}' may turn {turn:.3g} rad in one step of {dt} s, "
+                    f"half a circle or more, so its reported velocity would be "
+                    f"wrong; lower its turn-rate limit or dt to keep the turn "
+                    f"below pi"
+                )
         self.costmaps = build_costmaps(world)
         self.robots = {
             r.name: Robot(

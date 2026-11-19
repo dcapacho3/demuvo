@@ -325,6 +325,27 @@ def test_a_diff_drive_param_is_refused_on_an_ackermann(tmp_path):
         load_world(write(tmp_path, text))
 
 
+def test_a_mecanum_robot_loads_with_its_params(tmp_path):
+    """The key "mecanum" selects the four-wheel model and takes its own params."""
+    text = GOOD.replace('model = "diff_drive"', 'model = "mecanum"').replace(
+        "pose = [1.0, 1.0, 0.0]",
+        "pose = [1.0, 1.0, 0.0]\nparams = { max_vy = 0.4, wheelbase = 0.35 }",
+    )
+    robot = load_world(write(tmp_path, text)).robots[0]
+    assert robot.model == "mecanum"
+    assert robot.params == {"max_vy": 0.4, "wheelbase": 0.35}
+
+
+def test_a_car_param_is_refused_on_a_mecanum(tmp_path):
+    """Max_steer belongs to ackermann; a mecanum robot's params refuse it."""
+    text = GOOD.replace('model = "diff_drive"', 'model = "mecanum"').replace(
+        "pose = [1.0, 1.0, 0.0]",
+        "pose = [1.0, 1.0, 0.0]\nparams = { max_steer = 0.5 }",
+    )
+    with pytest.raises(WorldError, match="max_steer"):
+        load_world(write(tmp_path, text))
+
+
 def test_params_replace_the_model_defaults(tmp_path):
     """The values in `params` come back on the robot."""
     text = GOOD.replace(

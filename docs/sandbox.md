@@ -93,7 +93,9 @@ The corners of a polygon or line are set in the world file.
   one more;
 - its body, a disc or a box, and its size;
 - the model, planner, smoother and controller, each with its settings, and the control
-  period;
+  period. A setting that does nothing for this robot is left out: pure pursuit's
+  reversing switch for a robot that turns in place, DWB's sideways speeds for one that cannot move
+  sideways, and the wheel sizes until something reads the encoders;
 - whether it plans again while it drives, with the period between plans and how far off
   the path it may stray; the other [replanning](world-file.md#replanning) settings are
   set in the world file;

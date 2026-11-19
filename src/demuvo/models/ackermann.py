@@ -80,7 +80,7 @@ from typing import ClassVar
 from robomath import Transform2D
 
 from ..plugins import check_positive
-from .base import Limits, RollingWheels, Twist
+from .base import Limits, RollingWheels, Twist, move
 
 
 @dataclass(frozen=True)
@@ -152,4 +152,4 @@ class Ackermann(RollingWheels):
         """
         command = self.clip(command)
         self._check_steerable(command)
-        return self.move(pose, command, dt)
+        return move(pose, command, dt)

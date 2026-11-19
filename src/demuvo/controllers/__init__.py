@@ -10,6 +10,7 @@ arguments.
 
 from .base import Controller, Observation
 from .dwb import DWB
+from .omni_pursuit import OmniPursuit
 from .pure_pursuit import PurePursuit
 
-__all__ = ["DWB", "Controller", "Observation", "PurePursuit"]
+__all__ = ["DWB", "Controller", "Observation", "OmniPursuit", "PurePursuit"]

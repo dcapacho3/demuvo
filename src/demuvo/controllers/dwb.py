@@ -43,6 +43,15 @@ A car follows a path that changes direction, as a Reeds-Shepp path does, one run
 a time: the path is cut to the run, only speeds in the run's direction are sampled,
 and the local goal is the run's end. Near the path a heading critic also keeps the
 car facing as the path does, which lands it on the goal's angle.
+
+A robot that can move sideways (`Observation.limits.strafes`, as a mecanum robot's
+does) gets a third axis, as in Nav2's DWB for a holonomic base: `vy_samples`
+sideways speeds, reachable within `acc_lim_y` and no faster than `max_vel_y` or the
+robot's own `max_vy`. Every (vx, vy, wz) is rolled out on its exact arc and pulled
+inside the robot's limits as its model would pull it, so the scored trajectory is
+the driven one. The critics are the same; the align critics still make it face
+along the path, and it strafes to get onto the path and round what blocks it. A
+robot that cannot strafe samples vy = 0 alone and is driven exactly as before.
 """
 
 from __future__ import annotations
@@ -58,10 +67,10 @@ import numpy as np
 from robomath import rplus_se2, se2_to_xyt, wrap_angle, xyt_to_se2
 
 from ..costmap import INSCRIBED, MAX_NON_OBSTACLE, Costmap
-from ..models import Twist
+from ..models import Limits, Twist
 from ..paths import along_path
 from ..plugins import check_not_negative, check_positive
-from .base import Observation, car_limits, pass_runs, path_runs
+from .base import Observation, car_limits, pass_runs, path_runs, strafe_limits
 
 LOGGER = logging.getLogger(__name__)
 # How many times the path angle weight the heading critic counts, near the path.
@@ -148,6 +157,11 @@ class DWB:
             scores worse than a smaller one, so without a floor it inches.
             With one it turns on its least circle at this speed instead. The
             floor is never above the fastest speed the window reaches.
+        max_vel_y: largest sideways speed in m/s, either way, for a robot that
+            can move sideways; the robot's own `max_vy` caps it too.
+        acc_lim_y: sideways acceleration limit in m/s^2.
+        vy_samples: how many sideways speeds it tries, for a robot that can move
+            sideways; the window holds this many times as many trajectories.
     """
 
     max_vel_x: float = 0.5
@@ -171,14 +185,18 @@ class DWB:
     rotate_to_goal: bool = True
     path_angle_scale: float = 2.0
     car_min_vel_x: float = 0.1
-    # Settings only a robot that cannot turn in place uses, and only one that can;
-    # a form shows the ones that apply.
+    max_vel_y: float = 0.5
+    acc_lim_y: float = 2.5
+    vy_samples: int = 5
+    # Settings only a robot that cannot turn in place uses, only one that can, and
+    # only one that can move sideways; a form shows the ones that apply.
     car_only: ClassVar[tuple[str, ...]] = ("car_min_vel_x", "path_angle_scale")
     spot_only: ClassVar[tuple[str, ...]] = (
         "rotate_speed",
         "turn_gain",
         "rotate_to_goal",
     )
+    strafe_only: ClassVar[tuple[str, ...]] = ("max_vel_y", "acc_lim_y", "vy_samples")
     _last: Twist = field(default_factory=Twist, init=False, repr=False, compare=False)
     _maps: tuple[tuple, _Maps] | None = field(
         default=None, init=False, repr=False, compare=False
@@ -204,6 +222,8 @@ class DWB:
             "time_granularity",
             "rotate_speed",
             "turn_gain",
+            "max_vel_y",
+            "acc_lim_y",
         )
         check_not_negative(
             self,
@@ -217,7 +237,7 @@ class DWB:
             "path_angle_scale",
             "car_min_vel_x",
         )
-        for name in ("vx_samples", "vtheta_samples"):
+        for name in ("vx_samples", "vtheta_samples", "vy_samples"):
             value = getattr(self, name)
             if not isinstance(value, int) or isinstance(value, bool) or value < 1:
                 raise ValueError(f"{name} must be a whole number of 1 or more")
@@ -256,12 +276,23 @@ class DWB:
             # clip is scored as what the model would drive instead.
             bound = np.array([car.max_w(float(v)) for v in vx])
             wz = np.clip(wz, -bound, bound)
-        poses = rollout(obs.pose.xyt, vx, wz, self.sim_time, self.time_granularity)
-        reach = self.max_vel_x * self.sim_time + self.forward_point_distance
+        vy = None
+        speed = self.max_vel_x
+        strafe = strafe_limits(obs)
+        if strafe is not None:
+            vx, vy, wz = self._sideways(vx, wz, obs.dt, strafe)
+            # A trajectory reaches farther on a diagonal.
+            speed = math.hypot(speed, min(self.max_vel_y, strafe.max_vy))
+        poses = rollout(
+            obs.pose.xyt, vx, wz, self.sim_time, self.time_granularity, vy=vy
+        )
+        reach = speed * self.sim_time + self.forward_point_distance
         scores = self._score(
             poses, obs, align=to_goal > reach, car=car is not None, sign=sign
         )
         still = (np.abs(vx) < 1e-9) & (np.abs(wz) < 1e-9)
+        if vy is not None:
+            still &= np.abs(vy) < 1e-9  # a pure strafe moves
         scores[still] = np.inf  # standing still gets nowhere
         if car is not None:
             # Inching gets nowhere either: a car turns by driving, so it must.
@@ -278,7 +309,11 @@ class DWB:
                 )
                 self._stuck_on = obs.path_changes
             return self._keep(Twist())
-        return self._keep(Twist(vx=float(vx[best]), wz=float(wz[best])))
+        if vy is None:
+            return self._keep(Twist(vx=float(vx[best]), wz=float(wz[best])))
+        return self._keep(
+            Twist(vx=float(vx[best]), vy=float(vy[best]), wz=float(wz[best]))
+        )
 
     def _run_of(self, obs: Observation, car) -> tuple[Observation, float | None, bool]:
         """The observation of the run being followed, its direction and if it is last.
@@ -336,6 +371,37 @@ class DWB:
             vs = np.union1d(vs, [0.0])  # a turn on the spot is always in reach
         vx, wz = np.meshgrid(vs, ws, indexing="ij")
         return vx.ravel(), wz.ravel()
+
+    def _sideways(
+        self, vx: np.ndarray, wz: np.ndarray, dt: float, limits: Limits
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """The window with a third axis, sideways speeds, for a robot that strafes.
+
+        It tries `vy_samples` sideways speeds reachable in dt from the last
+        command within `acc_lim_y`, no faster than `max_vel_y` or the robot's
+        `max_vy`, and 0 when it is in reach, so every (vx, wz) pair of the
+        window is still tried on its own. Each triple is then pulled inside the
+        robot's limits as `Limits.clip` pulls a command, vx and vy by one factor
+        and wz to its bound at that vx, so the trajectory scored is the one the
+        robot drives.
+
+        Returns:
+            vx, vy and wz, flat, each pair of the window once for each vy.
+        """
+        bound = min(self.max_vel_y, limits.max_vy)
+        y0 = self._last.vy
+        low = max(-bound, y0 - self.acc_lim_y * dt)
+        high = min(bound, y0 + self.acc_lim_y * dt)
+        ys = np.linspace(low, high, self.vy_samples)
+        if low <= 0.0 <= high:
+            ys = np.union1d(ys, [0.0])
+        vy = np.tile(ys, len(vx))
+        vx, wz = np.repeat(vx, len(ys)), np.repeat(wz, len(ys))
+        over = np.maximum(np.abs(vx) / limits.max_v, np.abs(vy) / limits.max_vy)
+        shrink = np.where(over > 1.0, over, 1.0)
+        vx, vy = vx / shrink, vy / shrink
+        turn = np.array([limits.max_w(float(v)) for v in vx])
+        return vx, vy, np.clip(wz, -turn, turn)
 
     def _grids(self, obs: Observation) -> _Maps:
         """The grid, its free cells, the path through it and the distance maps.
@@ -488,22 +554,28 @@ def blank_grid(path: np.ndarray) -> Costmap:
 
 
 def rollout(
-    start: np.ndarray, vx: np.ndarray, wz: np.ndarray, sim_time: float, step: float
+    start: np.ndarray,
+    vx: np.ndarray,
+    wz: np.ndarray,
+    sim_time: float,
+    step: float,
+    vy: np.ndarray | None = None,
 ) -> np.ndarray:
-    """The poses of a diff-drive robot under each constant (vx, wz), every `step`.
+    """The poses of a robot under each constant body twist, every `step`.
 
-    Each pose is exact, on the arc of radius vx / wz, as `DiffDrive.step` moves.
-    The first pose is one step from the start, and the last is at `sim_time`.
+    Each pose is exact, on the arc of the twist, as the models' `step` moves:
+    radius vx / wz for a diff drive, hypot(vx, vy) / |wz| with a sideways speed
+    vy. None for vy is no sideways speed. The first pose is one step from the
+    start, and the last is at `sim_time`.
 
     Returns:
-        shape (K, T, 3), (x, y, angle) for each of the K pairs at each of T times.
+        shape (K, T, 3), (x, y, angle) for each of the K twists at each of T times.
     """
     count = max(1, math.ceil(round(sim_time / step, 9)))
     times = np.minimum(np.arange(1, count + 1) * step, sim_time)
+    side = np.zeros((len(vx), count)) if vy is None else vy[:, None] * times
     # The body twist held for each time, so the pose moves along its exact arc.
-    twist = np.stack(
-        [vx[:, None] * times, np.zeros((len(vx), count)), wz[:, None] * times], axis=-1
-    )
+    twist = np.stack([vx[:, None] * times, side, wz[:, None] * times], axis=-1)
     return se2_to_xyt(rplus_se2(xyt_to_se2(np.asarray(start, dtype=float)), twist))
 
 

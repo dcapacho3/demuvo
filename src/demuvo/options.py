@@ -53,6 +53,7 @@ _MOTIONS = {
 _CONTROLLERS = {
     "Pure pursuit": "demuvo.controllers:PurePursuit",
     "DWB": "demuvo.controllers:DWB",
+    "Omni pursuit": "demuvo.controllers:OmniPursuit",
     NO_CONTROLLER: None,
 }
 
@@ -253,8 +254,9 @@ def hidden_settings(spec, part: str) -> frozenset[str]:
     """The settings of one part of a robot that do nothing for it.
 
     A class lists them in `car_only` (a robot that turns in place has no use for
-    them), `spot_only` (a car has none) and `encoder_only` (no use without
-    encoders). A setting it lists nowhere always shows.
+    them), `spot_only` (a car has none), `strafe_only` (no use to a robot that
+    cannot move sideways) and `encoder_only` (no use without encoders). A
+    setting it lists nowhere always shows.
 
     Args:
         spec: the `RobotSpec`.
@@ -266,8 +268,11 @@ def hidden_settings(spec, part: str) -> frozenset[str]:
     if not path:
         return frozenset()
     cls = MODELS[path] if part == "model" else class_of(path)
-    car = not MODELS[spec.model]().limits().turns_in_place
+    limits = MODELS[spec.model]().limits()
+    car = not limits.turns_in_place
     hidden = set(getattr(cls, "spot_only" if car else "car_only", ()))
+    if not limits.strafes:
+        hidden |= set(getattr(cls, "strafe_only", ()))
     if "encoders" not in spec.sensors and "encoders" not in (
         ESTIMATORS[spec.estimator].needs
     ):

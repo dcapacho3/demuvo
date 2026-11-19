@@ -110,3 +110,8 @@ names every column in order and says when a cell is left empty.
 The same world and seed give the same run on one machine and one numpy build. On another
 machine the last few bits of a float may differ, so compare results with a small
 tolerance, not for equality, when they cross machines.
+
+A run also refuses to start rather than report something wrong: `Run(world)`, with or
+without `dt=...`, raises `ValueError` when a robot's limits would let it turn half a circle or more in one
+step, since the velocity and distance read back from such a step are ambiguous. Lower the
+robot's turn-rate limit or `dt`.
