@@ -5,10 +5,13 @@
 import numpy as np
 import pytest
 
-from demuvo import edit
+from demuvo import edit, load_world
+from demuvo.gui import look
 from demuvo.gui.keys import KEY
-from demuvo.gui.raster import Canvas
+from demuvo.gui.raster import Canvas, rgba
+from demuvo.gui.robots import MIN_RADIUS, Footprint, display_scale
 from demuvo.gui.sandbox import ZOOM_KEY, Sandbox
+from demuvo.gui.scenedraw import MIN_ACTOR_RADIUS
 from demuvo.gui.scenepane import ZOOM_STEP
 from demuvo.gui.session import Session
 from demuvo.gui.shell import Shell
@@ -379,3 +382,103 @@ def test_a_jump_to_the_whole_world_or_the_selection_is_drawn_in_full_at_once():
     assert not scene.rough
     program.command(KEY["0"], False)
     assert not scene.rough
+
+
+# -- robots and actors stay readable when the world is zoomed out --
+
+SMALL_BODIES = """
+version = 1
+[world]
+size = [60.0, 40.0]
+seed = 1
+[[robot]]
+name = "r1"
+model = "diff_drive"
+shape = { name = "circle", radius = 0.2 }
+pose = [10.0, 10.0, 0.0]
+[[robot]]
+name = "r2"
+model = "diff_drive"
+shape = { name = "box", size = [0.5, 0.3] }
+pose = [20.0, 10.0, 0.0]
+[[actor]]
+name = "a1"
+shape = { name = "circle", radius = 0.25 }
+pose = [10.0, 20.0, 0.0]
+[[actor]]
+name = "a2"
+shape = { name = "box", size = [0.6, 0.4] }
+pose = [20.0, 20.0, 0.0]
+"""
+
+
+def small_bodies(tmp_path):
+    """A big world with robots and actors that would be a few pixels across."""
+    path = tmp_path / "small.toml"
+    path.write_text(SMALL_BODIES)
+    window, program = start(load_world(path))
+    return window, program, program.session.scene
+
+
+def test_a_robot_keeps_a_minimum_size_on_the_screen_and_a_big_one_is_not_changed():
+    """The drawing scale is raised for a tiny robot and left alone when it is large."""
+    foot = Footprint(True, None, 0.2, 0.2)
+    assert display_scale(foot, 5.0) == pytest.approx(MIN_RADIUS / 0.2)
+    assert display_scale(foot, 500.0) == 500.0
+
+
+def pixel_distance_to_ink(window, scene, point, colour_of):
+    """How far, in pixels, from a world point the nearest pixel of a colour lies."""
+    frame = window.render()
+    cx, cy = (int(round(float(v))) for v in scene.view.to_screen(*point))
+    near = frame[cy - 30 : cy + 30, cx - 30 : cx + 30].astype(int)
+    rows, cols = np.nonzero(np.abs(near - colour_of).sum(axis=2) < 40)
+    return float(np.hypot(rows - 30, cols - 30).max()) if len(rows) else 0.0
+
+
+def test_zoomed_out_a_robot_and_an_actor_are_still_drawn_at_a_readable_size(tmp_path):
+    """The disc robot reaches the minimum radius, and the actor does too."""
+    window, program, scene = small_bodies(tmp_path)
+    program.fit_world()
+    window.render()
+    assert scene.view.scale < 20  # a body of 0.2 metres is under 4 pixels
+    teal = np.array([round(v * 255) for v in rgba(look.robot_color(0))[:3]])
+    robot_reach = pixel_distance_to_ink(window, scene, (10.0, 10.0), teal)
+    assert robot_reach >= MIN_RADIUS - 2
+    amber = np.array([round(v * 255) for v in rgba(look.AMBER)[:3]])
+    actor_reach = pixel_distance_to_ink(window, scene, (10.0, 20.0), amber)
+    assert actor_reach >= MIN_ACTOR_RADIUS - 2
+
+
+def test_a_robot_or_actor_drawn_larger_than_it_is_can_be_clicked_where_it_is_drawn(
+    tmp_path,
+):
+    """The click reaches the symbol, not only the true body; far off it misses."""
+    window, program, scene = small_bodies(tmp_path)
+    program.fit_world()
+    window.render()
+    rx, ry = (float(v) for v in scene.view.to_screen(10.0, 10.0))
+    assert scene.robot_at(rx + 8, ry) == "r1" and scene.robot_at(rx + 40, ry) is None
+    ax, ay = (float(v) for v in scene.view.to_screen(10.0, 20.0))
+    assert scene.actor_at(ax + 6, ay) == 0 and scene.actor_at(ax + 30, ay) is None
+    bx, by = (float(v) for v in scene.view.to_screen(20.0, 20.0))
+    assert scene.actor_at(bx + 6, by) == 1
+
+
+def test_a_box_actor_grows_about_its_middle_and_its_selection_ring_follows(tmp_path):
+    """The corners are scaled about the centre, and the box round it has room."""
+    window, program, scene = small_bodies(tmp_path)
+    program.fit_world()
+    grow = scene._grow(scene.world.actors[1].shape)
+    assert grow > 1.0
+    ring = np.array([[10.0, 10.0], [14.0, 10.0], [14.0, 12.0]])
+    assert scene._grown(ring, (0.0, 0.0), 1.0) is ring
+    centre = np.array([float(v) for v in scene.view.to_screen(20.0, 20.0)])
+    corners = centre + np.array([[3.0, 2.0], [-3.0, 2.0]])
+    assert scene._grown(corners, (20.0, 20.0), 2.0) == pytest.approx(
+        centre + (corners - centre) * 2
+    )
+    scene.selected_actor = 1
+    window.render()  # draws the ring round the grown box
+    left, top, right, bottom = scene.actor_boxes()["a2"]
+    assert right - left > 2 * MIN_ACTOR_RADIUS and bottom - top > 2 * MIN_ACTOR_RADIUS

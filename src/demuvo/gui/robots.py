@@ -26,6 +26,9 @@ from .sprites import Sprite, draw_sprites
 
 # Headings are cached in steps of this many degrees.
 HEADING_STEP = 2.0
+# A robot is drawn at least this many pixels from its middle to its edge, so that it
+# stays a robot with an arrow, and not a dot, when the world is zoomed out.
+MIN_RADIUS = 9.0
 # A label is drawn for every robot until there are more than this many.
 LABELS_UP_TO = 40
 # The corners of the heading arrow, as fractions of the inscribed radius.
@@ -59,6 +62,14 @@ def footprint(shape) -> Footprint:
     if inscribed <= 0:
         inscribed = float(np.abs(outline).min() or 0.1)
     return Footprint(False, outline, inscribed, bound)
+
+
+def display_scale(foot: Footprint, scale: float) -> float:
+    """Pixels per metre to draw a robot at: the view's, or more if it would be a dot.
+
+    Only the drawing is made larger; the robot's size in the world does not change.
+    """
+    return max(scale, MIN_RADIUS / foot.bound)
 
 
 def _heading_arrow(canvas: Canvas, center, reach: float, theta: float) -> None:
@@ -148,7 +159,8 @@ def _sprites_of(scene, name: str, x: float, y: float, degrees: float):
     The arrow is None for a polygon, which has its own inside the body; the label
     is None for a robot in a crowd that is not selected.
     """
-    foot, color, scale = scene.feet[name], scene.colors[name], scene.view.scale
+    foot, color = scene.feet[name], scene.colors[name]
+    scale = display_scale(foot, scene.view.scale)
     selected = name == scene.selected
     halo = _halo_radius(foot, scale) if selected else None
     size = 2 * (halo if selected else foot.bound * scale) + 14
@@ -196,7 +208,8 @@ def robot_at(scene, sx: float, sy: float) -> str | None:
     best, best_distance = None, math.inf
     for robot in scene.world.robots:
         x, y = scene.view.to_screen(*scene.pose(robot.name)[:2])
-        reach = max(scene.feet[robot.name].bound * scene.view.scale, 12.0)
+        foot = scene.feet[robot.name]
+        reach = max(foot.bound * display_scale(foot, scene.view.scale), 12.0)
         distance = math.hypot(sx - float(x), sy - float(y))
         if distance <= reach and distance < best_distance:
             best, best_distance = robot.name, distance
@@ -209,7 +222,11 @@ def robot_boxes(scene) -> dict[str, tuple[int, int, int, int]]:
     poses = np.array([scene.pose(n) for n in names], dtype=float).reshape(-1, 3)
     sx, sy = scene.view.to_screen(poses[:, 0], poses[:, 1])
     reach = np.array(
-        [_halo_radius(scene.feet[n], scene.view.scale) + 30 for n in names]
+        [
+            _halo_radius(scene.feet[n], display_scale(scene.feet[n], scene.view.scale))
+            + 30
+            for n in names
+        ]
     )
     left, top = (sx - reach).astype(int), (sy - reach).astype(int)
     right, bottom = (sx + reach).astype(int), (sy + reach).astype(int)

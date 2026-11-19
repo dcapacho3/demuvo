@@ -55,8 +55,11 @@ A big world, such as a warehouse, needs a closer look.
 The scale bar at the bottom left of the world gives a round number of metres and, once
 you have zoomed, the zoom as a percentage of the whole-world view. You can zoom out to
 40 percent and in to 400 pixels a metre, where a cell of the default costmap is 20
-pixels across, and the world cannot be moved out of sight. The zoom stays while you
-edit and while the window is resized; a world of another size starts whole.
+pixels across, and the world cannot be moved out of sight. Zoomed out, a robot or an actor too small to see is drawn at least 9 or 8 pixels from its
+middle to its edge, with its arrow or nose, so it stays readable; the body in the world does
+not change, and you can click the symbol where it is drawn. The zoom stays while you edit,
+and a window of another size keeps the scale and the place in its middle; a world of another
+size starts whole.
 
 ## Building a world
 

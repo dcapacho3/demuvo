@@ -18,6 +18,7 @@ from robomath import Transform2D
 
 from ..world.shapes import Circle, LineString
 from . import font, look
+from .cutout import Cutout, slid, uncovered
 from .raster import Canvas, is_convex, rgba
 from .robots import draw_robots, footprint, robot_at, robot_boxes
 from .sprites import SpriteCache
@@ -45,6 +46,9 @@ CLICK_PIXELS = 6.0
 ROUTE_PIXELS = 10.0
 # Points kept in the trail of a robot.
 TRAIL = 400
+# An actor is drawn at least this many pixels from its middle to its edge, so it
+# stays an actor with a nose, and not a dot, when the world is zoomed out.
+MIN_ACTOR_RADIUS = 8.0
 # Seconds the view must stay still before it is drawn in full again.
 SETTLE = 0.12
 # A changed path redraws the cut-out at most this often, in seconds.
@@ -74,48 +78,6 @@ class Layers:
     def alpha(self, name: str) -> float:
         """The opacity a layer is drawn with now."""
         return self.shown[name] * self.opacity[name]
-
-
-def _slid(pixels: np.ndarray, dx: int, dy: int) -> np.ndarray:
-    """A picture moved by whole pixels; what the move uncovers is left unset."""
-    height, width = pixels.shape[:2]
-    moved = np.empty_like(pixels)
-    sx0, sy0 = max(-dx, 0), max(-dy, 0)
-    sx1, sy1 = width + min(-dx, 0), height + min(-dy, 0)
-    moved[sy0 + dy : sy1 + dy, sx0 + dx : sx1 + dx] = pixels[sy0:sy1, sx0:sx1]
-    return moved
-
-
-def _uncovered(
-    dx: int, dy: int, width: int, height: int
-) -> list[tuple[int, int, int, int]]:
-    """The boxes (x0, y0, x1, y1) of a picture that a move by (dx, dy) leaves bare."""
-    strips = []
-    if dx > 0:
-        strips.append((0, 0, dx, height))
-    elif dx < 0:
-        strips.append((width + dx, 0, width, height))
-    left, right = max(dx, 0), width + min(dx, 0)
-    if dy > 0:
-        strips.append((left, 0, right, dy))
-    elif dy < 0:
-        strips.append((left, height + dy, right, height))
-    return strips
-
-
-@dataclass
-class _Cutout:
-    """The cached pixels of the layers that change rarely."""
-
-    pixels: np.ndarray | None = None
-    key: object = None
-    # The view the pixels stand for, and what else they were drawn from, so a view
-    # that only moved can reuse them.
-    drawn: tuple | None = None
-    signature: tuple = ()
-    checked: float = 0.0
-    keep: tuple = ()
-    world: object = None
 
 
 class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public-methods
@@ -159,7 +121,7 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
         self._actor_poses: dict[str, np.ndarray] = {}
         self._dragged: dict[str, np.ndarray] = {}
         self.sprites = SpriteCache()
-        self._cutout = _Cutout()
+        self._cutout = Cutout()
         self._picture_of: tuple | None = None
         self._local: dict[str, tuple[object, np.ndarray, str]] = {}
         self._poses: dict[str, np.ndarray] = {}
@@ -433,9 +395,9 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
         dx, dy = round(self.view.ox - before.ox), round(self.view.oy - before.oy)
         if abs(dx) >= width or abs(dy) >= height:
             return None
-        pixels = _slid(self._cutout.pixels, dx, dy)
+        pixels = slid(self._cutout.pixels, dx, dy)
         moved = self.view.shifted(-x, -y)
-        for x0, y0, x1, y1 in _uncovered(dx, dy, width, height):
+        for x0, y0, x1, y1 in uncovered(dx, dy, width, height):
             strip = Canvas(x1 - x0, y1 - y0, look.WINDOW)
             self._paint(strip, moved.shifted(-x0, -y0), alphas)
             pixels[y0:y1, x0:x1] = strip.px
@@ -581,11 +543,12 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
             fill = rgba(look.AMBER, opacity * (0.35 if not spec.solid else 1.0))
             x, y, angle = (float(v) for v in self.actor_pose(index))
             pose = Transform2D.from_xyt(np.array([x, y, angle]))
+            grow = self._grow(spec.shape)
             if isinstance(spec.shape, Circle):
                 px, py = view.to_screen(x, y)
                 canvas.circle(
                     (float(px), float(py)),
-                    spec.shape.radius * view.scale,
+                    spec.shape.radius * view.scale * grow,
                     fill=fill,
                     stroke=edge,
                     width=2,
@@ -594,7 +557,10 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
                 corners = np.array(spec.shape.points(pose), dtype=float)
                 sx, sy = view.to_screen(corners[:, 0], corners[:, 1])
                 canvas.convex(
-                    np.column_stack([sx, sy]), fill=fill, stroke=edge, width=2
+                    self._grown(np.column_stack([sx, sy]), (x, y), grow),
+                    fill=fill,
+                    stroke=edge,
+                    width=2,
                 )
             self._actor_nose(canvas, spec, (x, y, angle), edge)
 
@@ -664,7 +630,7 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
     def _actor_nose(self, canvas: Canvas, spec, pose, color) -> None:
         """A short tick from the middle, so which way an actor faces can be seen."""
         x, y, angle = pose
-        reach = _actor_reach(spec.shape)
+        reach = _actor_reach(spec.shape) * self._grow(spec.shape)
         tip = (x + reach * math.cos(angle), y + reach * math.sin(angle))
         start = self.view.to_screen(x, y)
         end = self.view.to_screen(*tip)
@@ -675,7 +641,9 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
         boxes = {}
         for index, spec in enumerate(self.world.actors):
             x, y, _ = (float(v) for v in self.actor_pose(index))
-            reach = _actor_reach(spec.shape) * self.view.scale + 6
+            reach = (
+                _actor_reach(spec.shape) * self._grow(spec.shape) * self.view.scale + 6
+            )
             px, py = (float(v) for v in self.view.to_screen(x, y))
             boxes[spec.name] = (
                 int(px - reach),
@@ -691,9 +659,29 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
         for index in range(len(self.world.actors) - 1, -1, -1):
             shape = self.world.actors[index].shape
             pose = Transform2D.from_xyt(np.array(self.actor_pose(index), dtype=float))
-            if self._body_hit(x, y, shape, pose):
+            if self._body_hit(x, y, shape, pose) or self._symbol_hit(sx, sy, index):
                 return index
         return None
+
+    def _grow(self, shape) -> float:
+        """How many times a body is drawn larger than it is, so it is not a dot."""
+        return max(1.0, MIN_ACTOR_RADIUS / (_actor_reach(shape) * self.view.scale))
+
+    def _grown(self, ring: np.ndarray, middle, grow: float) -> np.ndarray:
+        """Screen corners of a body made `grow` times larger about its middle."""
+        if grow == 1.0:
+            return ring
+        centre = np.array([float(v) for v in self.view.to_screen(*middle)])
+        return centre + (ring - centre) * grow
+
+    def _symbol_hit(self, sx: float, sy: float, index: int) -> bool:
+        """Whether a pixel is on an actor that is drawn larger than its body."""
+        spec = self.world.actors[index]
+        if self._grow(spec.shape) == 1.0:
+            return False
+        x, y, _ = (float(v) for v in self.actor_pose(index))
+        px, py = (float(v) for v in self.view.to_screen(x, y))
+        return math.hypot(sx - px, sy - py) <= MIN_ACTOR_RADIUS
 
     def _draw_selected_actor(self, canvas: Canvas) -> None:
         """Outline the selected actor, which moves, so it is drawn every frame."""
@@ -701,19 +689,25 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
         if index is None or index >= len(self.world.actors):
             return
         pose = Transform2D.from_xyt(np.asarray(self.actor_pose(index), dtype=float))
-        self._outline(canvas, self.world.actors[index].shape, pose)
+        shape = self.world.actors[index].shape
+        self._outline(canvas, shape, pose, self._grow(shape))
 
-    def _outline(self, canvas: Canvas, shape, pose: Transform2D) -> None:
-        """Ring a disc, or dash round the corners of any other shape, at a pose."""
+    def _outline(
+        self, canvas: Canvas, shape, pose: Transform2D, grow: float = 1.0
+    ) -> None:
+        """Ring a disc, or dash round the corners of any other shape, at a pose.
+
+        A `grow` above 1 rings a body that is drawn that many times larger.
+        """
         color = rgba(look.TEAL, 1.0)
         if isinstance(shape, Circle):
             x, y = self.view.to_screen(*pose.translation)
-            radius = shape.radius * self.view.scale + 3
+            radius = shape.radius * self.view.scale * grow + 3
             canvas.circle((float(x), float(y)), radius, stroke=color, width=2)
             return
         corners = np.array(shape.points(pose), dtype=float)
         sx, sy = self.view.to_screen(corners[:, 0], corners[:, 1])
-        ring = np.column_stack([sx, sy])
+        ring = self._grown(np.column_stack([sx, sy]), pose.translation, grow)
         polyline(canvas, np.vstack([ring, ring[:1]]), 3, color, dash=(6, 4))
 
     def _paths(self, canvas: Canvas, view: View, opacity: float) -> None:
