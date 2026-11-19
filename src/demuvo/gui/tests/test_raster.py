@@ -140,6 +140,22 @@ def test_a_convex_polygon_covers_its_area_either_way_round():
     edged.convex([(-500, -500), (-490, -500), (-490, -490)], fill=BLACK)
 
 
+def test_a_convex_polygon_can_grow_past_its_edge_to_meet_a_neighbour():
+    """With a grow of half a pixel the pixel on the edge is solid, not half covered."""
+    plain, grown = Canvas(40, 40), Canvas(40, 40)
+    square = [(10, 10), (30, 10), (30, 30), (10, 30)]
+    plain.convex(square, fill=BLACK)
+    grown.convex(square, fill=BLACK, grow=0.5)
+    assert plain.px[20, 9, 0] == 1.0  # the pixel just outside, untouched
+    assert grown.px[20, 9, 0] == pytest.approx(0.5)  # half a pixel past the edge
+    assert ink(grown) > ink(plain)
+    # two squares that meet along x = 20 leave no light line when each grows
+    pair = Canvas(40, 40)
+    pair.convex([(10, 10), (20, 10), (20, 30), (10, 30)], fill=BLACK, grow=0.5)
+    pair.convex([(20, 10), (30, 10), (30, 30), (20, 30)], fill=BLACK, grow=0.5)
+    assert pair.px[20, 19, 0] == 0.0 and pair.px[20, 20, 0] == 0.0
+
+
 def test_a_polygon_that_is_not_convex_is_filled_by_sampling():
     """An L of area 300; the notch stays clear."""
     canvas = Canvas(40, 40)

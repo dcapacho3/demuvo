@@ -244,14 +244,17 @@ class Canvas:
         fill: Color | None = None,
         stroke: Color | None = None,
         width: float = 1.0,
+        grow: float = 0.0,
     ) -> None:
         """A convex polygon, points in order either way.
 
         Exact inside, and close at the corners outside, where the distance to the
-        nearest edge line is used and not the distance to the corner.
+        nearest edge line is used and not the distance to the corner. A `grow` of
+        half a pixel or so fills `grow` pixels beyond the edge, so convex pieces that
+        meet along an edge leave no thin line between them.
         """
         p = np.asarray(points, dtype=np.float64)
-        pad = width + 2
+        pad = width + grow + 2
         low, high = p.min(axis=0) - pad, p.max(axis=0) + pad
         grid = self._grid(low[0], low[1], high[0], high[1])
         if grid is None:
@@ -259,7 +262,7 @@ class Canvas:
         left, top, px, py = grid
         distance = _outside_distance(p, px, py)
         if fill is not None:
-            self.blend(left, top, np.clip(0.5 - distance, 0, 1), fill)
+            self.blend(left, top, np.clip(0.5 + grow - distance, 0, 1), fill)
         if stroke is not None:
             self.blend(left, top, _ring(distance, width), stroke)
 

@@ -124,6 +124,44 @@ def test_obstacles_of_every_kind_are_drawn_in_navy(scene):
         assert red < 0.3 and blue < 0.4, (x, y)
 
 
+def test_a_concave_obstacle_is_solid_with_no_line_between_its_pieces(scene):
+    """Every pixel well inside the notched polygon is navy, whichever piece it is in."""
+    from shapely.geometry import (  # pylint: disable=import-outside-toplevel
+        Point,
+        Polygon,
+    )
+
+    corners = [(6, 4), (7, 4), (7, 5), (6.4, 4.4), (6, 5)]
+    inside = Polygon(corners).buffer(-0.06)
+    canvas = paint(scene)
+    checked = 0
+    for x in np.arange(6.0, 7.0, 0.02):
+        for y in np.arange(4.0, 5.0, 0.02):
+            if inside.contains(Point(x, y)):
+                red, _, blue = canvas.px[at(scene, x, y)[::-1]]
+                assert red < 0.3 and blue < 0.4, (x, y)
+                checked += 1
+    assert checked > 200
+
+
+def test_the_costmap_picture_is_made_once_for_a_costmap_and_a_palette(scene):
+    """The same picture comes back until the palette changes."""
+    costmap = scene._first_costmap()
+    first = scene._costmap_picture(costmap)
+    assert scene._costmap_picture(costmap) is first
+    scene.palette = look.PALETTES[1]
+    assert scene._costmap_picture(costmap) is not first
+
+
+def test_drawing_the_same_world_again_keeps_the_cached_layers(scene):
+    """A new run of an unchanged view does not throw the cut-out away."""
+    paint(scene)
+    key = scene._cutout.key
+    assert key is not None
+    scene.set_run(scene.run)
+    assert scene._cutout.key == key
+
+
 def test_the_board_has_a_navy_outline_and_the_cut_out_is_clipped_to_the_board(scene):
     """The outline is dark; the planned path never leaves the board."""
     canvas = paint(scene)

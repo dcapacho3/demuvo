@@ -125,6 +125,7 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
         self._dragged: dict[str, np.ndarray] = {}
         self.sprites = SpriteCache()
         self._cutout = _Cutout()
+        self._picture_of: tuple | None = None
         self._local: dict[str, tuple[object, np.ndarray, str]] = {}
         self._poses: dict[str, np.ndarray] = {}
         self.set_run(run)
@@ -138,11 +139,14 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
         """Draw another run, or the same one after its world was replaced."""
         self.run = run
         # keep the window rectangle, so an edit does not shrink the board to a corner
-        rect = self.view.rect if self.view is not None else View.rect
-        if self.view is None or self.view.bounds != self.world.bounds:
+        before, key = self.view, self._cutout.key
+        rect = before.rect if before is not None else View.rect
+        if before is None or before.bounds != self.world.bounds:
             self.camera = Camera()  # a world of another size is shown whole
         self.view = View(self.world.bounds, rect=rect)
         self.fit(rect, self._room)
+        if self.view == before:  # the same view keeps the cached layers
+            self._cutout.key = key
         self._poses = {}
         self.trails: dict[str, deque] = {
             r.name: deque([tuple(r.pose.xyt[:2])], maxlen=TRAIL)
@@ -373,19 +377,28 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
         tile = (np.floor(xs)[None, :] + np.floor(ys)[:, None]).astype(int) % 2
         colors = np.array([rgba(look.MINT)[:3], rgba(look.MINT2)[:3]], dtype=np.float32)
         base = np.array(rgba(look.WINDOW)[:3], dtype=np.float32)
-        canvas.px[j0:j1, i0:i1] = base + (colors[tile] - base) * opacity
+        # the two tile colours are mixed with the background once, not every pixel
+        canvas.px[j0:j1, i0:i1] = (base + (colors - base) * opacity)[tile]
 
     def _costmap(self, canvas: Canvas, view: View, opacity: float) -> None:
         """The global costmap of the first robot, if the world has one."""
         costmap = self._first_costmap()
         if costmap is not None:
             self._picture(
-                canvas,
-                view,
-                costmap,
-                look.costmap_rgba(costmap.data, self.palette),
-                opacity,
+                canvas, view, costmap, self._costmap_picture(costmap), opacity
             )
+
+    def _costmap_picture(self, costmap) -> np.ndarray:
+        """The costmap as an RGBA picture; kept while the costmap and palette stay."""
+        kept = self._picture_of
+        if kept is None or kept[0] is not costmap or kept[1] != self.palette:
+            kept = (
+                costmap,
+                self.palette,
+                look.costmap_rgba(costmap.data, self.palette),
+            )
+            self._picture_of = kept
+        return kept[2]
 
     @staticmethod
     def _picture(canvas: Canvas, view: View, costmap, picture, opacity: float) -> None:
@@ -418,7 +431,24 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
             elif is_convex(screen):
                 canvas.convex(screen, fill=fill, stroke=edge, width=2)
             else:
-                canvas.polygon(screen, fill)
+                self._concave(canvas, view, obstacle, fill, edge)
+
+    @staticmethod
+    def _concave(canvas: Canvas, view: View, obstacle, fill, edge) -> None:
+        """A shape that is not convex: its convex pieces, then its outline.
+
+        The pieces are cheap to fill, and a long polygon that crosses the window
+        would cost every pixel of it to sample. Each is grown by half a pixel so no
+        line shows where two meet.
+        """
+        for part in obstacle.shape.parts(obstacle.pose):
+            corners = np.array(part.vertices, dtype=float)
+            sx, sy = view.to_screen(corners[:, 0], corners[:, 1])
+            canvas.convex(np.column_stack([sx, sy]), fill=fill, grow=0.5)
+        outline = np.array(obstacle.shape.points(obstacle.pose), dtype=float)
+        sx, sy = view.to_screen(outline[:, 0], outline[:, 1])
+        closed = np.column_stack([np.append(sx, sx[0]), np.append(sy, sy[0])])
+        polyline(canvas, closed, 2, edge)
 
     def _draw_actors(self, canvas: Canvas, opacity: float) -> None:
         """Every actor where it is now; one that is not solid is drawn hollow.
