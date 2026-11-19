@@ -216,7 +216,7 @@ how a class is listed in the window.
 - **Sensing:** any number of lidars on a robot, each with its mount, noise and scan rate,
   and a local costmap that the robot builds from their scans.
 - **Planning and control:** `StraightLine` and `AStar` planners and a `LineOfSight` smoother
-  on a global costmap, `Dubins` and `ReedsShepp` planners for a car, a `PurePursuit`
+  on a global costmap, `Dubins`, `ReedsShepp` and `HybridAStar` planners for a car (the last plans round obstacles on the costmap), a `PurePursuit`
   controller that can reverse, a `DWB` controller, a local planner that steers round
   what the lidar sees in the local costmap and slides a mecanum robot sideways round it,
   and an `OmniPursuit` controller that moves a mecanum robot straight along its path
@@ -231,10 +231,8 @@ how a class is listed in the window.
 ## To do
 
 - [x] A car-like (Ackermann) model, with the controllers and planners that suit it.
-- [ ] For the car: a Hybrid A* planner, so it plans round obstacles on the costmap with a
-  bounded curvature, as `AStar` does for a diff drive; and a parking controller that
-  reaches a goal's angle exactly under obstacle avoidance, where `DWB` today arrives
-  within 0.3 rad or so.
+- [ ] For the car: a parking controller that reaches a goal's angle exactly under obstacle
+  avoidance, where `DWB` today arrives within 0.3 rad or so.
 - [x] A mecanum (omnidirectional) model, with the controllers that suit it: an exact step,
   four-wheel encoders, an `OmniPursuit` path follower that turns apart from where it
   goes, and a sideways axis in `DWB`.
@@ -253,7 +251,7 @@ how a class is listed in the window.
   limit that makes a world harder. Off by default, so the ideal world stays as it is.
 - [ ] Swarms: many robots, each running the same rule from its own sensors and its
   neighbours, with collisions and time reported over seeds.
-- [ ] Moving actors.
+- [x] Moving actors.
 - [ ] A benchmark runner that compares planners and controllers over worlds and seeds, with
   success, time, path length and collision metrics, a table and a CSV file.
 - [ ] Run logs and replay.
@@ -287,8 +285,9 @@ The window tests need `libglfw3`, `libgl1` and `xvfb`, and are skipped where the
 missing.
 
 Each part of the code is a folder under `src/demuvo/` (`world`, `models`, `costmap`,
-`sim`, `actors`, `planners`, `controllers`, `nav`, `evaluation`, `run`, `gui`), plus the files
-`options.py`, `edit.py` and `runner.py`, and its tests sit in a `tests` folder inside it.
+`sim`, `actors`, `sensing`, `planners`, `smoothers`, `controllers`, `nav`, `evaluation`, `run`,
+`gui`), plus the files `options.py`, `edit.py`, `runner.py`, `paths.py`, `plugins.py` and
+`verify.py`, and its tests sit in a `tests` folder inside it.
 
 Pose maths comes from [robomath](https://github.com/dcapacho3/robomath).
 
