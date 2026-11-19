@@ -74,6 +74,22 @@ class Collision:
     b: str
 
 
+def _box_pairs(boxes: np.ndarray, names: list[str], moved):
+    """The index pairs of bodies whose boxes overlap, those of `moved` only if given."""
+    meets = (boxes[:, None, 0] <= boxes[None, :, 2]) & (
+        boxes[None, :, 0] <= boxes[:, None, 2]
+    )
+    meets &= (boxes[:, None, 1] <= boxes[None, :, 3]) & (
+        boxes[None, :, 1] <= boxes[:, None, 3]
+    )
+    if moved is not None:
+        flags = np.array([n in moved for n in names])
+        meets &= flags[:, None] | flags[None, :]
+    rows, cols = _upper_pairs(len(names))
+    hits = meets[rows, cols]
+    return rows[hits], cols[hits]
+
+
 @lru_cache(maxsize=16)
 def _upper_pairs(count: int) -> tuple[np.ndarray, np.ndarray]:
     """The i < j index pairs of a count-by-count matrix, kept between steps.
@@ -196,18 +212,8 @@ class Checker:
         parts = {n: bodies[n][0] for n in names}
         boxes = np.array([bodies[n][1] for n in names]).reshape(-1, 4)
         contacts = []
-        meets = (boxes[:, None, 0] <= boxes[None, :, 2]) & (
-            boxes[None, :, 0] <= boxes[:, None, 2]
-        )
-        meets &= (boxes[:, None, 1] <= boxes[None, :, 3]) & (
-            boxes[None, :, 1] <= boxes[:, None, 3]
-        )
-        if moved is not None:
-            flags = np.array([n in moved for n in names])
-            meets &= flags[:, None] | flags[None, :]
-        rows, cols = _upper_pairs(len(names))
-        hits = meets[rows, cols]
-        for i, j in zip(rows[hits], cols[hits]):
+        rows, cols = _box_pairs(boxes, names, moved)
+        for i, j in zip(rows, cols):
             a, b = names[i], names[j]
             rule = self._pair(a, b)
             if rule is None or not self._meet(a, b):

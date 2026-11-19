@@ -535,6 +535,20 @@ def _warn_map_differs(found: MapFile | None, size, origin) -> None:
             )
 
 
+def _parse_header(data: dict, folder: Path):
+    """The world table and costmaps: size, origin, seed, step, the two costmaps."""
+    world = table(require_key(data, "world", "file"), "world")
+    check_keys(world, {"size", "origin", "seed", "dt"}, "world")
+    costmap, local_costmap = _parse_costmaps(data.get("costmap", {}), folder)
+    found = _map_in_use(costmap)
+    size, origin = _size_and_origin(world, found)
+    seed = require_key(world, "seed", "world")
+    if not isinstance(seed, int) or isinstance(seed, bool):
+        raise WorldError("world: 'seed' must be an integer")
+    dt = number(world, "dt", "world") if "dt" in world else DEFAULT_DT
+    return size, origin, seed, dt, costmap, local_costmap
+
+
 def load_world(path: str | Path) -> World:
     """Read a world file and check it.
 
@@ -580,18 +594,10 @@ def load_world(path: str | Path) -> World:
         "file",
     )
 
-    world = table(require_key(data, "world", "file"), "world")
-    check_keys(world, {"size", "origin", "seed", "dt"}, "world")
-    costmap, local_costmap = _parse_costmaps(
-        data.get("costmap", {}), Path(path).resolve().parent
+    size, origin, seed, dt, costmap, local_costmap = _parse_header(
+        data, Path(path).resolve().parent
     )
-    found = _map_in_use(costmap)
-    size, origin = _size_and_origin(world, found)
     bounds = (origin[0], origin[1], origin[0] + size[0], origin[1] + size[1])
-    seed = require_key(world, "seed", "world")
-    if not isinstance(seed, int) or isinstance(seed, bool):
-        raise WorldError("world: 'seed' must be an integer")
-    dt = number(world, "dt", "world") if "dt" in world else DEFAULT_DT
 
     obstacles = tuple(
         _parse_obstacle(item, i, bounds)

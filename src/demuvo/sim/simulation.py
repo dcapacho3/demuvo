@@ -29,7 +29,7 @@ CLEARANCE = 1e-7
 SCALAR_VELOCITY_MAX = 4
 
 
-class Simulation:
+class Simulation:  # pylint: disable=too-many-instance-attributes
     """A world in motion.
 
     Time moves in steps of a fixed length, and all robots advance together.

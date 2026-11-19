@@ -784,7 +784,7 @@ class Input:
             self.shell.screen.damage.add(pointer.tip_box)
 
 
-class Shell:
+class Shell:  # pylint: disable=too-many-public-methods
     """The frame of a window: layout, input, animation and rendering.
 
     A program is any object with the methods listed under `Program`; it fills the

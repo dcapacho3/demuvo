@@ -17,7 +17,7 @@ from ..world import World, load_world, save_world
 REFUSED = "That change cannot be made: {}"
 
 
-class WorldEdits:
+class WorldEdits:  # pylint: disable=too-many-public-methods
     """The obstacle, size and file edits of a session.
 
     Args:

@@ -85,7 +85,7 @@ class _Cutout:
     world: object = None
 
 
-class SceneDraw:
+class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public-methods
     """Draws a run's world with the renderer.
 
     Args:

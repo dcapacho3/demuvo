@@ -77,7 +77,7 @@ class ReplanSpec:
 
 
 @dataclass(frozen=True)
-class RobotSpec:
+class RobotSpec:  # pylint: disable=too-many-instance-attributes
     """A robot as the world file describes it.
 
     Attributes:

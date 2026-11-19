@@ -42,7 +42,7 @@ class _Plan:
     failed: bool = False
 
 
-class Navigation:
+class Navigation:  # pylint: disable=too-many-instance-attributes
     """The planner and controller of each robot, and the path each one follows.
 
     Call it with the simulation at every step; it returns the command of every

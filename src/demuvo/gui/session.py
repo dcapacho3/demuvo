@@ -35,7 +35,7 @@ PART_TABLES = {
 }
 
 
-class Session:
+class Session:  # pylint: disable=too-many-public-methods
     """The world and its run, in one mode.
 
     Args:
