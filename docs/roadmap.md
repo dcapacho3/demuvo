@@ -5,7 +5,7 @@ What is built, what the first release still needs, and the longer list. Move a l
 
 Sizes: **S** is one small commit, **M** a few commits, **L** a series of parts. Every
 item keeps demuvo's rules: simulation only, an ideal world with no physics and no slip
-(sensor noise is fine), kinematic models, pose maths from robomath, and a dependency
+(sensor noise is fine), kinematic models, and a dependency
 only if its licence allows it. Planners written from papers.
 
 ## Built
@@ -255,7 +255,7 @@ and a table over seeds, with docs that stand alone.
 | A faster core in C++ or Rust under the same Python interface: the search loops of A*, Hybrid A* and the DWB wavefront first, then the collision check. | L |
 | Jump Point Search for A*, which skips the cells of an open grid. A plan across the Depot takes 0.4 s today, and every replan pays it. | M |
 | Hybrid A*: vectorise the arcs of each pose, and stop a search that has no path sooner than 20,000 poses (3 s on the Depot). | M |
-| DWB: find the poses of each candidate trajectory by the closed-form arc, x, y and angle, and not through 3 by 3 matrices. The batched `rplus_se2` calls take 18% of a DWB run. | S |
+| DWB: find the poses of each candidate trajectory by the closed-form arc, x, y and angle, and not through 3 by 3 matrix products. The products take 18% of a DWB run. | S |
 | Build the simulation once for an edit; today one build checks the edit and another runs it. | S |
 | Keep the scene of fixed obstacles between edits, as the global costmap now is. | S |
 | Open a big Gazebo file faster: the mesh cut takes 1.3 s for the Depot, and could be kept beside the file. | S |
