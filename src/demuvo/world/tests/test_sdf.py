@@ -52,7 +52,7 @@ def make_world_file(tmp_path):
 
 def test_the_shapes_that_stand_on_the_floor_become_obstacles(world_file):
     """The crate turns with its model, and floor, roof, ramp and plane are left out."""
-    with pytest.warns(UserWarning, match="1 mesh shapes were left out"):
+    with pytest.warns(UserWarning, match="mesh 'x.dae' was not found"):
         data = read_sdf(world_file)
     shapes = [
         (o["shape"]["name"], [round(v, 2) for v in o["pose"]]) for o in data["obstacle"]
@@ -84,7 +84,7 @@ def test_a_file_that_is_not_xml_or_has_no_shape_is_refused(tmp_path):
         read_sdf(bad)
     empty = tmp_path / "empty.world"
     empty.write_text("<sdf><world><model name='m'/></world></sdf>")
-    with pytest.raises(WorldError, match="no box, cylinder or sphere"):
+    with pytest.raises(WorldError, match="no box, cylinder, sphere or mesh"):
         read_sdf(empty)
 
 
@@ -99,7 +99,16 @@ def test_a_gazebo_world_with_leading_blank_lines_is_read(tmp_path):
     assert len(read_sdf(path)["obstacle"]) == 1
 
 
-@pytest.mark.filterwarnings("ignore:.*mesh shapes")
+def test_the_turtlebot_world_is_a_hexagon_arena_with_nine_posts():
+    """The meshes shipped with the example are cut: nine posts and two polygons."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        world = load_world(GAZEBO / "turtlebot3_world.sdf")
+    kinds = sorted(o.shape.name for o in world.obstacles)
+    assert kinds == ["circle"] * 9 + ["polygon"] * 2
+
+
+@pytest.mark.filterwarnings("ignore:.*was not found")
 @pytest.mark.parametrize("name", ["supermarket.world", "turtlebot3_world.sdf"])
 def test_a_robot_drives_across_a_gazebo_example_with_a_planner_that_goes_round(name):
     """The imported walls and shelves are in the way, and A* finds the way."""

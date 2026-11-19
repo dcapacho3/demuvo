@@ -1,0 +1,2 @@
+The two meshes come from the Nav2 simulation package nav2_minimal_tb3_sim
+(Apache 2.0), which took them from the ROBOTIS TurtleBot3 world.
