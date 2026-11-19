@@ -76,12 +76,42 @@ class Layers:
         return self.shown[name] * self.opacity[name]
 
 
+def _slid(pixels: np.ndarray, dx: int, dy: int) -> np.ndarray:
+    """A picture moved by whole pixels; what the move uncovers is left unset."""
+    height, width = pixels.shape[:2]
+    moved = np.empty_like(pixels)
+    sx0, sy0 = max(-dx, 0), max(-dy, 0)
+    sx1, sy1 = width + min(-dx, 0), height + min(-dy, 0)
+    moved[sy0 + dy : sy1 + dy, sx0 + dx : sx1 + dx] = pixels[sy0:sy1, sx0:sx1]
+    return moved
+
+
+def _uncovered(
+    dx: int, dy: int, width: int, height: int
+) -> list[tuple[int, int, int, int]]:
+    """The boxes (x0, y0, x1, y1) of a picture that a move by (dx, dy) leaves bare."""
+    strips = []
+    if dx > 0:
+        strips.append((0, 0, dx, height))
+    elif dx < 0:
+        strips.append((width + dx, 0, width, height))
+    left, right = max(dx, 0), width + min(dx, 0)
+    if dy > 0:
+        strips.append((left, 0, right, dy))
+    elif dy < 0:
+        strips.append((left, height + dy, right, height))
+    return strips
+
+
 @dataclass
 class _Cutout:
     """The cached pixels of the layers that change rarely."""
 
     pixels: np.ndarray | None = None
     key: object = None
+    # The view the pixels stand for, and what else they were drawn from, so a view
+    # that only moved can reuse them.
+    drawn: tuple | None = None
     signature: tuple = ()
     checked: float = 0.0
     keep: tuple = ()
@@ -308,9 +338,7 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
         # Edits leave the obstacles and tasks they do not touch as the same objects,
         # and a rebuilt simulation has an equal costmap, so a robot that moves keeps
         # the cache. `keep` holds them so an id is never taken for another object.
-        key = (
-            self.view,
-            self.rough,
+        content = (
             self.palette,
             tuple(alphas.values()),
             self._costmap_key(),
@@ -321,6 +349,7 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
             world.origin,
             tuple(r.name for r in world.robots),
         )
+        key = (self.view, self.rough, content)
         self._cutout.keep = (world.obstacles, world.tasks)
         return alphas, key
 
@@ -336,14 +365,19 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
             return None
         return (hash(costmap.data.tobytes()), costmap.resolution, tuple(costmap.origin))
 
-    def _draw_cutout(self, alphas: dict[str, float], key: object) -> None:
+    def _draw_cutout(self, alphas: dict[str, float], key: tuple) -> None:
         """Draw the cached layers into a cut-out the size of the scene.
 
         While the view is being zoomed or moved they are drawn at half the size and
-        doubled, a fourth of the work, and drawn again in full once it settles.
+        doubled, a fourth of the work, and drawn again in full once it settles. A view
+        that only moved shifts the pixels it has and draws what the move uncovers.
         """
         x, y, width, height = (round(v) for v in self.view.rect)
-        if self.rough:
+        shown = self.view
+        moved = self._shifted(alphas, key[2]) if self.rough else None
+        if moved is not None:
+            pixels, shown = moved
+        elif self.rough:
             small = Canvas(-(-width // 2), -(-height // 2), look.WINDOW)
             half = replace(
                 self.view,
@@ -354,12 +388,38 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
             )
             self._paint(small, half, alphas)
             doubled = np.repeat(np.repeat(small.px, 2, axis=0), 2, axis=1)
-            self._cutout.pixels = doubled[:height, :width]
+            pixels = doubled[:height, :width]
         else:
             canvas = Canvas(width, height, look.WINDOW)
             self._paint(canvas, self.view.shifted(-x, -y), alphas)
-            self._cutout.pixels = canvas.px
-        self._cutout.key = key
+            pixels = canvas.px
+        self._cutout.drawn = (shown, key[2])
+        self._cutout.pixels, self._cutout.key = pixels, key
+
+    def _shifted(self, alphas: dict[str, float], content: tuple):
+        """The cut-out for a view that has only moved, and the view it stands for.
+
+        The old pixels move by whole pixels and the strips that show what was off the
+        scene are drawn. The cut-out then stands for the old view moved by that whole
+        number, so the error never grows past half a pixel. None if it cannot be had.
+        """
+        old = self._cutout.drawn
+        x, y, width, height = (round(v) for v in self.view.rect)
+        if old is None or old[1] != content or self._cutout.pixels is None:
+            return None
+        before = old[0]
+        if before.scale != self.view.scale or before.rect != self.view.rect:
+            return None
+        dx, dy = round(self.view.ox - before.ox), round(self.view.oy - before.oy)
+        if abs(dx) >= width or abs(dy) >= height:
+            return None
+        pixels = _slid(self._cutout.pixels, dx, dy)
+        moved = self.view.shifted(-x, -y)
+        for x0, y0, x1, y1 in _uncovered(dx, dy, width, height):
+            strip = Canvas(x1 - x0, y1 - y0, look.WINDOW)
+            self._paint(strip, moved.shifted(-x0, -y0), alphas)
+            pixels[y0:y1, x0:x1] = strip.px
+        return pixels, replace(before, ox=before.ox + dx, oy=before.oy + dy)
 
     def _paint(self, canvas: Canvas, view: View, alphas: dict[str, float]) -> None:
         """Draw the cached layers on a canvas that holds the scene, at a view."""

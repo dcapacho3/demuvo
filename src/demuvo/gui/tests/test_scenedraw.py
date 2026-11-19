@@ -162,6 +162,60 @@ def test_drawing_the_same_world_again_keeps_the_cached_layers(scene):
     assert scene._cutout.key == key
 
 
+def sharp_pixels(scene):
+    """The cut-out drawn in full from nothing at the scene's present view."""
+    rough, scene.rough = scene.rough, False
+    scene._cutout.key = None
+    paint(scene)
+    pixels = scene._cutout.pixels.copy()
+    scene.rough = rough
+    return pixels
+
+
+@pytest.mark.parametrize(
+    "move", [(12, 7), (-9, 5), (6, -11), (-14, -8), (10, 0), (0, -6)]
+)
+def test_a_view_that_only_moved_shifts_the_cut_out_and_draws_the_new_strips(
+    scene, move
+):
+    """For a move of whole pixels the result is what a full drawing gives."""
+    paint(scene)
+    scene.pan_by(*move)
+    assert scene.rough
+    paint(scene)
+    shifted = scene._cutout.pixels.copy()
+    assert np.allclose(shifted, sharp_pixels(scene), atol=1e-4)
+
+
+def test_the_error_of_a_shifted_cut_out_never_grows_past_half_a_pixel(scene):
+    """Many moves of a fraction of a pixel add up to whole shifts, not to drift."""
+    paint(scene)
+    for _ in range(30):
+        scene.pan_by(0.37, -0.21)
+        paint(scene)
+        drawn, _ = scene._cutout.drawn
+        assert (
+            abs(scene.view.ox - drawn.ox) <= 0.5
+            and abs(scene.view.oy - drawn.oy) <= 0.5
+        )
+
+
+def test_a_cut_out_is_drawn_again_when_the_view_zooms_or_the_move_is_too_big(scene):
+    """A new scale, or a move of the whole scene or more, is not a shift."""
+    paint(scene)
+    assert scene._shifted({"floor": 1.0}, ()) is None  # other content: no shift
+    key = scene.cutout_key()[1][2]
+    scene.rough = True
+    scene.zoom_by(1.5)
+    assert scene._shifted(scene.cutout_key()[0], key) is None  # another scale
+    paint(scene)
+    scene.pan_by(5000, 0)  # the camera keeps the board in sight, so the move is smaller
+    alphas, key = scene.cutout_key()
+    scene.view = scene.view.shifted(9000, 0)
+    assert scene._shifted(alphas, key[2]) is None  # farther than the scene is wide
+    assert SceneDraw(scene.run)._shifted(alphas, key[2]) is None  # nothing drawn yet
+
+
 def test_the_board_has_a_navy_outline_and_the_cut_out_is_clipped_to_the_board(scene):
     """The outline is dark; the planned path never leaves the board."""
     canvas = paint(scene)
