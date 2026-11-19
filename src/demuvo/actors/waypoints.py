@@ -53,6 +53,11 @@ class Waypoints:
     wait: float = 0.0
     delay: float = 0.0
     face: bool = True
+    # Set by `configure`, in a frozen class, so a field that no form shows.
+    _angle: float = field(default=0.0, init=False, repr=False, compare=False)
+    _times: list = field(default_factory=list, init=False, repr=False, compare=False)
+    _legs: list | None = field(default=None, init=False, repr=False, compare=False)
+    _lap: float = field(default=0.0, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         """Check the settings; the legs are built in `configure`."""
@@ -86,6 +91,7 @@ class Waypoints:
 
     def configure(self, start: Transform2D, rng: np.random.Generator) -> None:
         """Lay out the legs from the start pose; this motion draws no random number."""
+        del rng
         x, y, angle = (float(v) for v in start.xyt)
         # Each stop is its place, how long it holds the actor and which way it
         # faces there (None for the way it came); the start is the first.
@@ -119,7 +125,7 @@ class Waypoints:
 
     def pose_at(self, time: float) -> Transform2D:
         """The pose at this time; before 0 and before `delay` it is the start pose."""
-        legs = getattr(self, "_legs", None)
+        legs = self._legs
         if legs is None:
             raise RuntimeError("configure must be called before pose_at")
         t = max(0.0, time - self.delay)

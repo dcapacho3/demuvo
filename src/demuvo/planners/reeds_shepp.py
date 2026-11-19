@@ -33,7 +33,7 @@ from ..plugins import check_positive
 PI = math.pi
 HALF_PI = math.pi / 2
 # A length this small is zero: it keeps a test of sign from failing on rounding.
-ZERO = 10 * np.finfo(float).eps
+ZERO = 10 * float(np.spacing(1.0))
 
 # The segment patterns, by the number OMPL gives them.
 PATTERNS = (
@@ -197,7 +197,7 @@ def _words(x: float, y: float, phi: float) -> list[Word]:
     xb = x * math.cos(phi) + y * math.sin(phi)
     yb = x * math.sin(phi) - y * math.cos(phi)
 
-    def add(solver, shape, pattern, mirror, flip, reverse, args):
+    def add(solver, shape, pattern, args, *, flip, reverse):
         """Try a solver on transformed inputs and record the word it gives."""
         got = solver(*args)
         if got is None:
@@ -207,7 +207,7 @@ def _words(x: float, y: float, phi: float) -> list[Word]:
             lengths = tuple(reversed(lengths))
         if flip:
             lengths = tuple(-length for length in lengths)
-        found.append((PATTERNS[pattern + mirror], lengths))
+        found.append((pattern, lengths))
 
     # (solver, segment lengths from (t, u, v), pattern index, also backwards)
     base = (
@@ -222,17 +222,26 @@ def _words(x: float, y: float, phi: float) -> list[Word]:
     )
     for solver, shape, pattern, backwards in base:
         for reverse in (False, True) if backwards else (False,):
-            px, py = (xb, yb) if reverse else (x, y)
+            point = (xb, yb) if reverse else (x, y)
             # The pattern index of the backwards word: the reversed pattern.
             index = pattern
             if reverse:
                 index = {0: 0, 4: 6, 8: 10}[pattern]
             for flip in (False, True):
                 for mirror in (0, 1):
-                    sx = -px if flip else px
-                    sy = -py if mirror else py
-                    sphi = -phi if flip != bool(mirror) else phi
-                    add(solver, shape, index, mirror, flip, reverse, (sx, sy, sphi))
+                    args = (
+                        -point[0] if flip else point[0],
+                        -point[1] if mirror else point[1],
+                        -phi if flip != bool(mirror) else phi,
+                    )
+                    add(
+                        solver,
+                        shape,
+                        PATTERNS[index + mirror],
+                        args,
+                        flip=flip,
+                        reverse=reverse,
+                    )
     return found
 
 

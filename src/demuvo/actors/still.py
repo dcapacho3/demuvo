@@ -20,10 +20,12 @@ class Still:
 
     def configure(self, start: Transform2D, rng: np.random.Generator) -> None:
         """Keep the start pose; the random stream is not used."""
+        del rng
         self._start = start
 
     def pose_at(self, time: float) -> Transform2D:
         """The start pose, whatever the time."""
+        del time
         if self._start is None:
             raise RuntimeError("configure must be called before pose_at")
         return self._start

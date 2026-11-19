@@ -397,7 +397,8 @@ class SceneDraw:
         """The start and waypoints of an actor as drawn, with a dragged point moved."""
         stops = route_of(self.world.actors[index])
         if self.drag_point is not None and index == self.selected_actor:
-            place, x, y = self.drag_point
+            # pylint cannot see the pane set drag_point; it only sees the None
+            place, x, y = self.drag_point  # pylint: disable=unpacking-non-sequence
             stops[place + 1] = (x, y)
         return stops
 
@@ -419,7 +420,7 @@ class SceneDraw:
         if index is None:
             return None
         spots = picks(self.route(index))
-        if not len(spots):
+        if len(spots) == 0:
             return None
         px, py = self.view.to_screen(spots[:, 0], spots[:, 1])
         away = np.hypot(px - sx, py - sy)

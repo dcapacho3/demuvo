@@ -106,6 +106,10 @@ class Replanner:
             return None
         if sight.failed:
             return "it has no path yet"
+        return self._trigger(name, sight, spec, still_for)
+
+    def _trigger(self, name: str, sight: Sight, spec, still_for: float) -> str | None:
+        """Which of the spec's triggers has fired, in plain words, or None."""
         if spec.timer:
             return f"{spec.period:g} s passed"
         if spec.blocked and sight.costmap is not None:
@@ -121,7 +125,7 @@ class Replanner:
             area = changed_area(self._seen[name], sight.costmap)
             if area + 1e-9 >= spec.changed:
                 return f"the local costmap changed over {area:.2f} square metres"
-        if spec.stuck > 0 and still_for + 1e-9 >= spec.stuck:
+        if 0 < spec.stuck <= still_for + 1e-9:
             return f"it has stood still for {still_for:.1f} s"
         return None
 
