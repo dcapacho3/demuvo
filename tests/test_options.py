@@ -157,7 +157,7 @@ def test_the_motions_of_an_actor_are_listed():
 def test_the_arguments_of_a_class_include_what_a_form_cannot_show():
     """A form asks for them to see what it must fill in itself, such as points."""
     assert "points" in options.arguments_of("demuvo.actors:Waypoints")
-    assert options.arguments_of(None) == ()
+    assert not options.arguments_of(None)
     # a class that is not a dataclass is read from its __init__
     assert options.arguments_of("demuvo.sensing.lidar:Lidar") == (
         "model",
@@ -177,7 +177,7 @@ def test_the_word_settings_of_a_class_are_offered_as_choices():
     assert options.choices_of("demuvo.planners:AStar") == {}
 
 
-class Reaching:
+class Reaching:  # pylint: disable=too-few-public-methods
     """A class that is not a dataclass, so its settings are its arguments."""
 
     def __init__(self, reach: float = 1.0, points=None) -> None:
@@ -200,10 +200,10 @@ def test_each_setting_carries_its_first_sentence_from_the_docstring():
 def test_a_class_with_no_documented_settings_describes_none():
     """No Attributes or Args section gives an empty table."""
 
-    class Plain:
+    class Undocumented:  # pylint: disable=too-few-public-methods
         """Nothing documented."""
 
-    assert options.described(Plain) == {}
+    assert options.described(Undocumented) == {}
     assert options.summary(None) == ""
     assert options.summary("demuvo.planners:AStar").startswith("The cheapest path")
 

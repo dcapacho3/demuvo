@@ -85,7 +85,7 @@ def test_each_actor_gets_its_own_stream_from_the_world_seed(tmp_path, monkeypatc
     """The stream depends on the seed and the actor's name, not on the other actors."""
     seen = {}
 
-    def configure(self, start, rng):
+    def configure(self, _start, rng):
         seen[self.points[0][0]] = rng.random()
 
     monkeypatch.setattr(Waypoints, "configure", configure)

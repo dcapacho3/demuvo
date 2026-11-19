@@ -1,5 +1,7 @@
 """Tests for actors in the window: the button, the list, the scene and the inspector."""
 
+# pylint: disable=protected-access  # the tests press the sandbox's own menu actions
+
 import math
 from dataclasses import dataclass
 
@@ -9,6 +11,7 @@ import pytest
 from demuvo import edit
 from demuvo.gui import look, scenedraw
 from demuvo.gui.keys import CTRL, KEY
+from demuvo.gui.raster import Canvas
 from demuvo.gui.sandbox import ACTOR_KEY, Sandbox
 from demuvo.gui.session import Session
 from demuvo.gui.shell import Shell
@@ -23,11 +26,13 @@ PLAIN = "demuvo.gui.tests.test_actor_gui:Plain"
 class Plain:
     """A motion with nothing a form can show, so the form says so."""
 
-    def configure(self, start, rng) -> None:
-        """Keep where it starts."""
-        self._start = start
+    _start: object = None
 
-    def pose_at(self, time: float):
+    def configure(self, place, _rng) -> None:
+        """Keep where it starts."""
+        self._start = place
+
+    def pose_at(self, _time: float):
         """Always the start pose."""
         return self._start
 
@@ -41,12 +46,13 @@ class Counted:
     """
 
     repeats: int = 2
+    _start: object = None
 
-    def configure(self, start, rng) -> None:
+    def configure(self, place, _rng) -> None:
         """Keep where it starts."""
-        self._start = start
+        self._start = place
 
-    def pose_at(self, time: float):
+    def pose_at(self, _time: float):
         """Always the start pose."""
         return self._start
 
@@ -356,8 +362,6 @@ def test_an_actor_that_will_not_fit_is_reported(app, monkeypatch):
 
 def test_an_actor_route_is_a_layer_and_is_drawn_numbered():
     """The route shows with the actor, and turning its layer off hides it."""
-    from demuvo.gui.raster import Canvas
-
     session = Session(edit.new_world())
     session.add_actor()
     session.edits.set_actor_motion(0, "demuvo.actors:Waypoints")
@@ -434,9 +438,9 @@ def _points(program):
     return program.session.world.actors[0].motion_params["points"]
 
 
-def _drag(window, program, start, target):
+def _drag(window, program, origin, target):
     """Press at one world point and release at another."""
-    first, last = at(program, *start), at(program, *target)
+    first, last = at(program, *origin), at(program, *target)
     window.mouse_move(*first)
     window.mouse_press(Event(*first))
     window.mouse_move(*last)
@@ -499,7 +503,7 @@ def test_an_actor_with_no_route_is_not_given_one_by_a_click():
 
 def test_no_waypoint_is_under_a_pixel_without_an_actor_or_a_route():
     """Nothing selected, or an actor that stands still, has no point to pick."""
-    window, program = start()
+    _, program = start()
     assert program.session.scene.point_at(100, 100) is None
     program._add_actor()
     program.select(f"{ACTOR_KEY}0")
@@ -509,7 +513,7 @@ def test_no_waypoint_is_under_a_pixel_without_an_actor_or_a_route():
 
 def test_a_waypoint_gets_its_own_wait_and_heading_from_the_fold():
     """The wait makes it a three-number point, the heading switch a four-number one."""
-    program, window, _ = _selected_actor_with_route()
+    program, _, _ = _selected_actor_with_route()
     _open_waypoints(program)
     program.inspector.fields["wp1wait"].set(3.0)
     assert _points(program)[1] == [7.0, 5.0, 3.0]

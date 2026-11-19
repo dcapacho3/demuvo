@@ -1,5 +1,7 @@
 """Tests for the key numbers of a run and their CSV file."""
 
+# pylint: disable=unbalanced-tuple-unpacking  # it reads `rows = []` as always empty
+
 import csv
 import dataclasses
 from datetime import datetime

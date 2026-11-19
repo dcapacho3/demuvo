@@ -195,7 +195,7 @@ def test_the_result_is_printed_only_when_asked(monkeypatch, capsys):
 def test_metrics_writes_the_named_csv_file(tmp_path, monkeypatch, capsys):
     """--metrics FILE writes the key numbers there and prints the path."""
 
-    def drive_to_the_goal(session, seconds):
+    def drive_to_the_goal(session, _seconds):
         session.run.until_done(60.0)
         return 0
 
@@ -267,7 +267,7 @@ def test_seeds_without_metrics_write_no_file(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     assert main([DEMO, "--seeds", "1"]) == 0
     assert capsys.readouterr().out.splitlines()[-1] == "1 of 1 runs done"
-    assert list(tmp_path.iterdir()) == []
+    assert not list(tmp_path.iterdir())
 
 
 def test_seeds_need_a_file(capsys):

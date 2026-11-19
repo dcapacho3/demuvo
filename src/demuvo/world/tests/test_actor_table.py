@@ -22,7 +22,7 @@ def actors_of(tmp_path, extra):
 def test_a_world_with_no_actor_table_has_none(tmp_path):
     """Actors are optional, and every world written before them still loads."""
     world = small_world(tmp_path, "")
-    assert world.actors == ()
+    assert not world.actors
     assert world.actor_defaults == ActorDefaults()
 
 

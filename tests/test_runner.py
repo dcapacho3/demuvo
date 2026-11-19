@@ -87,7 +87,7 @@ def test_the_metrics_of_a_run_carry_its_seed_and_its_path_changes():
     """One row for r1, with the world's seed and the paths its planner handed over."""
     run = Run(DEMO)
     run.until_done(60.0)
-    (row,) = run.metrics()
+    (row,) = run.metrics()  # pylint: disable=unbalanced-tuple-unpacking
     assert row["robot"] == "r1" and row["seed"] == run.world.seed
     assert row["world"] == "" and run.metrics("demo")[0]["world"] == "demo"
     assert row["success"] == 1 and 19.0 < row["done_at_s"] < 20.0

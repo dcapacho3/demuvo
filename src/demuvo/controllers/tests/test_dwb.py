@@ -1,5 +1,7 @@
 """Tests for the DWB controller."""
 
+# pylint: disable=protected-access  # these tests check the module's own helpers
+
 import logging
 import math
 from pathlib import Path
@@ -41,7 +43,7 @@ def window(marks=(), centre=(3.0, 3.0), size=3.0, resolution=0.05):
     return Costmap(inflate(data, resolution, 0.2, 0.55, 10.0), resolution, origin)
 
 
-def look(pose, goal, costmap=None, path=None, tolerance=(0.1, 0.1), changes=1):
+def look(pose, goal, *, costmap=None, path=None, tolerance=(0.1, 0.1), changes=1):
     """An Observation for a robot at pose with a straight path to goal."""
     pose, goal = Transform2D.from_xyt(pose), Transform2D.from_xyt(goal)
     if path is None:
@@ -79,7 +81,7 @@ def drive(controller, obs, runs):
 def test_a_clear_path_ahead_drives_forward_and_straight():
     """On a free straight path the best command goes along it, not round."""
     controller = DWB()
-    obs = look((1.5, 3.0, 0.0), (4.5, 3.0, 0.0), window())
+    obs = look((1.5, 3.0, 0.0), (4.5, 3.0, 0.0), costmap=window())
     pose = drive(controller, obs, 40)
     assert controller.command(obs).vx > 0.0
     x, y, yaw = pose.xyt
@@ -122,7 +124,7 @@ def test_a_robot_shut_in_stops_and_the_log_says_so_once(caplog):
     walls = [(2.4, 2.0, 2.6, 4.0), (3.4, 2.0, 3.6, 4.0)]
     walls += [(2.4, 2.4, 3.6, 2.6), (2.4, 3.4, 3.6, 3.6)]
     controller = DWB()
-    obs = look((3.0, 3.0, 0.0), (4.4, 3.0, 0.0), window(walls))
+    obs = look((3.0, 3.0, 0.0), (4.4, 3.0, 0.0), costmap=window(walls))
     with caplog.at_level(logging.WARNING, logger="demuvo.controllers.dwb"):
         assert controller.command(obs) == Twist()
         assert controller.command(obs) == Twist()
@@ -336,7 +338,7 @@ def steer(controller, obs, model, runs):
 )
 def test_a_diff_drive_is_driven_exactly_as_without_limits(pose, goal):
     """Limits that turn in place change nothing, so a diff drive keeps its behaviour."""
-    plain = [c for c in steer(DWB(), look(pose, goal), DiffDrive(), 20)[1]]
+    plain = list(steer(DWB(), look(pose, goal), DiffDrive(), 20)[1])
     limited = steer(DWB(), see(pose, goal, DiffDrive().limits()), DiffDrive(), 20)[1]
     assert limited == plain
 

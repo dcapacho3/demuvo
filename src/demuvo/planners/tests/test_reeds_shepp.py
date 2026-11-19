@@ -1,5 +1,7 @@
 """Tests for the Reeds-Shepp planner."""
 
+# pylint: disable=protected-access  # these tests check the module's own helpers
+
 import math
 
 import numpy as np

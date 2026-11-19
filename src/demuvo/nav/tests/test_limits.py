@@ -184,7 +184,7 @@ def test_dwb_follows_the_same_parking_world_cusp_by_cusp():
 
 def test_the_parking_world_is_parked_with_the_default_lookahead_too():
     """A long lookahead cuts the last arc; the car shortens it near the end instead."""
-    from demuvo import Run, edit  # pylint: disable=import-outside-toplevel
+    from demuvo import Run  # pylint: disable=import-outside-toplevel
 
     world = edit.set_settings(load_world(PARKING), "car", "controller", {})
     run = Run(world)
