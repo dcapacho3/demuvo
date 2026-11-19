@@ -6,6 +6,8 @@ import pytest
 from demuvo import Simulation, Twist, load_world
 from demuvo.costmap import LETHAL
 
+from .worlds import robot as robot_block
+
 WORLD = """
 version = 1
 
@@ -15,21 +17,18 @@ seed = 8
 {world}
 [[obstacle]]
 shape = {{ name = "linestring", vertices = [[3.03, 0.5], [3.03, 5.5]] }}
-
-[[robot]]
-name = "a"
-model = "diff_drive"
-shape = {{ name = "circle", radius = 0.25 }}
-pose = [2.0, 2.5, 0.0]
-{robot}
-"""
+{robot}"""
 LIDAR = "sensors = { lidar = { beams = 90, period = 0.01 } }"
 
 
-def sim_of(tmp_path, robot="", world=""):
+def sim_of(tmp_path, extra="", world=""):
     """A simulation of one robot facing a wall, with the extra lines."""
     path = tmp_path / "w.toml"
-    path.write_text(WORLD.format(world=world, robot=robot))
+    path.write_text(
+        WORLD.format(
+            world=world, robot=robot_block("a", 2.0, 2.5, radius=0.25, extra=extra)
+        )
+    )
     return Simulation(load_world(path))
 
 
@@ -79,11 +78,11 @@ def test_the_hits_are_placed_with_the_estimated_pose_so_a_drift_shows(tmp_path):
     marked = {}
     for estimator, noise in (("ground_truth", 0.0), ("dead_reckoning", 1.5)):
         encoders = f"encoders = {{ noise = {noise} }}, " if noise else ""
-        robot = (
+        extra = (
             f'estimator = "{estimator}"\n'
             f"sensors = {{ {encoders}lidar = {{ beams = 90, period = 0.01 }} }}"
         )
-        sim = sim_of(tmp_path, robot, "\n[costmap.local]\nperiod = 0.01\n")
+        sim = sim_of(tmp_path, extra, "\n[costmap.local]\nperiod = 0.01\n")
         for _ in range(60):
             sim.step({"a": Twist(vx=0.5)})
         marked[estimator] = wall_x(sim.robots["a"].local_costmap)

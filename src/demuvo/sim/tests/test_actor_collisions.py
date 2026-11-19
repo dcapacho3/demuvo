@@ -6,13 +6,7 @@ from robomath import Transform2D
 from demuvo import Simulation, Twist, load_world
 from demuvo.sim.collisions import Checker
 
-HEAD = """
-version = 1
-[world]
-size = [10.0, 6.0]
-seed = 1
-dt = 0.1
-"""
+from .worlds import HEAD, robot
 
 
 def actor(name, x, y, radius=0.5, motion="", **flags):
@@ -24,17 +18,6 @@ name = "{name}"
 shape = {{ name = "circle", radius = {radius} }}
 pose = [{x}, {y}, 0.0]
 {lines}{motion}"""
-
-
-def robot(name, x, y, radius=0.5):
-    """A `[[robot]]` block."""
-    return f"""
-[[robot]]
-name = "{name}"
-model = "diff_drive"
-shape = {{ name = "circle", radius = {radius} }}
-pose = [{x}, {y}, 0.0]
-"""
 
 
 def world(tmp_path, *parts):

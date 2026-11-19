@@ -11,27 +11,11 @@ from demuvo import Simulation, Twist, load_world
 from demuvo.sim.collisions import ALL, Checker
 from demuvo.world.shapes import SHAPES, Part
 
-HEAD = """
-version = 1
-[world]
-size = [10.0, 6.0]
-seed = 1
-dt = 0.1
-"""
+from .worlds import HEAD, robot
+
 WALL = """
 [[obstacle]]
 shape = { name = "linestring", vertices = [[5.0, 0.5], [5.0, 5.5]] }
-"""
-
-
-def robot(name, x, y, angle=0.0, radius=0.5):
-    """Robot."""
-    return f"""
-[[robot]]
-name = "{name}"
-model = "diff_drive"
-shape = {{ name = "circle", radius = {radius} }}
-pose = [{x}, {y}, {angle}]
 """
 
 

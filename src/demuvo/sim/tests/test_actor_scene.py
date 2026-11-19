@@ -9,6 +9,8 @@ from demuvo.sensing import Scene, cast
 from demuvo.sim.scene import actor_owner, parts_scene, with_robots
 from demuvo.world.shapes import Part
 
+from .worlds import robot
+
 WORLD = """
 version = 1
 
@@ -20,14 +22,14 @@ seed = 5
 name = "walker"
 shape = {{ name = "circle", radius = 0.3 }}
 pose = [3.2, 2.5, 0.0]
-{motion}{flags}
-[[robot]]
-name = "a"
-model = "diff_drive"
-shape = {{ name = "circle", radius = 0.25 }}
-pose = [2.0, 2.5, 0.0]
-sensors = {{ lidar = {{ beams = 90, period = 0.01, max_range = 6.0 }} }}
-"""
+{motion}{flags}{robot}"""
+ROBOT = robot(
+    "a",
+    2.0,
+    2.5,
+    radius=0.25,
+    extra="sensors = { lidar = { beams = 90, period = 0.01, max_range = 6.0 } }\n",
+)
 # Straight along x at 1 m/s, so where it is at a time is easy to say.
 MOTION = (
     'motion = "demuvo.actors:Waypoints"\n'
@@ -38,7 +40,7 @@ MOTION = (
 def sim_of(tmp_path, motion="", flags=""):
     """A simulation of one robot facing one actor 1.2 m ahead of it."""
     path = tmp_path / "w.toml"
-    path.write_text(WORLD.format(motion=motion, flags=flags))
+    path.write_text(WORLD.format(motion=motion, flags=flags, robot=ROBOT))
     return Simulation(load_world(path))
 
 
@@ -118,7 +120,7 @@ def test_a_world_with_no_actor_builds_the_same_scene_as_before(tmp_path):
     """The actors are an addition: a world without them is untouched."""
     path = tmp_path / "w.toml"
     path.write_text(
-        WORLD.format(motion="", flags="").replace(
+        WORLD.format(motion="", flags="", robot=ROBOT).replace(
             """[[actor]]
 name = "walker"
 shape = { name = "circle", radius = 0.3 }
