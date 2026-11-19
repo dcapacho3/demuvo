@@ -27,7 +27,7 @@ EXAMPLE = (
 )
 
 
-def look(pose, goal, limits=MECANUM, tolerance=(0.1, 0.1), path=None, dt=0.05):
+def look(pose, goal, *, limits=MECANUM, tolerance=(0.1, 0.1), path=None, dt=0.05):
     """An Observation for a robot at pose with a straight path to goal."""
     pose, goal = Transform2D.from_xyt(pose), Transform2D.from_xyt(goal)
     if path is None:
@@ -43,7 +43,7 @@ def look(pose, goal, limits=MECANUM, tolerance=(0.1, 0.1), path=None, dt=0.05):
     )
 
 
-def drive(controller, pose, goal, model=None, seconds=20.0, dt=0.05, **kwargs):
+def drive(controller, pose, goal, *, model=None, seconds=20.0, dt=0.05, **kwargs):
     """Follow a straight path to goal on `model`; the poses after each run."""
     model = model or Mecanum()
     start, end = Transform2D.from_xyt(pose), Transform2D.from_xyt(goal)

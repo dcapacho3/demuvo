@@ -184,6 +184,11 @@ class RollingWheels:
     uses: ClassVar[tuple[str, ...]] = ("vx", "wz")
     # Settings only the encoders read; a form shows them when the robot has some.
     encoder_only: ClassVar[tuple[str, ...]] = ("wheel_radius", "track")
+    track: float
+    wheel_radius: float
+
+    def limits(self) -> Limits:
+        """The commands the robot can follow; the class that mixes this in sets them."""
 
     def clip(self, command: Twist) -> Twist:
         """Limit a command to what the robot can do.

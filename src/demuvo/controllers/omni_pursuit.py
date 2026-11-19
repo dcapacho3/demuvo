@@ -4,7 +4,7 @@ A path follower for a robot that moves sideways, as a mecanum robot does
 (`Observation.limits.strafes`). Such a robot's heading and its direction of
 travel are independent, so it does not steer along an arc the way pure pursuit
 does: it moves straight at the point ahead and turns to the angle it wants at
-the same time. The design is in docs/mecanum-model-design.md, section 9.
+the same time.
 
 Each run it:
 
@@ -19,7 +19,7 @@ Each run it:
    have halfway through the command, and divides it by sin(h) / h, h half the
    turn the command makes. The command is held for `Observation.dt`, along an
    arc; this puts the arc's chord exactly on the aim, where the heading at the
-   start would drift half the turn off course every run (design, section 5.5);
+   start would drift half the turn off course every run;
 5. cuts the command into the robot's limits with `Limits.clip`, which scales vx
    and vy by one factor, so the direction of travel is kept and what it commands
    is what the robot does.
@@ -105,11 +105,10 @@ class OmniPursuit:
             return Twist()
         x, y, yaw = obs.pose.xyt
         gx, gy, gyaw = obs.goal.xyt
-        xy_tolerance, yaw_tolerance = obs.goal_tolerance
         distance = math.hypot(gx - x, gy - y)
-        if distance <= xy_tolerance:
+        if distance <= obs.goal_tolerance[0]:
             error = float(wrap_angle(gyaw - yaw))
-            if abs(error) <= yaw_tolerance:
+            if abs(error) <= obs.goal_tolerance[1]:
                 return Twist()
             return self._fit(Twist(wz=self._turn(error, limits)), limits)
         index = self._target(obs.path, x, y)
@@ -117,8 +116,7 @@ class OmniPursuit:
         if self.face_path and distance > self.lookahead:
             heading = float(obs.path[index, 2])
         wz = self._turn(float(wrap_angle(heading - yaw)), limits)
-        tx, ty = obs.path[index, :2]
-        dx, dy = float(tx - x), float(ty - y)
+        dx, dy = (float(v) for v in obs.path[index, :2] - (x, y))
         gap = math.hypot(dx, dy)
         if gap == 0.0:
             # On the path's last point but short of the goal: no way to aim, so
@@ -159,9 +157,9 @@ def body_velocity(
 
     Held for dt with turn rate wz, a body velocity sweeps an arc, and the arc's
     chord points along the body velocity turned by the heading at mid-step,
-    shortened by s = sin(h) / h with h = wz * dt / 2 (design, section 5.3). So
-    the world velocity turned into the frame at the mid-step heading and divided
-    by s moves the robot by exactly (wx, wy) * dt. With wz = 0 it is the plain
+    shortened by s = sin(h) / h with h = wz * dt / 2. So the world velocity turned
+    into the frame at the mid-step heading and divided by s moves the robot by
+    exactly (wx, wy) * dt. With wz = 0 it is the plain
     turn into the robot's frame.
     """
     half = wz * dt / 2

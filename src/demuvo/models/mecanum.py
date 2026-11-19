@@ -1,8 +1,5 @@
 """The mecanum (omnidirectional) model.
 
-The full design, with the derivations and the numerical checks, is
-`docs/mecanum-model-design.md`; this is the short version.
-
 State and command
 -----------------
 

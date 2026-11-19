@@ -183,7 +183,7 @@ def test_an_ackermann_speed_is_clipped_before_the_cone():
     assert (cut.vx, cut.wz) == pytest.approx((0.5, 0.5 * REACH))
 
 
-def test_a_steering_angle_past_max_steer_is_refused_by_the_check():
+def test_a_steering_angle_past_max_steer_is_refused_by_the_check():  # pylint: disable=protected-access
     """A command that skipped clip and turns too tight raises, naming the limit."""
     with pytest.raises(ValueError, match="max_steer"):
         Ackermann()._check_steerable(Twist(vx=0.1, wz=5.0))

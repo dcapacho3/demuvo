@@ -1,4 +1,4 @@
-"""Tests for the mecanum model; the cases are those of docs/mecanum-model-design.md."""
+"""Tests for the mecanum model: the step, the wheels and the limits."""
 
 import math
 
@@ -21,7 +21,7 @@ def drive(pose, command, dt, model=None):
 def chord(pose, command, dt):
     """The step written out by hand: the chord at the mid-step heading.
 
-    The tests' oracle, independent of robomath (design, section 5.3).
+    The tests' oracle, independent of robomath.
     """
     x, y, angle = pose
     theta = command.wz * dt
