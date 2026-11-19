@@ -255,7 +255,7 @@ and a table over seeds, with docs that stand alone.
 | A faster core in C++ or Rust under the same Python interface: the search loops of A*, Hybrid A* and the DWB wavefront first, then the collision check. | L |
 | Jump Point Search for A*, which skips the cells of an open grid. A plan across the Depot takes 0.4 s today, and every replan pays it. | M |
 | Hybrid A*: vectorise the arcs of each pose, and stop a search that has no path sooner than 20,000 poses (3 s on the Depot). | M |
-| Batched pose maths in robomath: move many poses by a body step at once. DWB calls `rplus_se2` for every point of every candidate trajectory. | M |
+| DWB: find the poses of each candidate trajectory by the closed-form arc, x, y and angle, and not through 3 by 3 matrices. The batched `rplus_se2` calls take 18% of a DWB run. | S |
 | Build the simulation once for an edit; today one build checks the edit and another runs it. | S |
 | Keep the scene of fixed obstacles between edits, as the global costmap now is. | S |
 | Open a big Gazebo file faster: the mesh cut takes 1.3 s for the Depot, and could be kept beside the file. | S |
