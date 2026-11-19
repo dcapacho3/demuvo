@@ -230,18 +230,17 @@ how a class is listed in the window.
 
 ## To do
 
-- [x] A car-like (Ackermann) model, with the controllers and planners that suit it.
 - [ ] For the car: a parking controller that reaches a goal's angle exactly under obstacle
   avoidance, where `DWB` today arrives within 0.3 rad or so.
-- [x] A mecanum (omnidirectional) model, with the controllers that suit it: an exact step,
-  four-wheel encoders, an `OmniPursuit` path follower that turns apart from where it
-  goes, and a sideways axis in `DWB`.
+- [ ] For the car in tight rooms: `DWB` stalls there, and `HybridAStar` without reversing
+  often finds no path. A controller built for cars (MPPI or regulated pure pursuit), and
+  finer headings in the planner, would close both gaps.
 - [ ] For the mecanum robot: an optional wheel-speed limit, so its speeds along x and y
   and its turning share one budget as real wheels do, where today each has its own.
-- [x] Refuse a world whose limits allow a turn of half a circle or more in one step, since
-  the reported velocity of such a step is ambiguous.
 - [ ] More robot models, each with the controller and the encoders that suit it:
   skid-steer and forklift.
+- [ ] More sensors, such as an IMU and an absolute position with noise, for an estimator to
+  fuse with the encoders.
 - [ ] An extended Kalman filter (EKF), written from scratch, as a robot's estimator.
 - [ ] SLAM, written from scratch, so a robot builds a map and finds itself in it.
 - [ ] A map generator: a seeded Gaussian random field turned into obstacles, so each seed
@@ -251,12 +250,17 @@ how a class is listed in the window.
   limit that makes a world harder. Off by default, so the ideal world stays as it is.
 - [ ] Swarms: many robots, each running the same rule from its own sensors and its
   neighbours, with collisions and time reported over seeds.
-- [x] Moving actors.
-- [ ] A benchmark runner that compares planners and controllers over worlds and seeds, with
-  success, time, path length and collision metrics, a table and a CSV file.
-- [ ] Run logs and replay.
+- [ ] Compare planners and controllers in one command: every pairing over several worlds
+  and seeds, in one table. `--seeds` does this for the pairing in a single world today.
+- [ ] Run logs and replay: save the poses and commands of a run, and play it back in the
+  window.
+- [ ] Gazebo files: read meshes and more shapes than boxes, cylinders and spheres, and write
+  a world back out as `.sdf`.
 - [ ] Bridges to other software, ROS 2 first, so a program outside demuvo can drive a robot.
 - [ ] In the window: reshape the corners of a polygon or line, and more body shapes.
+- [ ] In the window: indent the rows inside a folded group of the inspector, so a group
+  inside a group reads as one.
+- [ ] Run pylint in the CI check, now that the code is clean, so it stays so.
 - [ ] A Debian package, and a faster core in C++ and Rust under the same Python interface.
 - [ ] Later: a reset and step interface so learning-based methods, reinforcement learning
   among them, can drive a world, and experiments with learned planners and controllers,
