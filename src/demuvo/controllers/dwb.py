@@ -642,7 +642,7 @@ def wavefront(
     height, width = free.shape
     # cells are numbered along the rows and the grids are plain lists, since this loop
     # runs once for every cell it reaches and numpy indexing is slow one cell at a time
-    open_cell, cost_of = free.ravel().tolist(), price.ravel().tolist()
+    open_cell, price = free.ravel().tolist(), price.ravel().tolist()
     distance = [math.inf] * (height * width)
     heap = []
     for row, col in sorted(set(zip(seeds[0].tolist(), seeds[1].tolist()))):
@@ -666,11 +666,11 @@ def wavefront(
                 continue
             if corner and not (open_cell[cell + dr * width] and open_cell[cell + dc]):
                 continue
-            there = here + length * cost_of[ahead]
+            there = here + length * price[ahead]
             if there < distance[ahead]:
                 distance[ahead] = there
                 heapq.heappush(heap, (there, ahead))
-    return np.array(distance).reshape(free.shape)
+    return np.array(distance).reshape(height, width)
 
 
 def _blend(values, r0, c0, fx, fy):
