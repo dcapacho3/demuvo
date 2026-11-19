@@ -8,19 +8,10 @@ import pytest
 from demuvo import Navigation, Simulation, load_world
 from demuvo.costmap import Costmap
 
+from .spy import MODULE
+
 DEMO = Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml"
 PLANNER = 'planner = "demuvo.planners:StraightLine"'
-
-MODULE = """
-from demuvo import Twist
-seen = []
-class Spy:
-    def __init__(self, speed=0.5, lookahead=0.6):
-        pass
-    def command(self, obs):
-        seen.append(obs)
-        return Twist()
-"""
 
 
 def spy_world(tmp_path, monkeypatch, sensors=""):

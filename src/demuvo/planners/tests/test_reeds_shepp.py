@@ -12,6 +12,8 @@ from demuvo import options
 from demuvo.planners import ReedsShepp, dubins
 from demuvo.planners import reeds_shepp as rs
 
+from .bends import max_curvature
+
 
 def poses(start, goal):
     """Two (x, y, angle) tuples as transforms."""
@@ -98,12 +100,7 @@ def test_the_path_never_bends_tighter_than_the_turning_radius(seed):
     start = tuple(rng.uniform([-3, -3, -math.pi], [3, 3, math.pi]))
     goal = tuple(rng.uniform([-3, -3, -math.pi], [3, 3, math.pi]))
     path = plan(start, goal, turning_radius=0.8, spacing=0.02)
-    steps = np.diff(path[:, :2], axis=0)
-    lengths = np.hypot(steps[:, 0], steps[:, 1])
-    assert lengths.max() <= 0.02 + 1e-9
-    turned = np.abs([float(wrap_angle(d)) for d in np.diff(path[:, 2])])
-    driven = lengths > 1e-12
-    assert (turned[driven] / lengths[driven]).max() <= 1 / 0.8 + 0.05
+    assert max_curvature(path, 0.02) <= 1 / 0.8 + 0.05
 
 
 def test_a_sideways_shift_has_a_cusp():

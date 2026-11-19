@@ -9,6 +9,8 @@ from robomath import Transform2D, wrap_angle
 from demuvo import Ackermann, options
 from demuvo.planners import Dubins
 
+from .bends import max_curvature
+
 
 def plan(start, goal, **params):
     """The Dubins path between two (x, y, angle) poses."""
@@ -47,13 +49,7 @@ def test_the_path_never_bends_tighter_than_the_turning_radius(seed):
     start = rng.uniform([-4, -4, -math.pi], [4, 4, math.pi])
     goal = rng.uniform([-4, -4, -math.pi], [4, 4, math.pi])
     path = plan(tuple(start), tuple(goal), turning_radius=0.8, spacing=0.02)
-    steps = np.diff(path[:, :2], axis=0)
-    lengths = np.hypot(steps[:, 0], steps[:, 1])
-    assert lengths.max() <= 0.02 + 1e-9  # points are spacing apart at most
-    turned = np.abs([float(wrap_angle(d)) for d in np.diff(path[:, 2])])
-    driven = lengths > 1e-12
-    curvature = turned[driven] / lengths[driven]
-    assert curvature.max() <= 1 / 0.8 + 0.05
+    assert max_curvature(path, 0.02) <= 1 / 0.8 + 0.05
     assert path[-1] == pytest.approx(goal)
 
 

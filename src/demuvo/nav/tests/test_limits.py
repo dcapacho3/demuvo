@@ -6,18 +6,9 @@ import pytest
 
 from demuvo import Navigation, Simulation, edit, load_world
 
-DEMO = Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml"
+from .spy import MODULE
 
-MODULE = """
-from demuvo import Twist
-seen = []
-class Spy:
-    def __init__(self, speed=0.5, lookahead=0.6):
-        pass
-    def command(self, obs):
-        seen.append(obs)
-        return Twist()
-"""
+DEMO = Path(__file__).resolve().parents[4] / "examples" / "worlds" / "demo.toml"
 
 
 def spy_world(tmp_path, monkeypatch, model):
