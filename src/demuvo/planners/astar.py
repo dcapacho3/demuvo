@@ -20,6 +20,8 @@ LOGGER = logging.getLogger(__name__)
 # The 4 and 8 neighbours of a cell as (row step, column step).
 _STEPS_4 = ((0, 1), (1, 0), (0, -1), (-1, 0))
 _STEPS_8 = _STEPS_4 + ((1, 1), (1, -1), (-1, -1), (-1, 1))
+# What a diagonal step saves over two straight ones, per cell, in the estimate.
+_DIAGONAL_GAP = math.sqrt(2) - 2
 
 
 @dataclass
@@ -151,55 +153,66 @@ class AStar:
             return None
         return int(rr.flat[nearest]), int(cc.flat[nearest])
 
-    def _heuristic(self, cell, last):
-        """The distance from a cell to the goal cell if nothing were in the way."""
-        dr, dc = abs(cell[0] - last[0]), abs(cell[1] - last[1])
-        if self.connectivity == 4:
-            return self._costmap.resolution * (dr + dc)
-        return self._costmap.resolution * (dr + dc + (math.sqrt(2) - 2) * min(dr, dc))
+    def _search(self, blocked, price, first, last):  # pylint: disable=too-many-locals
+        """The cells from first to last as a list, or None if last cannot be reached.
 
-    def _neighbours(self, cell, blocked):
-        """The free cells a step from `cell` reaches, with the length of the step."""
+        The cells are numbered along the rows, so a neighbour is a number added to
+        the cell's own, and the grids are plain lists: indexing a numpy array one
+        cell at a time is several times slower, and this loop runs once for every
+        cell it reaches. That is why its values are all locals.
+        """
         rows, cols = blocked.shape
+        resolution = self._costmap.resolution
+        shut, cost_of = blocked.ravel().tolist(), price.ravel().tolist()
         steps = _STEPS_8 if self.connectivity == 8 else _STEPS_4
-        for dr, dc in steps:
-            r, c = cell[0] + dr, cell[1] + dc
-            if not (0 <= r < rows and 0 <= c < cols) or blocked[r, c]:
-                continue
-            if dr and dc and (blocked[cell[0] + dr, cell[1]] or blocked[cell[0], c]):
-                continue  # a diagonal step may not cut a corner
-            yield (r, c), self._costmap.resolution * math.hypot(dr, dc)
-
-    def _search(self, blocked, price, first, last):
-        """The cells from first to last as a list, or None if last cannot be reached."""
-        best = {first: 0.0}
-        came_from = {first: None}
-        # (estimate, distance still to go, order found, cell): a tie goes to the
-        # cell nearer the goal, then to the one found first, so a run repeats.
-        start_estimate = self._heuristic(first, last)
-        queue = [(start_estimate, start_estimate, 0, first)]
+        moves = [
+            (dr * cols + dc, dr, dc, resolution * math.hypot(dr, dc), bool(dr and dc))
+            for dr, dc in steps
+        ]
+        gap = _DIAGONAL_GAP if self.connectivity == 8 else 0.0
+        goal_row, goal_col = last
+        goal = goal_row * cols + goal_col
+        start = first[0] * cols + first[1]
+        best = [math.inf] * (rows * cols)
+        came_from = [-1] * (rows * cols)
+        best[start] = 0.0
+        # (estimate, distance still to go, order found, cell, row, column): a tie goes
+        # to the cell nearer the goal, then to the one found first, so a run repeats.
+        far = abs(first[0] - goal_row), abs(first[1] - goal_col)
+        h0 = resolution * (sum(far) + gap * min(far))
+        queue = [(h0, h0, 0, start, first[0], first[1])]
         found = 1
         while queue:
-            estimate, remaining, _, cell = heapq.heappop(queue)
-            if estimate - remaining > best[cell] + 1e-9:
+            estimate, remaining, _, cell, row, col = heapq.heappop(queue)
+            here = best[cell]
+            if estimate - remaining > here + 1e-9:
                 continue  # a cheaper way to this cell was found after this entry
-            if cell == last:
-                return _trace(came_from, cell)
-            for neighbour, length in self._neighbours(cell, blocked):
-                cost = best[cell] + length * price[neighbour]
-                if cost < best.get(neighbour, math.inf):
-                    best[neighbour] = cost
-                    came_from[neighbour] = cell
-                    h = self._heuristic(neighbour, last)
-                    heapq.heappush(queue, (cost + h, h, found, neighbour))
+            if cell == goal:
+                return _trace(came_from, cell, cols)
+            for offset, dr, dc, length, corner in moves:
+                r, c = row + dr, col + dc
+                if not (0 <= r < rows and 0 <= c < cols):
+                    continue
+                ahead = cell + offset
+                if shut[ahead]:
+                    continue
+                if corner and (shut[cell + dr * cols] or shut[cell + dc]):
+                    continue  # a diagonal step may not cut a corner
+                cost = here + length * cost_of[ahead]
+                if cost < best[ahead]:
+                    best[ahead] = cost
+                    came_from[ahead] = cell
+                    far_r, far_c = abs(r - goal_row), abs(c - goal_col)
+                    h = resolution * (far_r + far_c + gap * min(far_r, far_c))
+                    heapq.heappush(queue, (cost + h, h, found, ahead, r, c))
                     found += 1
         return None
 
 
-def _trace(came_from, cell):
-    """The cells from the first to `cell`, by following where each came from."""
+def _trace(came_from, cell, cols):
+    """The cells (row, column) from the first to `cell`, by where each came from."""
     path = []
-    while cell is not None:
-        path.append(cell)
+    while cell != -1:
+        path.append(divmod(cell, cols))
         cell = came_from[cell]
     return path[::-1]
