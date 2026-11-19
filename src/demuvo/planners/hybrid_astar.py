@@ -161,6 +161,7 @@ class HybridAStar:
             self.turning_radius, self.spacing
         )
         first = tuple(float(v) for v in start)
+        price = 1.0 + self.cost_weight * costmap.data / MAX_NON_OBSTACLE
         key0 = _key(costmap, first)
         # best[key] = (cost so far, parent key, the pose, the move that led to it)
         best = {key0: (0.0, None, first, None)}
@@ -176,17 +177,16 @@ class HybridAStar:
                 closing = self._close(shot, best[key][2], goal)
                 if closing is not None:
                     return self._assemble(best, key, closing, goal), opened
-            self._expand(key, best, heap, far)
+            self._expand(key, best, heap, far, price)
         return None, opened
 
-    def _expand(self, key, best, heap, far) -> None:
+    def _expand(self, key, best, heap, far, price) -> None:
         """Open a pose: try each arc from it and keep the ones that are cheaper."""
         costmap = self._costmap
         kappas = (-1.0 / self.turning_radius, 0.0, 1.0 / self.turning_radius)
         moves = [(+1, k) for k in kappas]
         if self.allow_reversing:
             moves += [(-1, k) for k in kappas]
-        price = 1.0 + self.cost_weight * costmap.data / MAX_NON_OBSTACLE
         cost, _, pose, last = best[key]
         for move in moves:
             found = self._arc(pose, move, price)
