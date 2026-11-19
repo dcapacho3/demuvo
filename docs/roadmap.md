@@ -14,7 +14,8 @@ only if its licence allows it. Planners written from papers.
   to aim it, Shift for waypoints, a card before unsaved work is lost, inspector groups
   with help text, layers, an empty default world.
 - **World:** box, circle, polygon and wall obstacles, maps from `map.yaml`, Gazebo
-  `.world` and `.sdf` import (boxes, cylinders, spheres), moving actors on waypoints.
+  `.world` and `.sdf` import (boxes, cylinders, spheres, includes and meshes cut at a
+  robot's height), moving actors on waypoints.
 - **Models:** differential drive, car (Ackermann), mecanum.
 - **Sensing:** lidar with mount, noise and rate; encoders; a local costmap built from
   scans; ground-truth and dead-reckoning estimators.
@@ -158,7 +159,7 @@ and a table over seeds, with docs that stand alone.
 | Warehouse, supermarket, parking lot and street-grid generators. | M each |
 | A difficulty score for a world (clutter, corridor width, path winding) as its own tool. | S |
 | Occupancy image import (PNG and YAML). | S |
-| Gazebo import of meshes and more shapes; export of a world to `.sdf`. | M |
+| Gazebo import of more shapes (heightmaps, capsules, ellipsoids) and of a model that sits in the Fuel cloud only; export of a world to `.sdf`. | M |
 | Import from SVG or DXF drawings. | M |
 | Terrain layer: a speed limit, cost or label from a seeded map; off by default. | M |
 | A world that changes in time: doors, blocked aisles, schedules. | M |

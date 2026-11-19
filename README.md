@@ -117,11 +117,17 @@ A world is a TOML file: size, seed, obstacles (box, circle, polygon, wall), acto
 again while it drives. A file is checked when it loads, and a
 mistake is named by object and key. [The world file](docs/world-file.md) describes every key.
 
-A Gazebo `.world` or `.sdf` file opens too, and gives its boxes, cylinders and spheres
-that stand on the floor as obstacles, with no robot: add one with the robot tool. Floors, planes,
-meshes and tilted shapes are left out, since a demuvo world is flat. `examples/gazebo/`
-holds the TurtleBot3 world that Nav2 uses and two supermarket and cafe worlds to try
-the planners on. `demuvo examples/gazebo/turtlebot3_world.sdf` opens the first.
+A Gazebo `.world` or `.sdf` file opens too, seen from above as a robot meets it, with no
+robot: add one with the robot tool. Only what lies between 0.1 and 1 m above the floor
+counts, so a roof, a ceiling or a floor is not an obstacle. Boxes, cylinders and spheres
+become obstacles; a mesh (`.dae`, `.stl` or `.obj`) is cut at the same heights, and each
+region of the cut becomes one box, turned if it needs to be, or one polygon. A model the
+file includes is read too, from the folders Gazebo searches (set `GZ_SIM_RESOURCE_PATH`
+for yours) and from the Fuel cache. Anything that cannot be read, such as a mesh that
+is missing, gives a warning that names it. `examples/gazebo/` holds the TurtleBot3
+world that Nav2 uses, with its meshes, and two supermarket and cafe worlds whose meshes
+are not shipped, so they warn. `demuvo examples/gazebo/turtlebot3_world.sdf` opens the
+first.
 
 ![A walker crosses the corridor and a cart does a lap round the box. The robot's first
 path runs straight through them; its lidar finds the walker and A* takes it round.](docs/actors.gif)

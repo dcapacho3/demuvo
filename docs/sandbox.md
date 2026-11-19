@@ -118,9 +118,18 @@ The File menu has New world, Open, Save and Save as.
   Cancel is what Enter and Esc answer. Open always shows its browser, and its title
   says when the unsaved changes will be lost.
 
-Open also takes a Gazebo `.world` or `.sdf` file: its boxes, cylinders and spheres that
-stand on the floor become obstacles, with no robot, as in an empty Gazebo world. The world has no
-file of its own after that, so Save asks for a name and never writes over the Gazebo file.
+Open also takes a Gazebo `.world` or `.sdf` file, with no robot, as in an empty Gazebo
+world. What stands between 0.1 and 1 m above the floor becomes obstacles: boxes,
+cylinders and spheres as they are, and meshes (`.dae`, `.stl`, `.obj`) cut at those
+heights, so a roof or a ceiling adds nothing. Each region of a mesh becomes one box
+(turned, if it is) or one polygon, not a staircase of boxes. A closed mesh is a solid
+and a room is open. Models the file includes are read from the folders that Gazebo
+searches, `GZ_SIM_RESOURCE_PATH` among them, and from the Fuel cache; nothing is
+downloaded. A world with no collision shapes, such as one that only includes a model
+with visual meshes, is read from the visuals, and the log says so. The log also names
+anything that could not be read: a mesh or an include that is missing, a shape demuvo
+does not know, the shapes the heights left out. The world has no file of its own after
+that, so Save asks for a name and never writes over the Gazebo file.
 
 Saving writes a new file. Comments and the order of keys in the old file are not kept.
 The [world file](world-file.md) has the format.
