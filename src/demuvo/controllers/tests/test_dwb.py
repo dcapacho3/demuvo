@@ -27,6 +27,8 @@ from demuvo.costmap import LETHAL, Costmap
 from demuvo.costmap.layers import inflate
 from demuvo.options import controllers, hidden_settings, settings_of
 
+from .observations import look, moved, see
+
 EXAMPLE = Path(__file__).resolve().parents[4] / "examples" / "worlds" / "dwb.toml"
 
 
@@ -43,37 +45,11 @@ def window(marks=(), centre=(3.0, 3.0), size=3.0, resolution=0.05):
     return Costmap(inflate(data, resolution, 0.2, 0.55, 10.0), resolution, origin)
 
 
-def look(pose, goal, *, costmap=None, path=None, tolerance=(0.1, 0.1), changes=1):
-    """An Observation for a robot at pose with a straight path to goal."""
-    pose, goal = Transform2D.from_xyt(pose), Transform2D.from_xyt(goal)
-    if path is None:
-        path = StraightLine().plan(pose, goal)
-    return Observation(
-        time=0.0,
-        dt=0.05,
-        pose=pose,
-        path=path,
-        goal=goal,
-        goal_tolerance=tolerance,
-        path_changes=changes,
-        costmap=costmap,
-    )
-
-
 def drive(controller, obs, runs):
     """Run the controller `runs` times, moving the robot by each command."""
     model, pose = DiffDrive(), obs.pose
     for _ in range(runs):
-        obs = Observation(
-            obs.time + obs.dt,
-            obs.dt,
-            pose,
-            obs.path,
-            obs.goal,
-            obs.goal_tolerance,
-            obs.path_changes,
-            costmap=obs.costmap,
-        )
+        obs = moved(obs, pose)
         pose = model.step(pose, controller.command(obs), obs.dt)
     return pose
 
@@ -289,37 +265,11 @@ def test_the_example_world_goes_round_what_only_the_lidar_sees():
     assert again.result() == lines  # the same seed gives the same run
 
 
-def see(pose, goal, limits, **kwargs):
-    """`look`, with the robot's limits in the observation."""
-    obs = look(pose, goal, **kwargs)
-    return Observation(
-        obs.time,
-        obs.dt,
-        obs.pose,
-        obs.path,
-        obs.goal,
-        obs.goal_tolerance,
-        obs.path_changes,
-        costmap=obs.costmap,
-        limits=limits,
-    )
-
-
 def steer(controller, obs, model, runs):
     """Run the controller `runs` times on `model`, returning the poses and commands."""
     pose, poses, commands = obs.pose, [], []
     for _ in range(runs):
-        obs = Observation(
-            obs.time + obs.dt,
-            obs.dt,
-            pose,
-            obs.path,
-            obs.goal,
-            obs.goal_tolerance,
-            obs.path_changes,
-            costmap=obs.costmap,
-            limits=obs.limits,
-        )
+        obs = moved(obs, pose)
         command = controller.command(obs)
         commands.append(command)
         pose = model.step(pose, command, obs.dt)

@@ -6,22 +6,9 @@ import numpy as np
 import pytest
 from robomath import Transform2D
 
-from demuvo import Ackermann, DiffDrive, Observation, PurePursuit, StraightLine, Twist
+from demuvo import Ackermann, DiffDrive, Observation, PurePursuit, Twist
 
-
-def look(pose, goal, tolerance=(0.1, 0.1), path=None):
-    """An Observation for a robot at pose with a straight path to goal."""
-    pose, goal = Transform2D.from_xyt(pose), Transform2D.from_xyt(goal)
-    if path is None:
-        path = StraightLine().plan(pose, goal)
-    return Observation(
-        time=0.0,
-        dt=0.05,
-        pose=pose,
-        path=path,
-        goal=goal,
-        goal_tolerance=tolerance,
-    )
+from .observations import look, moved, see
 
 
 def test_a_goal_straight_ahead_gives_the_set_speed_and_no_turn():
@@ -120,20 +107,6 @@ def test_a_bad_number_is_refused_when_the_controller_is_built(name, bad):
 
 # A car's limits: the default Ackermann, which cannot turn in place.
 CAR = Ackermann().limits()
-
-
-def see(pose, goal, limits, **kwargs):
-    """`look`, with the robot's limits in the observation."""
-    obs = look(pose, goal, **kwargs)
-    return Observation(
-        obs.time,
-        obs.dt,
-        obs.pose,
-        obs.path,
-        obs.goal,
-        obs.goal_tolerance,
-        limits=limits,
-    )
 
 
 @pytest.mark.parametrize(
@@ -251,15 +224,7 @@ def test_a_reversing_car_arrives_without_going_round():
     obs = see((1.0, 1.0, 0.0), (0.3, 1.0, 3.14), CAR)
     pose, driven = obs.pose, 0.0
     for _ in range(60):
-        obs = Observation(
-            obs.time + obs.dt,
-            obs.dt,
-            pose,
-            obs.path,
-            obs.goal,
-            obs.goal_tolerance,
-            limits=CAR,
-        )
+        obs = moved(obs, pose)
         command = controller.command(obs)
         pose = model.step(pose, command, obs.dt)
         driven += abs(command.vx) * obs.dt

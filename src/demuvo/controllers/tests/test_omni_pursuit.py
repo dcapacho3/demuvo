@@ -21,26 +21,18 @@ from demuvo import (
 from demuvo.controllers.omni_pursuit import body_velocity
 from demuvo.options import controllers, settings_of
 
+from .observations import look as observation
+
 MECANUM = Mecanum().limits()
 EXAMPLE = (
     Path(__file__).resolve().parents[4] / "examples" / "worlds" / "omni_pursuit.toml"
 )
 
 
-def look(pose, goal, *, limits=MECANUM, tolerance=(0.1, 0.1), path=None, dt=0.05):
-    """An Observation for a robot at pose with a straight path to goal."""
-    pose, goal = Transform2D.from_xyt(pose), Transform2D.from_xyt(goal)
-    if path is None:
-        path = StraightLine().plan(pose, goal)
-    return Observation(
-        time=0.0,
-        dt=dt,
-        pose=pose,
-        path=path,
-        goal=goal,
-        goal_tolerance=tolerance,
-        limits=limits,
-    )
+def look(pose, goal, **kwargs):
+    """An Observation for a mecanum robot at pose with a straight path to goal."""
+    kwargs.setdefault("limits", MECANUM)
+    return observation(pose, goal, **kwargs)
 
 
 def drive(controller, pose, goal, *, model=None, seconds=20.0, dt=0.05, **kwargs):
