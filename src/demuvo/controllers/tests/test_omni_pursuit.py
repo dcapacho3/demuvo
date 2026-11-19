@@ -182,6 +182,14 @@ def test_an_empty_path_gives_a_zero_command():
     assert OmniPursuit().command(obs) == Twist()
 
 
+def test_on_the_last_path_point_short_of_the_goal_it_only_turns():
+    """With no direction to aim at, it turns toward the goal heading and stays put."""
+    path = np.array([[1.0, 1.0, 0.0]])
+    obs = look((1.0, 1.0, 0.0), (5.0, 1.0, 1.0), path=path)
+    command = OmniPursuit().command(obs)
+    assert command.vx == command.vy == 0.0 and command.wz > 0.0
+
+
 def test_a_path_with_no_goal_is_an_error():
     """A path needs a goal to finish at."""
     obs = look((1.0, 1.0, 0.0), (5.0, 1.0, 0.0))
