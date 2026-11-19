@@ -1,15 +1,19 @@
 """Tests for inflation, and for keeping the global costmap between edits."""
 
+import dataclasses
 import math
 
 import numpy as np
 import pytest
+from robomath import Transform2D
 
 from demuvo import edit
+from demuvo.costmap import build
 from demuvo.costmap.build import build_costmaps
 from demuvo.costmap.grid import INSCRIBED, LETHAL, MAX_NON_OBSTACLE
 from demuvo.costmap.layers import inflate
-from demuvo.world import WorldError
+from demuvo.world import Obstacle, WorldError
+from demuvo.world.shapes import Box
 
 from ...world.tests.small_world import small_world
 
@@ -100,3 +104,110 @@ def test_a_map_file_that_changes_or_goes_is_not_taken_from_the_memory(tmp_path):
     yaml.unlink()
     with pytest.raises(WorldError, match="cannot read map"):
         build_costmaps(world)
+
+
+# -- patching the map for a changed shape --
+
+
+def same_as_a_full_build(world):
+    """Whether the costmaps given now equal those built from nothing."""
+    got = build.build_costmaps(world)
+    build.forget()
+    want = build.build_costmaps(world)
+    return all(np.array_equal(got[n].data, want[n].data) for n in want)
+
+
+def crowded_world(tmp_path):
+    """A world with several shapes and two sizes of robot."""
+    world = small_world(tmp_path)
+    world = edit.add_robot(world, "big", (4.4, 3.4, 0.0), radius=0.4)
+    for x, y in ((1.5, 2.0), (3.0, 1.0), (4.0, 2.5)):
+        world = edit.add_obstacle(world, "box", (x, y, 0.0), (0.6, 0.4))
+    return edit.add_outline(world, "polygon", [(2, 3), (2.8, 3.2), (2.4, 3.8)])
+
+
+def test_a_patched_map_is_the_map_a_full_build_gives(tmp_path):
+    """Move, resize, add and remove shapes one after another: no cell differs."""
+    world = crowded_world(tmp_path)
+    build.forget()
+    build.build_costmaps(world)
+    edits = [
+        lambda w: edit.move_obstacle(w, 0, (1.6, 2.1, 0.5)),
+        lambda w: edit.move_obstacle(w, 1, (3.1, 1.2, 0.0)),
+        lambda w: edit.resize_obstacle(w, 2, (1.0, 0.8)),
+        lambda w: edit.add_obstacle(w, "circle", (4.4, 1.0, 0.0), (0.3,)),
+        lambda w: edit.remove_obstacle(w, 0),
+        lambda w: edit.move_obstacle(w, 1, (2.2, 0.7, 0.0)),
+    ]
+    for make in edits:
+        world = make(world)
+        assert same_as_a_full_build(world)
+
+
+def test_the_patch_is_used_for_a_small_change_and_not_for_a_big_one(
+    tmp_path, monkeypatch
+):
+    """One moved shape patches; with room for none, the map is built again."""
+    world = crowded_world(tmp_path)
+    calls = []
+    real = build.generate_static
+    monkeypatch.setattr(
+        build,
+        "generate_static",
+        lambda w, r, window=None: calls.append(window) or real(w, r, window),
+    )
+    build.forget()
+    build.build_costmaps(world)
+    build.build_costmaps(edit.move_obstacle(world, 0, (1.6, 2.1, 0.0)))
+    assert calls[0] is None and calls[1] is not None
+    monkeypatch.setattr(build, "MAX_PATCH", 0)
+    build.build_costmaps(edit.move_obstacle(world, 1, (3.1, 1.1, 0.0)))
+    assert calls[2] is None
+
+
+def test_a_change_that_is_not_one_of_shapes_is_not_patched(tmp_path):
+    """The same shapes in a new tuple, a map file and a map with no static layer."""
+    world = crowded_world(tmp_path)
+    build.forget()
+    first = build.build_costmaps(world)["a"]
+    rebuilt = dataclasses.replace(world, obstacles=(*world.obstacles,))
+    assert build.build_costmaps(rebuilt)["a"] is not first
+    assert same_as_a_full_build(rebuilt)
+    bare = dataclasses.replace(
+        world, costmap=dataclasses.replace(world.costmap, plugins=("inflation",))
+    )
+    build.build_costmaps(bare)
+    moved = edit.move_obstacle(bare, 0, (1.6, 2.1, 0.0))
+    assert same_as_a_full_build(moved)
+
+
+def test_a_patch_without_inflation_changes_the_static_layer_only(tmp_path):
+    """With no inflation plugin the map is the static layer itself."""
+    world = crowded_world(tmp_path)
+    plain = dataclasses.replace(
+        world, costmap=dataclasses.replace(world.costmap, plugins=("static",))
+    )
+    build.forget()
+    build.build_costmaps(plain)
+    moved = edit.move_obstacle(plain, 0, (1.6, 2.1, 0.0))
+    assert same_as_a_full_build(moved)
+    assert build.build_costmaps(moved)["a"].data.max() == LETHAL
+
+
+def test_a_shape_off_the_grid_leaves_the_cells_as_they_were(tmp_path):
+    """Added beyond the edge of the world, it marks nothing."""
+    world = crowded_world(tmp_path)
+    build.forget()
+    before = build.build_costmaps(world)["a"].data
+    far = Obstacle(Transform2D.from_xyt((50.0, 50.0, 0.0)), Box((1.0, 1.0)))
+    plain = dataclasses.replace(world, obstacles=(*world.obstacles, far))
+    after = build.build_costmaps(plain)["a"].data
+    assert np.array_equal(after, before)
+    nothing = dataclasses.replace(
+        plain, costmap=dataclasses.replace(plain.costmap, plugins=("static",))
+    )
+    build.forget()
+    build.build_costmaps(dataclasses.replace(world, costmap=nothing.costmap))
+    again = dataclasses.replace(nothing, obstacles=(*nothing.obstacles[:-1],))
+    far_again = dataclasses.replace(again, obstacles=(*again.obstacles, far))
+    assert build.build_costmaps(far_again)["a"].data.max() == LETHAL

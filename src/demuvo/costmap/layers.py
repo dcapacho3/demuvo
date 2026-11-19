@@ -36,36 +36,65 @@ def distance_to_part(points: np.ndarray, part: Part) -> np.ndarray:
     return np.maximum(d - part.radius, 0.0)
 
 
+def part_cells(
+    part: Part, resolution: float, origin: tuple[float, float]
+) -> tuple[int, int, int, int]:
+    """The cells a part can touch: first row, end row, first column, end column.
+
+    They are counted from the corner of the world and are not clipped to a grid.
+    """
+    reach = part.radius + resolution
+    x0, y0, x1, y1 = part.box
+    ox, oy = origin
+    return (
+        math.floor((y0 - reach - oy) / resolution),
+        math.ceil((y1 + reach - oy) / resolution),
+        math.floor((x0 - reach - ox) / resolution),
+        math.ceil((x1 + reach - ox) / resolution),
+    )
+
+
 def _mark(
     grid: np.ndarray,
     part: Part,
     resolution: float,
     origin: tuple[float, float] = (0.0, 0.0),
+    first: tuple[int, int] = (0, 0),
 ) -> None:
     """Set to LETHAL every cell whose centre is within half a cell of the part.
 
-    The origin is the world position of the corner of cell (0, 0).
+    The origin is the world position of the corner of cell (0, 0) of the world, and
+    `first` the row and column of the world that the grid's own cell (0, 0) is, so a
+    piece of the map gets the same cells as the whole of it would.
     """
-    reach = part.radius + resolution
-    x0, y0, x1, y1 = part.box
-    ox, oy = origin
-    c0 = math.floor((x0 - reach - ox) / resolution)
-    c1 = math.ceil((x1 + reach - ox) / resolution)
-    r0 = math.floor((y0 - reach - oy) / resolution)
-    r1 = math.ceil((y1 + reach - oy) / resolution)
-    c0, r0 = max(c0, 0), max(r0, 0)
-    c1, r1 = min(c1, grid.shape[1]), min(r1, grid.shape[0])
+    r0, r1, c0, c1 = part_cells(part, resolution, origin)
+    r0, c0 = max(r0 - first[0], 0), max(c0 - first[1], 0)
+    r1, c1 = min(r1 - first[0], grid.shape[0]), min(c1 - first[1], grid.shape[1])
     if c0 >= c1 or r0 >= r1:
         return
     rows, cols = np.mgrid[r0:r1, c0:c1]
-    centres = np.stack([cols.ravel() + 0.5, rows.ravel() + 0.5], axis=1)
+    centres = np.stack(
+        [cols.ravel() + first[1] + 0.5, rows.ravel() + first[0] + 0.5], axis=1
+    )
     centres = centres * resolution + origin
     # the small margin keeps a wall on a cell edge from slipping between two cells
     near = distance_to_part(centres, part) <= resolution / 2 + 1e-9
     grid[rows.ravel()[near], cols.ravel()[near]] = LETHAL
 
 
-def generate_static(world: World, resolution: float) -> np.ndarray:
+def world_parts(world: World) -> list[Part]:
+    """The border and the obstacles of the world as convex parts."""
+    parts = border_parts(world.bounds)
+    for obstacle in world.obstacles:
+        parts += obstacle.shape.parts(obstacle.pose)
+    return parts
+
+
+def generate_static(
+    world: World,
+    resolution: float,
+    window: tuple[int, int, int, int] | None = None,
+) -> np.ndarray:
     """The obstacles and the border of the world as cells.
 
     Cell (0, 0) has its corner at the world's origin.
@@ -73,21 +102,20 @@ def generate_static(world: World, resolution: float) -> np.ndarray:
     A cell is LETHAL when its centre lies within half a cell of a shape, so a
     shape never hides between cells; a cell touching a shape's corner can be
     marked a little early.
+
+    Args:
+        world: the world.
+        resolution: side of a cell in metres.
+        window: (first row, end row, first column, end column) to give only that part
+            of the grid; the cells are those the whole grid has.
     """
     width, height = world.size
-    origin = world.origin
-    grid = np.zeros(
-        (
-            math.ceil(round(height / resolution, 9)),
-            math.ceil(round(width / resolution, 9)),
-        ),
-        dtype=np.uint8,
-    )
-    parts = border_parts(world.bounds)
-    for obstacle in world.obstacles:
-        parts += obstacle.shape.parts(obstacle.pose)
-    for part in parts:
-        _mark(grid, part, resolution, origin)
+    rows = math.ceil(round(height / resolution, 9))
+    cols = math.ceil(round(width / resolution, 9))
+    r0, r1, c0, c1 = window or (0, rows, 0, cols)
+    grid = np.zeros((r1 - r0, c1 - c0), dtype=np.uint8)
+    for part in world_parts(world):
+        _mark(grid, part, resolution, world.origin, (r0, c0))
     return grid
 
 

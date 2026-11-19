@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 import numpy as np
@@ -10,7 +11,13 @@ from robomath import Transform2D
 from ..world import World
 from ..world.shapes import Circle
 from .grid import Costmap
-from .layers import edge_distance, generate_static, inflate, load_static
+from .layers import (
+    edge_distance,
+    generate_static,
+    inflate,
+    load_static,
+    part_cells,
+)
 
 
 def inscribed_radius(shape) -> float:
@@ -48,15 +55,122 @@ def _map_stamp(spec) -> tuple[float, int] | None:
     return found.st_mtime, found.st_size
 
 
+# The most shapes that may differ from the last map for it to be patched, not built
+# again; a world that differs in more is a new one.
+MAX_PATCH = 4
+
+
+def forget() -> None:
+    """Drop the kept map, so the next build starts from nothing."""
+    _LAST.clear()
+
+
+def _window(changed, shape, resolution: float, origin) -> tuple[int, int, int, int]:
+    """The cells that changed shapes can touch, clipped to the grid."""
+    boxes = [
+        part_cells(part, resolution, origin)
+        for o in changed
+        for part in o.shape.parts(o.pose)
+    ]
+    return (
+        max(min(b[0] for b in boxes), 0),
+        min(max(b[1] for b in boxes), shape[0]),
+        max(min(b[2] for b in boxes), 0),
+        min(max(b[3] for b in boxes), shape[1]),
+    )
+
+
+def _changed(old: tuple, new: tuple) -> list:
+    """The obstacles that are in one tuple and not in the other, by identity."""
+    kept = {id(o) for o in old} & {id(o) for o in new}
+    return [o for o in (*old, *new) if id(o) not in kept]
+
+
+def _patch(world: World, inputs: tuple):
+    """The last map changed for the shapes that differ, or None if it cannot be.
+
+    Moving, adding or removing a shape changes the cells round it and no others, so
+    only that window of the static layer is made again, and in each inflated map only
+    the window and what its inflation reaches. The result is what a build from
+    nothing gives.
+    """
+    spec = world.costmap
+    if _LAST["inputs"] != inputs or spec.source != "generate":
+        return None
+    if "static" not in spec.plugins:
+        return None
+    changed = _changed(_LAST["obstacles"], world.obstacles)
+    if not changed or len(changed) > MAX_PATCH:
+        return None
+    base, resolution, origin = _LAST["base"]
+    window = _window(changed, base.shape, resolution, origin)
+    patched = base.copy()
+    on_grid = window[0] < window[1] and window[2] < window[3]
+    if on_grid:
+        patched[window[0] : window[1], window[2] : window[3]] = generate_static(
+            world, resolution, window
+        )
+    patched.flags.writeable = False
+    shared = {}
+    for radius, costmap in _LAST["shared"].items():
+        data = patched if radius is None else costmap.data
+        if radius is not None and on_grid:
+            data = _inflated_window(data, patched, window, radius, spec)
+        shared[radius] = Costmap(data, resolution, origin)
+    return patched, shared
+
+
+def _grown(window, by: int, shape) -> tuple[int, int, int, int]:
+    """A window of cells made `by` cells larger on every side, kept on the grid."""
+    return (
+        max(window[0] - by, 0),
+        min(window[1] + by, shape[0]),
+        max(window[2] - by, 0),
+        min(window[3] + by, shape[1]),
+    )
+
+
+def _inflated_window(inflated, base, window, radius: float, spec) -> np.ndarray:
+    """An inflated map with the cells near a window of the base made again."""
+    resolution = spec.resolution
+    reach = math.ceil(round(max(spec.inflation_radius, radius) / resolution, 9))
+    # the cells whose cost the window can change, and the cells that decide them
+    changes = _grown(window, reach, base.shape)
+    decides = _grown(changes, reach, base.shape)
+    piece = inflate(
+        base[decides[0] : decides[1], decides[2] : decides[3]],
+        resolution,
+        radius,
+        spec.inflation_radius,
+        spec.cost_scaling_factor,
+    )
+    data = inflated.copy()
+    data[changes[0] : changes[1], changes[2] : changes[3]] = piece[
+        changes[0] - decides[0] : changes[1] - decides[0],
+        changes[2] - decides[2] : changes[3] - decides[2],
+    ]
+    data.flags.writeable = False
+    return data
+
+
 def _base(world: World):
     """The cells of the static layer, their size and origin; built once per change.
 
     The same obstacles, size, origin and settings give the same grid, so the last one
-    is kept and used again.
+    is kept and used again. Obstacles that differ by a shape or two patch it.
     """
     spec = world.costmap
     inputs = (world.size, world.origin, spec, _map_stamp(spec))
     if _LAST.get("obstacles") is world.obstacles and _LAST.get("inputs") == inputs:
+        return _LAST["base"]
+    patch = _patch(world, inputs) if _LAST else None
+    if patch is not None:
+        base, shared = patch
+        _LAST.update(
+            obstacles=world.obstacles,
+            base=(base, _LAST["base"][1], _LAST["base"][2]),
+            shared=shared,
+        )
         return _LAST["base"]
     origin = world.origin
     resolution = spec.resolution
