@@ -455,11 +455,13 @@ class Sandbox:  # pylint: disable=too-many-public-methods
         return None
 
     def busy(self) -> bool:
-        """True while the run plays."""
-        return self.session.playing
+        """True while the run plays, or the view has not yet been drawn in full."""
+        return self.session.playing or self.session.scene.rough
 
     def after_tick(self, now: float) -> None:
         """Advance a playing run by the real time since the last tick."""
+        if self.session.scene.settle(now):
+            self.scene_changed()
         elapsed = self.clock.elapsed(now)
         if self.session.playing:
             self.session.advance(elapsed)

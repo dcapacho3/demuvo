@@ -1,5 +1,7 @@
 """Tests for zooming and moving the scene: camera, pane, keys and scale bar."""
 
+# pylint: disable=protected-access  # some tests read the scene's cache and clock
+
 import numpy as np
 import pytest
 
@@ -265,3 +267,34 @@ def test_the_zoom_is_kept_when_the_window_is_resized():
     zoomed = scene.camera.zoom
     window.render(1000, 700)
     assert scene.camera.zoom == pytest.approx(zoomed)
+
+
+def test_the_scene_is_drawn_roughly_while_the_view_moves_and_in_full_after():
+    """Half size and doubled while zooming, drawn again in full once it has settled."""
+    window, program = start()
+    scene = program.session.scene
+    x, y = scene_middle(program)
+    window.mouse_move(x, y)
+    window.mouse_scroll(1.0)
+    assert scene.rough and program.busy()
+    window.render()
+    rough = scene._cutout.pixels.copy()
+    assert scene.settle(0.0) is False  # not yet still long enough
+    program.after_tick(scene._moved_at + 1.0)  # the loop's tick, a second later
+    assert not scene.rough and not program.busy()
+    window.render()
+    sharp = scene._cutout.pixels
+    assert sharp.shape == rough.shape and not np.array_equal(sharp, rough)
+    assert scene.settle(scene._moved_at + 5.0) is False  # nothing left to end
+
+
+def test_a_jump_to_the_whole_world_or_the_selection_is_drawn_in_full_at_once():
+    """Only a gesture is drawn roughly; a key that jumps is not."""
+    window, program = start()
+    scene = program.session.scene
+    scene.selected = "r1"
+    program.command(KEY["f"], False)
+    window.render()
+    assert not scene.rough
+    program.command(KEY["0"], False)
+    assert not scene.rough

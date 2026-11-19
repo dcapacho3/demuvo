@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 from robomath import Transform2D
@@ -45,6 +45,8 @@ CLICK_PIXELS = 6.0
 ROUTE_PIXELS = 10.0
 # Points kept in the trail of a robot.
 TRAIL = 400
+# Seconds the view must stay still before it is drawn in full again.
+SETTLE = 0.12
 # A changed path redraws the cut-out at most this often, in seconds.
 PATH_CHECK = 0.35
 # Length of the goal arrow in metres.
@@ -113,6 +115,9 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
         self.palette = look.PALETTES[0]
         self.view: View | None = None
         self.camera = Camera()
+        # True while the view is being zoomed or moved, until `settle` says it stopped.
+        self.rough = False
+        self._moved_at = 0.0
         self._base: View | None = None
         self._room = 60.0
         self.selected: str | None = None
@@ -174,12 +179,24 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
     def zoom_by(self, factor: float, about=None) -> None:
         """Zoom in (above 1) or out about a pixel, or the scene middle if None."""
         self.camera.zoom_by(factor, about, self._base, self._room)
-        self.fit(self.view.rect, self._room)
+        self._moved()
 
     def pan_by(self, dx: float, dy: float) -> None:
         """Move the picture by pixels."""
         self.camera.pan_by(dx, dy)
+        self._moved()
+
+    def _moved(self) -> None:
+        """The view changed in a gesture: draw roughly until it stops."""
+        self.rough, self._moved_at = True, time.perf_counter()
         self.fit(self.view.rect, self._room)
+
+    def settle(self, now: float) -> bool:
+        """End the rough drawing once the view has been still; True if it ended."""
+        if self.rough and now - self._moved_at > SETTLE:
+            self.rough = False
+            return True
+        return False
 
     def fit_world(self) -> None:
         """Show the whole board again."""
@@ -293,6 +310,7 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
         # the cache. `keep` holds them so an id is never taken for another object.
         key = (
             self.view,
+            self.rough,
             self.palette,
             tuple(alphas.values()),
             self._costmap_key(),
@@ -319,10 +337,33 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
         return (hash(costmap.data.tobytes()), costmap.resolution, tuple(costmap.origin))
 
     def _draw_cutout(self, alphas: dict[str, float], key: object) -> None:
-        """Draw the cached layers into a cut-out the size of the scene."""
+        """Draw the cached layers into a cut-out the size of the scene.
+
+        While the view is being zoomed or moved they are drawn at half the size and
+        doubled, a fourth of the work, and drawn again in full once it settles.
+        """
         x, y, width, height = (round(v) for v in self.view.rect)
-        canvas = Canvas(width, height, look.WINDOW)
-        view = self.view.shifted(-x, -y)
+        if self.rough:
+            small = Canvas(-(-width // 2), -(-height // 2), look.WINDOW)
+            half = replace(
+                self.view,
+                rect=(0.0, 0.0, float(small.width), float(small.height)),
+                scale=self.view.scale / 2,
+                ox=(self.view.ox - x) / 2,
+                oy=(self.view.oy - y) / 2,
+            )
+            self._paint(small, half, alphas)
+            doubled = np.repeat(np.repeat(small.px, 2, axis=0), 2, axis=1)
+            self._cutout.pixels = doubled[:height, :width]
+        else:
+            canvas = Canvas(width, height, look.WINDOW)
+            self._paint(canvas, self.view.shifted(-x, -y), alphas)
+            self._cutout.pixels = canvas.px
+        self._cutout.key = key
+
+    def _paint(self, canvas: Canvas, view: View, alphas: dict[str, float]) -> None:
+        """Draw the cached layers on a canvas that holds the scene, at a view."""
+        width, height = canvas.width, canvas.height
         if alphas["floor"] > 0:
             self._floor(canvas, view, alphas["floor"])
         if alphas["costmap"] > 0.001:
@@ -344,7 +385,6 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
             self._paths(canvas, view, alphas["paths"])
         if alphas["goals"] > 0.001:
             self._goals(canvas, view, alphas["goals"])
-        self._cutout.pixels, self._cutout.key = canvas.px, key
 
     def draw_cutout(self, canvas: Canvas) -> None:
         """Copy the cached layers into the canvas inside its clip, redrawn if stale."""
