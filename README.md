@@ -230,41 +230,16 @@ how a class is listed in the window.
 
 ## To do
 
-- [ ] For the car: a parking controller that reaches a goal's angle exactly under obstacle
-  avoidance, where `DWB` today arrives within 0.3 rad or so.
-- [ ] For the car in tight rooms: `DWB` stalls there, and `HybridAStar` without reversing
-  often finds no path. A controller built for cars (MPPI or regulated pure pursuit), and
-  finer headings in the planner, would close both gaps.
-- [ ] For the mecanum robot: an optional wheel-speed limit, so its speeds along x and y
-  and its turning share one budget as real wheels do, where today each has its own.
-- [ ] More robot models, each with the controller and the encoders that suit it:
-  skid-steer and forklift.
-- [ ] More sensors, such as an IMU and an absolute position with noise, for an estimator to
-  fuse with the encoders.
-- [ ] An extended Kalman filter (EKF), written from scratch, as a robot's estimator.
-- [ ] SLAM, written from scratch, so a robot builds a map and finds itself in it.
-- [ ] A map generator: a seeded Gaussian random field turned into obstacles, so each seed
-  makes a different, repeatable world (clutter, caves), with start and goal checked to be
-  connected.
-- [ ] An optional terrain layer, also from a seeded Gaussian map: friction, slip or a speed
-  limit that makes a world harder. Off by default, so the ideal world stays as it is.
-- [ ] Swarms: many robots, each running the same rule from its own sensors and its
-  neighbours, with collisions and time reported over seeds.
-- [ ] Compare planners and controllers in one command: every pairing over several worlds
-  and seeds, in one table. `--seeds` does this for the pairing in a single world today.
-- [ ] Run logs and replay: save the poses and commands of a run, and play it back in the
-  window.
-- [ ] Gazebo files: read meshes and more shapes than boxes, cylinders and spheres, and write
-  a world back out as `.sdf`.
-- [ ] Bridges to other software, ROS 2 first, so a program outside demuvo can drive a robot.
-- [ ] In the window: reshape the corners of a polygon or line, and more body shapes.
-- [ ] In the window: indent the rows inside a folded group of the inspector, so a group
-  inside a group reads as one.
-- [ ] Run pylint in the CI check, now that the code is clean, so it stays so.
-- [ ] A Debian package, and a faster core in C++ and Rust under the same Python interface.
-- [ ] Later: a reset and step interface so learning-based methods, reinforcement learning
-  among them, can drive a world, and experiments with learned planners and controllers,
-  including training and distillation.
+The full list, with sizes and what the first release still needs, is in the
+[roadmap](docs/roadmap.md). Next:
+
+- [ ] A recorder and a replay, so a run can be saved, played back and compared.
+- [ ] A benchmark runner over planners, controllers, models, worlds and seeds, in one table.
+- [ ] A map and instance generator with a check that start and goal connect.
+- [ ] Skid-steer and forklift models.
+- [ ] A parking controller for the car, and a fix for the car in tight rooms.
+- [ ] An extended Kalman filter, SLAM and more sensors, written from scratch.
+- [ ] Swarms, ROS 2 bridge, a Debian package and a faster core in C++ and Rust.
 
 ## Documentation
 
@@ -274,6 +249,7 @@ how a class is listed in the window.
 | [Your own algorithms](docs/plugins.md) | write a planner, a smoother or a controller |
 | [The world file](docs/world-file.md) | every key: obstacles, robots, tasks, costmaps, lidar, time |
 | [Python](docs/python.md) | `Run`, the edit functions, seeds, what stays exact |
+| [Roadmap](docs/roadmap.md) | what is built, what the first release needs, and the longer list |
 
 ## Develop
 
