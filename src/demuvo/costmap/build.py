@@ -31,18 +31,33 @@ def inscribed_radius(shape) -> float:
     return float(edge_distance(np.zeros((1, 2)), outline)[0])
 
 
-def build_costmaps(world: World) -> dict[str, Costmap | None]:
-    """The global costmap of each robot, by name, all None if the world turns it off.
+# The last global map that was built, kept because an edit that moves a robot or
+# sets a goal leaves the obstacles alone, and a drag makes dozens of them a second.
+# Its costs are read-only, so any number of worlds may share it.
+_LAST: dict = {}
 
-    The static layer is built once and shared. Inflation depends on the robot's
-    inscribed radius, so robots with the same radius share one costmap.
 
-    Raises:
-        WorldError: if a map file named in the world file cannot be read.
+def _map_stamp(spec) -> tuple[float, int] | None:
+    """When the map file of a costmap was last written, so a changed file is seen."""
+    if spec.source == "generate":
+        return None
+    try:
+        found = Path(spec.source).stat()
+    except OSError:
+        return None  # the build below reports a map that cannot be read
+    return found.st_mtime, found.st_size
+
+
+def _base(world: World):
+    """The cells of the static layer, their size and origin; built once per change.
+
+    The same obstacles, size, origin and settings give the same grid, so the last one
+    is kept and used again.
     """
     spec = world.costmap
-    if not spec.enabled:
-        return {r.name: None for r in world.robots}
+    inputs = (world.size, world.origin, spec, _map_stamp(spec))
+    if _LAST.get("obstacles") is world.obstacles and _LAST.get("inputs") == inputs:
+        return _LAST["base"]
     origin = world.origin
     resolution = spec.resolution
     if "static" not in spec.plugins:
@@ -52,7 +67,32 @@ def build_costmaps(world: World) -> dict[str, Costmap | None]:
     else:
         base, resolution, origin = load_static(Path(spec.source), spec.unknown)
     base.flags.writeable = False
-    shared: dict[float | None, Costmap] = {}
+    # the holder keeps the obstacles alive, so their identity is not reused
+    _LAST.update(
+        obstacles=world.obstacles,
+        inputs=inputs,
+        base=(base, resolution, origin),
+        shared={},
+    )
+    return _LAST["base"]
+
+
+def build_costmaps(world: World) -> dict[str, Costmap | None]:
+    """The global costmap of each robot, by name, all None if the world turns it off.
+
+    The static layer is built once and shared. Inflation depends on the robot's
+    inscribed radius, so robots with the same radius share one costmap. A world with
+    the same obstacles, size and costmap settings as the last one gets the same
+    costmaps back, so editing a robot does not build them again.
+
+    Raises:
+        WorldError: if a map file named in the world file cannot be read.
+    """
+    spec = world.costmap
+    if not spec.enabled:
+        return {r.name: None for r in world.robots}
+    base, resolution, origin = _base(world)
+    shared: dict[float | None, Costmap] = _LAST["shared"]
     result = {}
     for robot in world.robots:
         radius = None

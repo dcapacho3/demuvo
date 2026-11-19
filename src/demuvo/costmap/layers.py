@@ -111,6 +111,16 @@ def load_static(
     return grid, found.resolution, found.origin
 
 
+def _vertical_gap(lethal: np.ndarray, limit: int) -> np.ndarray:
+    """Rows from each cell to the nearest LETHAL cell of its column, to limit + 1."""
+    rows = lethal.shape[0]
+    index = np.arange(rows)[:, None]
+    far = 4 * rows + limit + 2
+    above = np.maximum.accumulate(np.where(lethal, index, -far), axis=0)
+    below = np.minimum.accumulate(np.where(lethal, index, far)[::-1], axis=0)[::-1]
+    return np.minimum(np.minimum(index - above, below - index), limit + 1)
+
+
 def inflate(
     grid: np.ndarray,
     resolution: float,
@@ -123,18 +133,31 @@ def inflate(
     A cell closer than the inscribed radius to a LETHAL cell costs INSCRIBED;
     farther out, 252 * exp(-cost_scaling_factor * (distance - inscribed radius)),
     down to the inflation radius (at least the inscribed radius).
+
+    The distance to the nearest LETHAL cell is found in two passes: along each column,
+    then across the few columns within reach, which is the work of one pass for each
+    column of the reach and not one for each cell of it.
     """
     lethal = grid == LETHAL
     reach = math.ceil(round(max(inflation_radius, inscribed_radius) / resolution, 9))
     out = grid.copy()
+    if not lethal.any():
+        return out
     rows, cols = grid.shape
-    # shortcut: one pass per offset, so rows*cols*reach^2 work; use a distance
-    # transform if this is slow
-    for dy in range(-reach, reach + 1):
-        for dx in range(-reach, reach + 1):
-            distance = math.hypot(dy, dx) * resolution
-            if (dy == 0 and dx == 0) or math.hypot(dy, dx) > reach:
+    gap = _vertical_gap(lethal, reach).astype(np.int32)
+    padded = np.full((rows, cols + 2 * reach), reach + 1, dtype=np.int32)
+    padded[:, reach : reach + cols] = gap
+    nearest = np.full((rows, cols), 2 * (reach + 1) ** 2, dtype=np.int32)
+    for dx in range(-reach, reach + 1):
+        side = padded[:, reach + dx : reach + dx + cols]
+        np.minimum(nearest, dx * dx + side * side, out=nearest)
+    # the cost of a cell by its squared distance in cells; none beyond the reach
+    table = np.zeros(2 * (reach + 1) ** 2 + 1, dtype=np.uint8)
+    for dy in range(reach + 1):
+        for dx in range(reach + 1):
+            if not 0 < dy * dy + dx * dx <= reach * reach:
                 continue
+            distance = math.hypot(dy, dx) * resolution
             if distance <= inscribed_radius:
                 cost = INSCRIBED
             else:
@@ -142,18 +165,6 @@ def inflate(
                     MAX_NON_OBSTACLE
                     * math.exp(-cost_scaling_factor * (distance - inscribed_radius))
                 )
-            if cost == 0:
-                continue
-            dst = (
-                slice(max(dy, 0), rows + min(dy, 0)),
-                slice(max(dx, 0), cols + min(dx, 0)),
-            )
-            src = (
-                slice(max(-dy, 0), rows + min(-dy, 0)),
-                slice(max(-dx, 0), cols + min(-dx, 0)),
-            )
-            view = out[dst]
-            np.maximum(
-                view, np.where(lethal[src], np.uint8(cost), np.uint8(0)), out=view
-            )
+            table[dy * dy + dx * dx] = cost
+    np.maximum(out, table[nearest], out=out)
     return out
