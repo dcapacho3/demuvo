@@ -2,9 +2,9 @@
 
 With an obstacle or an actor selected it shows that; with nothing, the world.
 
-It shows the robot's pose and goal, its model, planner, smoother and controller, the
-settings of each part, the control period and its replanning; or a hint when nothing
-is selected.
+It shows the robot's pose and goal and its body, then a group for each part with its
+settings: the model, planning (planner, smoother, replanning), control (controller and
+period) and sensing (pose source and each sensor); or a hint when nothing is selected.
 Each field applies its edit through the session and says why when it is refused.
 """
 
@@ -30,14 +30,10 @@ CLOSED = frozenset(
         "Body",
         "Collisions",
         "Waypoints",
-        "model settings",
-        "planner settings",
-        "smoother settings",
-        "controller settings",
-        "Control timing",
+        "Smoother",
         "Replanning",
+        "Sensing",
         "Pose source",
-        "Sensors",
         "Default sensors",
         "encoders",
         "lidar",
@@ -133,82 +129,61 @@ class Inspector:
         forms.goals(name, pose)
         forms.body(spec)
         col.add(Section("Robot"))
-        for field, items, current in self._choices(spec):
-            forms.choice(
-                field,
-                field,
-                items,
-                current,
-                lambda text, f=field: self._chosen(f, text),
-                hint=options.summary_of_choice(field, spec),
-            )
-        self._settings(spec, forms)
+        self._part(spec, forms, "model")
+        col.add(Section("Planning"))
+        self._part(spec, forms, "planner")
+        col.add(Section("Smoother", level=1))
+        self._part(spec, forms, "smoother")
         forms.replan(spec)
+        col.add(Section("Control"))
+        self._part(spec, forms, "controller")
+        self._period(spec)
         forms.sensing(spec)
 
-    def _choices(self, spec):
-        """The four choices of a robot: field, items to pick from, the current one."""
+    def _part(self, spec, forms, part: str) -> None:
+        """The choice of a part, then the settings of what it chose."""
         tables = self.tables
-        return (
-            ("model", list(options.models()), spec.model),
-            (
-                "planner",
-                list(tables["planner"]),
-                options.label_of(
-                    tables["planner"], spec.planner or options.DEFAULT_PLANNER
-                ),
-            ),
-            (
-                "smoother",
-                list(tables["smoother"]),
-                options.label_of(tables["smoother"], spec.smoother),
-            ),
-            (
-                "controller",
-                list(tables["controller"]),
-                options.label_of(tables["controller"], spec.controller),
-            ),
+        if part == "model":
+            items, current = list(options.models()), spec.model
+            known, values = options.model_settings(spec.model), spec.params
+        else:
+            chosen = getattr(spec, part)
+            if part == "planner":
+                chosen = chosen or options.DEFAULT_PLANNER
+            items, current = list(tables[part]), options.label_of(tables[part], chosen)
+            known = options.settings_of(chosen)
+            values = getattr(spec, f"{part}_params")
+        forms.choice(
+            part,
+            part,
+            items,
+            current,
+            lambda text, f=part: self._chosen(f, text),
+            hint=options.summary_of_choice(part, spec),
         )
-
-    def _settings(self, spec, forms) -> None:
-        """A section of fields for each part with settings, then the control period."""
-        col = self.column
-        parts = (
-            ("model", options.model_settings(spec.model), spec.params),
-            (
-                "planner",
-                options.settings_of(spec.planner or options.DEFAULT_PLANNER),
-                spec.planner_params,
-            ),
-            ("smoother", options.settings_of(spec.smoother), spec.smoother_params),
-            (
-                "controller",
-                options.settings_of(spec.controller),
-                spec.controller_params,
-            ),
-        )
-        for part, known, current in parts:
-            hidden = options.hidden_settings(spec, part)
-            known = [s for s in known if s.name not in hidden]
-            if not known:
-                continue
-            col.add(Section(f"{part} settings"))
+        hidden = options.hidden_settings(spec, part)
+        shown = [s for s in known if s.name not in hidden]
+        if shown:
             self.settings[part] = {}
-            for setting in known:
-                value = current.get(setting.name, setting.default)
-                key = f"{part}.{setting.name}"
-                forms.setting(
-                    key, setting, value, lambda *_a, p=part: self._settings_edited(p)
-                )
-                self.settings[part][setting.name] = self.fields.pop(key)
-        col.add(Section("Control timing"))
+        for setting in shown:
+            key = f"{part}.{setting.name}"
+            forms.setting(
+                key,
+                setting,
+                values.get(setting.name, setting.default),
+                lambda *_a, p=part: self._settings_edited(p),
+            )
+            self.settings[part][setting.name] = self.fields.pop(key)
+
+    def _period(self, spec) -> None:
+        """The control period, in the group of the controller."""
         period = Spin(
             spec.control_period,
             NumberSpec(0.001, 10.0, 0.01, 3, " s"),
             on_change=self._period_edited,
         )
         self.fields["period"] = period
-        col.add(FormRow("control period", period))
+        self.column.add(FormRow("control period", period))
 
     def lock(self) -> None:
         """Enable the fields while editing is allowed, and say why when it is not."""

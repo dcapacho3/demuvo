@@ -352,6 +352,24 @@ def test_a_heading_folds_what_follows_it_until_the_next_heading():
     column.draw(canvas)
 
 
+def test_a_heading_of_level_one_folds_inside_the_group_above_it():
+    """Folding the group hides the inner heading; the inner heading folds its rows."""
+    column = Column()
+    column.set_rect(0, 0, 300, 400)
+    column.adopt(FakeHost())
+    top, inner, row, plain = Section("Top"), Section("In", 1), Label("a"), Label("b")
+    column.add(top, plain, inner, row)
+    Folds({"In"}).attach(column)
+    assert plain.visible and inner.visible and not row.visible
+    top.activate()
+    assert not plain.visible and not inner.visible and not row.visible
+    top.activate()
+    inner.activate()
+    assert inner.visible and row.visible
+    column.layout()
+    column.draw(Canvas(300, 400))
+
+
 def test_a_slider_sets_its_value_from_the_pointer_and_clamps_at_the_ends():
     """Press sets it, move drags only while down, and the ends hold."""
     values = []

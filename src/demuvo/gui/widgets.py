@@ -327,13 +327,17 @@ class Section(Label):
     """A small upper-case heading that opens a group in a panel.
 
     After `make_foldable` a click on it, or Enter, opens and closes the group, and
-    a chevron shows which.
+    a chevron shows which. A heading of level 1 sits inside the group above it: it
+    folds its own rows, and folding the group above hides it too.
     """
 
-    def __init__(self, text: str) -> None:
+    INDENT = 14
+
+    def __init__(self, text: str, level: int = 0) -> None:
         """Make a heading."""
         super().__init__(text.upper(), 11, look.MUTED, bold=True)
         self.title, self.on_toggle, self.collapsed = text, None, False
+        self.level = level
         self.preferred_height = 30.0
 
     def make_foldable(self, collapsed: bool, on_toggle) -> None:
@@ -359,12 +363,15 @@ class Section(Label):
             return
         self.ring(canvas)
         icon = "chevron_right" if self.collapsed else "chevron_down"
-        draw_icon(canvas, icon, (self.x + 8, self.y + self.height / 2), 16, look.MUTED)
+        step = self.INDENT * self.level
+        draw_icon(
+            canvas, icon, (self.x + 8 + step, self.y + self.height / 2), 16, look.MUTED
+        )
         baseline = text_baseline(self.y, self.height, self.size)
         canvas.text(
             self._face(),
             self.text,
-            (self.x + 22, baseline),
+            (self.x + 22 + step, baseline),
             size=self.size,
             color=rgba(self.color, fade(self.enabled)),
         )
@@ -399,13 +406,17 @@ class Folds:
         self._show()
 
     def _show(self) -> None:
-        """Hide what follows each folded heading."""
-        closed, started = False, False
+        """Hide what follows each folded heading, and the headings inside it."""
+        top = inner = started = False
         for child in self.column.children:
             if isinstance(child, Section) and child.on_toggle is not None:
-                closed, started = child.collapsed, True
+                started = True
+                if child.level == 0:
+                    top, inner = child.collapsed, False
+                else:
+                    child.visible, inner = not top, child.collapsed
             elif started and child not in self.pinned:
-                child.visible = not closed
+                child.visible = not (top or inner)
 
     def _toggled(self, head: Section, closed: bool) -> None:
         """A heading was clicked: remember it, and fold or unfold its group."""

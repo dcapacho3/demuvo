@@ -142,19 +142,37 @@ def test_editing_a_setting_keeps_the_value_of_one_that_is_hidden():
 
 
 def test_the_advanced_sections_start_closed_and_stay_as_the_user_left_them():
-    """Pose, goal and the choices show; a click opens a section, and it stays open."""
+    """Pose, goal and the groups show; a click opens a section, and it stays open."""
     inspector, _, _, _ = build()
     heads = {c.title: c for c in inspector.column.children if isinstance(c, Section)}
-    assert not heads["Pose"].collapsed and not heads["Robot"].collapsed
-    assert heads["controller settings"].collapsed and heads["Replanning"].collapsed
+    assert not heads["Pose"].collapsed and not heads["Planning"].collapsed
+    assert heads["Replanning"].collapsed and heads["Sensing"].collapsed
     assert inspector.fields["x"].parent.visible
-    assert not inspector.fields["period"].parent.visible
+    assert inspector.fields["period"].parent.visible
+    assert not inspector.fields["replan"].parent.visible
     heads["Replanning"].activate()
     assert inspector.fields["replan"].parent.visible
     inspector.show("r1")
     assert inspector.fields["replan"].parent.visible
     assert inspector.column.children[-1] is inspector.footer[0]
     assert inspector.footer[0].visible
+
+
+def test_replanning_and_the_sensors_sit_inside_their_groups():
+    """Closing Planning hides Replanning; closing Sensing hides every sensor."""
+    inspector, _, _, _ = build()
+    heads = {c.title: c for c in inspector.column.children if isinstance(c, Section)}
+    assert heads["Replanning"].level == 1 and heads["Pose source"].level == 1
+    assert heads["Planning"].level == 0
+    heads["Planning"].activate()
+    assert (
+        not heads["Replanning"].visible
+        and not inspector.fields["planner"].parent.visible
+    )
+    assert heads["Planning"].visible
+    heads["Planning"].activate()
+    assert heads["Replanning"].visible and inspector.fields["planner"].parent.visible
+    assert not inspector.fields["replan"].parent.visible
 
 
 def test_editing_the_pose_moves_the_robot_and_refreshes():

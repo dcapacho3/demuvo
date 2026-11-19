@@ -120,7 +120,7 @@ class RobotForm(FormBase):
         they are when a field here changes.
         """
         name = spec.name
-        self.column.add(Section("Replanning"))
+        self.column.add(Section("Replanning", level=1))
         self.switch(
             "replan",
             "plan again",
@@ -154,7 +154,16 @@ class RobotForm(FormBase):
     def sensing(self, spec) -> None:
         """Where the controller's pose comes from, and the sensors."""
         name = spec.name
-        self.column.add(Section("Pose source"))
+        self.column.add(Section("Sensing"))
+        kinds = {s.get("type", n) for n, s in spec.sensors.items()}
+        if "encoders" not in kinds:
+            self.button(
+                "add_encoders",
+                "Add encoders",
+                lambda: self._add_sensor(spec, "encoders"),
+            )
+        self.button("add_lidar", "Add lidar", lambda: self._add_sensor(spec, "lidar"))
+        self.column.add(Section("Pose source", level=1))
         self.choice(
             "estimator",
             "estimator",
@@ -175,15 +184,6 @@ class RobotForm(FormBase):
             ),
             hint=CONTROL_POSE_HINT,
         )
-        self.column.add(Section("Sensors"))
-        kinds = {s.get("type", n) for n, s in spec.sensors.items()}
-        if "encoders" not in kinds:
-            self.button(
-                "add_encoders",
-                "Add encoders",
-                lambda: self._add_sensor(spec, "encoders"),
-            )
-        self.button("add_lidar", "Add lidar", lambda: self._add_sensor(spec, "lidar"))
         for sensor, settings in spec.sensors.items():
             self.sensor(name, sensor, settings)
 
@@ -202,7 +202,7 @@ class RobotForm(FormBase):
         """The settings of one sensor; `robot` None is a default of every robot."""
         kind = settings.get("type", sensor)
         title = kind if sensor == kind else f"{sensor} - {kind}"
-        self.column.add(Section(title))
+        self.column.add(Section(title, level=1))
         for setting in options.sensor_settings(kind):
             value = settings.get(setting.name, setting.default)
             self.number(
