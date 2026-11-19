@@ -36,6 +36,8 @@ GOAL_MESSAGE = (
     "Press the floor to place the goal of the selected robot, drag to turn it and "
     "let go to set it; Shift adds a waypoint."
 )
+# How much a key press or a menu item zooms by.
+ZOOM_KEY = 1.25
 # The tools, and what the status bar says when one is chosen.
 # Said in a tool's tooltip while it is grey, and why.
 EDIT_BUTTONS = ("add", "add_actor", "delete", "box", "circle", "polygon", "line")
@@ -43,6 +45,7 @@ LOCKED_TIP = " - grey while a run is in progress; press Reset (R) to edit again"
 SELECT_TIP = " - grey until a robot is selected"
 TOOL_MESSAGES = {
     "select": DEFAULT_MESSAGE,
+    "hand": "Drag to move the view. Scroll to zoom, 0 shows the whole world.",
     "goal": GOAL_MESSAGE,
     "box": "Drag on the floor from one corner to the other to draw a box.",
     "circle": "Drag on the floor from the centre outwards to draw a circle.",
@@ -69,7 +72,7 @@ OBSTACLE_KEY = "obstacle:"
 ACTOR_KEY = "actor:"
 
 
-class Sandbox:
+class Sandbox:  # pylint: disable=too-many-public-methods
     """The program: it builds the widgets and turns what the user does into edits.
 
     Args:
@@ -197,6 +200,14 @@ class Sandbox:
                 "line",
                 lambda on: self.set_tool("line"),
                 "Draw a line (L)",
+                True,
+                "tool",
+            ),
+            (
+                "hand",
+                "hand",
+                lambda on: self.set_tool("hand"),
+                "Move the view (H); the wheel zooms, the middle button also moves",
                 True,
                 "tool",
             ),
@@ -377,10 +388,20 @@ class Sandbox:
                 action=lambda: self.set_panel("bottom", not docks["bottom"].open),
             ),
             MenuItem(separator=True),
+            MenuItem("Zoom in", shortcut="+", action=self.zoom_in),
+            MenuItem("Zoom out", shortcut="-", action=self.zoom_out),
+            MenuItem("Fit the world", shortcut="0", action=self.fit_world),
+            MenuItem(
+                "Zoom to selection",
+                shortcut="F",
+                enabled=self.session.scene.selection_box() is not None,
+                action=self.zoom_to_selection,
+            ),
+            MenuItem(separator=True),
             *layers,
             MenuItem(separator=True),
             MenuItem(
-                "Fit to window", shortcut="Ctrl+0", action=self.shell.layout.apply
+                "Reset the panels", shortcut="Ctrl+0", action=self.shell.layout.apply
             ),
         ]
 
@@ -401,6 +422,16 @@ class Sandbox:
             (KEY["delete"], False): self._delete_selected,
             (KEY["space"], False): self.toggle_play,
             (KEY["v"], False): lambda: self.set_tool("select"),
+            (KEY["h"], False): lambda: self.set_tool("hand"),
+            (KEY["equal"], False): self.zoom_in,
+            (KEY["equal"], True): self.zoom_in,
+            (KEY["kp_add"], False): self.zoom_in,
+            (KEY["minus"], False): self.zoom_out,
+            (KEY["minus"], True): self.zoom_out,
+            (KEY["kp_subtract"], False): self.zoom_out,
+            (KEY["0"], False): self.fit_world,
+            (KEY["home"], False): self.fit_world,
+            (KEY["f"], False): self.zoom_to_selection,
             (KEY["g"], False): lambda: self.set_tool("goal"),
             (KEY["b"], False): lambda: self.set_tool("box"),
             (KEY["c"], False): lambda: self.set_tool("circle"),
@@ -476,6 +507,28 @@ class Sandbox:
     def message(self, text: str) -> None:
         """Show a message in the status bar."""
         self.shell.layout.chrome.status.show(text)
+
+    def zoom_in(self) -> None:
+        """Zoom in about the middle of the scene."""
+        self.session.scene.zoom_by(ZOOM_KEY)
+        self.scene_changed()
+
+    def zoom_out(self) -> None:
+        """Zoom out about the middle of the scene."""
+        self.session.scene.zoom_by(1 / ZOOM_KEY)
+        self.scene_changed()
+
+    def fit_world(self) -> None:
+        """Show the whole world."""
+        self.session.scene.fit_world()
+        self.scene_changed()
+
+    def zoom_to_selection(self) -> None:
+        """Zoom to the selected robot, obstacle or actor, or say to select one."""
+        if self.session.scene.zoom_to_selection():
+            self.scene_changed()
+        else:
+            self.message("Select a robot, an obstacle or an actor, then press F.")
 
     def scene_changed(self) -> None:
         """Redraw the whole scene."""

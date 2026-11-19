@@ -32,6 +32,8 @@ from .widgets import Event, Widget, text_baseline
 MIN_SIZE = 0.1
 # Said while a polygon or line is being drawn.
 OUTLINE_HINT = "Double click, right click or press Enter to finish. Esc cancels."
+# How much one notch of the wheel zooms the scene by.
+ZOOM_STEP = 1.15
 # A click this close, in pixels, to the first corner closes a polygon.
 CLOSE_PIXELS = 20.0
 # Two clicks within this many seconds and pixels are a double click, which ends a
@@ -76,6 +78,8 @@ class ScenePane(Widget):  # pylint: disable=too-many-instance-attributes
         self.aiming: tuple[str, float, float, bool] | None = None
         self.aim_to: tuple[float, float] | None = None
         self._last_click: tuple[float, float, float] | None = None
+        # Where the pointer was at the last move of a pan, or None if not panning.
+        self.panning: tuple[float, float] | None = None
 
     def on_hover(self, inside: bool) -> None:
         """Note that the pointer is over the scene; it looks the same, so no redraw."""
@@ -189,7 +193,14 @@ class ScenePane(Widget):  # pylint: disable=too-many-instance-attributes
         return found if found is not None else self
 
     def on_press(self, event: Event) -> None:
-        """Select a robot, start dragging it, or place a goal."""
+        """Move the view with the hand tool; else select, drag, draw or place a goal."""
+        if self.session.tool == "hand":
+            self.panning = (event.x, event.y)
+        else:
+            self._press(event)
+
+    def _press(self, event: Event) -> None:
+        """Select a robot, start dragging it, draw an obstacle or place a goal."""
         session = self.session
         scene = session.scene
         name = scene.robot_at(event.x, event.y)
@@ -281,6 +292,13 @@ class ScenePane(Widget):  # pylint: disable=too-many-instance-attributes
 
     def on_move(self, event: Event) -> None:
         """Carry the dragged robot or obstacle, or stretch the sketch."""
+        if self.panning is not None:
+            self.session.scene.pan_by(
+                event.x - self.panning[0], event.y - self.panning[1]
+            )
+            self.panning = (event.x, event.y)
+            self.actions.view_changed()
+            return
         if self.locked_grab:
             self.locked_grab = False
             self.actions.refused(self.session.guard())
@@ -323,6 +341,9 @@ class ScenePane(Widget):  # pylint: disable=too-many-instance-attributes
 
     def on_release(self, event: Event) -> None:
         """Drop the dragged robot or obstacle, or finish the obstacle being drawn."""
+        if self.panning is not None:
+            self.panning = None
+            return
         if self.moving is not None and self.ghost is not None:
             self.actions.obstacle_moved(*self.ghost, force=True)
             self.ghost = None
@@ -406,6 +427,16 @@ class ScenePane(Widget):  # pylint: disable=too-many-instance-attributes
         self.outline.append(point)
         self.cursor = point
         self.actions.sketch_changed()
+
+    def on_middle(self, event: Event) -> None:
+        """The middle button moves the view, whatever the tool."""
+        self.panning = (event.x, event.y)
+
+    def on_scroll(self, event: Event) -> bool:
+        """The wheel zooms the scene about the pointer."""
+        self.session.scene.zoom_by(ZOOM_STEP**event.dy, (event.x, event.y))
+        self.actions.view_changed()
+        return True
 
     def on_secondary(self, event: Event) -> None:
         """A right click ends the polygon or line being drawn."""

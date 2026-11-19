@@ -102,7 +102,7 @@ def _overlaps(widget: Widget, canvas: Canvas) -> bool:
     )
 
 
-class Widget:  # pylint: disable=unused-argument
+class Widget:  # pylint: disable=too-many-public-methods,unused-argument
     """A rectangle that draws itself, holds children and takes events.
 
     The event hooks take the event even where this base class ignores it, so a
@@ -234,6 +234,9 @@ class Widget:  # pylint: disable=unused-argument
 
     def on_secondary(self, event: Event) -> None:
         """The right button went down on the widget; most widgets ignore it."""
+
+    def on_middle(self, event: Event) -> None:
+        """The middle button went down on the widget; most widgets ignore it."""
 
     def on_move(self, event: Event) -> None:
         """The pointer moved over the widget, or while it is held."""

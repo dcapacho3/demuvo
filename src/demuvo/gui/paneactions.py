@@ -138,6 +138,10 @@ class PaneActions:
         """A press on something that cannot be moved now: say why."""
         self.program.message(why)
 
+    def view_changed(self) -> None:
+        """The scene was zoomed or moved, so all of it is drawn again."""
+        self.program.scene_changed()
+
     def sketch_changed(self) -> None:
         """The outline being drawn changed, so the scene is drawn again."""
         self.program.scene_changed()

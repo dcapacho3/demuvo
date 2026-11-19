@@ -41,6 +41,23 @@ the setting, and the world stays as it was.
 Drag the edge of the left, right or bottom panel to resize it. Ctrl+1, Ctrl+2 and
 Ctrl+3 show and hide the scene list, the inspector and the log.
 
+## Zoom and move
+
+A big world, such as a warehouse, needs a closer look.
+
+| Do | How |
+| --- | --- |
+| Zoom in or out | Turn the wheel over the world. The place under the pointer stays where it is. The `+` and `-` keys, Ctrl with them, and View > Zoom in and Zoom out zoom about the middle. |
+| Move the view | Press the middle button and drag, or pick the Hand tool (H) and drag with the left button, which suits a trackpad. |
+| See the whole world again | Press `0` or Home, or View > Fit the world. |
+| Zoom to what is selected | Press `F`, or View > Zoom to selection, with a robot, an actor or an obstacle selected. |
+
+The scale bar at the bottom left of the world gives a round number of metres and, once
+you have zoomed, the zoom as a percentage of the whole-world view. You can zoom out to
+40 percent and in to 400 pixels a metre, where a cell of the default costmap is 20
+pixels across, and the world cannot be moved out of sight. The zoom stays while you
+edit and while the window is resized; a world of another size starts whole.
+
 ## Building a world
 
 Pick a tool from the tool bar or by key, then use the pointer.
@@ -48,6 +65,7 @@ Pick a tool from the tool bar or by key, then use the pointer.
 | Tool | Key | What it does |
 | --- | --- | --- |
 | Select | V | Click a robot, an actor or an obstacle to select it. Drag it to move it. |
+| Hand | H | Drag to move the view; see [Zoom and move](#zoom-and-move). It works while a run is in progress. |
 | Goal | G | Press on the floor to put the selected robot's goal there, drag to turn its arrow and let go to set it, as RViz's 2D Goal Pose does; a click alone sets the heading to 0. Hold Shift to add a waypoint after the goals it has instead, which is how strategy games queue moves; the robot form's Add waypoint does the same. It is grey until a robot is selected. |
 | Box | B | Drag from one corner to the other. |
 | Circle | C | Drag from the centre outwards. |
@@ -217,14 +235,15 @@ starting a world forgets the list. Undo is off while a run is in progress.
 | Key | Does |
 | --- | --- |
 | Space, S, R | play or pause, step, reset |
-| V, G, B, C, P, L | the select, goal, box, circle, polygon and line tools |
+| V, H, G, B, C, P, L | the select, hand, goal, box, circle, polygon and line tools |
+| +, -, 0, F | zoom in, zoom out, show the whole world, zoom to the selection |
 | Enter, Esc | finish or cancel a polygon or line |
 | F2 | rename the selected robot, actor or obstacle |
 | Ctrl+N, Ctrl+M, Delete | add a robot, add an actor, delete the selected one |
 | Ctrl+O, Ctrl+S | open a world file, save the world |
 | Ctrl+Z, Ctrl+Y | undo, redo |
 | Ctrl+1, Ctrl+2, Ctrl+3 | the scene list, the inspector, the log |
-| Ctrl+0 | fit the panels to the window |
+| Ctrl+0 | put the panels back to their first sizes |
 | Tab, Shift+Tab | move the keyboard focus |
 | Ctrl+Q | quit |
 

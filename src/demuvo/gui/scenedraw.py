@@ -22,7 +22,8 @@ from .raster import Canvas, is_convex, rgba
 from .robots import draw_robots, footprint, robot_at, robot_boxes
 from .sprites import SpriteCache
 from .strokes import polyline, polylines, segments
-from .view import View
+from .view import Camera, View
+from .zoombar import draw_scale_bar
 
 # The layers, bottom first: name, label and whether it shows at first.
 LAYERS = {
@@ -111,6 +112,9 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
         self.layers = Layers()
         self.palette = look.PALETTES[0]
         self.view: View | None = None
+        self.camera = Camera()
+        self._base: View | None = None
+        self._room = 60.0
         self.selected: str | None = None
         self.selected_obstacle: int | None = None
         self.selected_actor: int | None = None
@@ -135,7 +139,10 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
         self.run = run
         # keep the window rectangle, so an edit does not shrink the board to a corner
         rect = self.view.rect if self.view is not None else View.rect
-        self.view = View(self.world.bounds, rect=rect).fit(rect)
+        if self.view is None or self.view.bounds != self.world.bounds:
+            self.camera = Camera()  # a world of another size is shown whole
+        self.view = View(self.world.bounds, rect=rect)
+        self.fit(rect, self._room)
         self._poses = {}
         self.trails: dict[str, deque] = {
             r.name: deque([tuple(r.pose.xyt[:2])], maxlen=TRAIL)
@@ -152,11 +159,59 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
     def fit(
         self, rect: tuple[float, float, float, float], bottom_room: float = 60.0
     ) -> None:
-        """Fit the board into a window rectangle."""
-        fitted = self.view.fit(rect, bottom_room)
+        """Fit the board into a window rectangle, then apply the user's zoom."""
+        self._room = bottom_room
+        self._base = View(self.world.bounds).fit(rect, bottom_room)
+        fitted = self.camera.view(self._base, bottom_room)
         if fitted != self.view:  # the same view keeps the cached layers
             self.view = fitted
             self._cutout.key = None
+
+    def zoom_by(self, factor: float, about=None) -> None:
+        """Zoom in (above 1) or out about a pixel, or the scene middle if None."""
+        self.camera.zoom_by(factor, about, self._base, self._room)
+        self.fit(self.view.rect, self._room)
+
+    def pan_by(self, dx: float, dy: float) -> None:
+        """Move the picture by pixels."""
+        self.camera.pan_by(dx, dy)
+        self.fit(self.view.rect, self._room)
+
+    def fit_world(self) -> None:
+        """Show the whole board again."""
+        self.camera.reset()
+        self.fit(self.view.rect, self._room)
+
+    def zoom_to_selection(self) -> bool:
+        """Zoom to the selected robot, obstacle or actor; False if none is selected."""
+        box = self.selection_box()
+        if box is None:
+            return False
+        self.camera.frame(box, self._base, self._room)
+        self.fit(self.view.rect, self._room)
+        return True
+
+    def selection_box(self) -> tuple[float, float, float, float] | None:
+        """The world box (x0, y0, x1, y1) of what is selected, at least 1.5 m across."""
+        if self.selected is not None:
+            spec = next(r for r in self.world.robots if r.name == self.selected)
+            points = np.array(spec.shape.points(Transform2D.identity()), dtype=float)
+            x, y = (float(v) for v in self.pose(self.selected)[:2])
+            reach = float(np.hypot(points[:, 0], points[:, 1]).max())
+            box = (x - reach, y - reach, x + reach, y + reach)
+        elif self.selected_obstacle is not None:
+            item = self.world.obstacles[self.selected_obstacle]
+            points = np.array(item.shape.points(item.pose), dtype=float)
+            box = (*points.min(axis=0), *points.max(axis=0))
+        elif self.selected_actor is not None:
+            item = self.world.actors[self.selected_actor]
+            points = np.array(item.shape.points(item.pose), dtype=float)
+            box = (*points.min(axis=0), *points.max(axis=0))
+        else:
+            return None
+        cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+        half = max(box[2] - box[0], box[3] - box[1], 1.5) / 2
+        return cx - half, cy - half, cx + half, cy + half
 
     def refresh_poses(self) -> None:
         """Read every robot's and actor's pose once; one at a time rebuilds all."""
@@ -666,6 +721,7 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
         canvas.set_clip(left, top, right, bottom)
         if self.layers.alpha("robots") > 0.001:
             draw_robots(self, canvas, self.layers.alpha("robots"))
+        draw_scale_bar(canvas, self.view, self.camera.percent)
         canvas.clip = saved
 
     def dirty_rect(self) -> tuple[int, int, int, int]:

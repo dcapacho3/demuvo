@@ -609,6 +609,12 @@ class Input:
             if target is not None and self.popup is None:
                 target.on_secondary(event)
             return
+        if event.button == 2:
+            target = self.hit(event.x, event.y)
+            if target is not None and self.popup is None:
+                self.pointer.captured = target
+                target.on_middle(event)
+            return
         if event.button != 0:
             return
         shell = self.shell

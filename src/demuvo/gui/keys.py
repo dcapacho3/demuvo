@@ -19,6 +19,10 @@ KEY = {
     "down": 264,
     "up": 265,
     "kp_enter": 335,
+    "equal": 61,
+    "minus": 45,
+    "kp_add": 334,
+    "kp_subtract": 333,
 }
 KEY.update({chr(code).lower(): code for code in range(ord("A"), ord("Z") + 1)})
 KEY.update({str(digit): ord(str(digit)) for digit in range(10)})
