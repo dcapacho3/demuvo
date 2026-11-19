@@ -12,6 +12,7 @@ Coordinates are pixels, x to the right and y down, and the centre of a pixel is 
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 
 import numpy as np
 
@@ -87,6 +88,42 @@ def _sampled_coverage(p: np.ndarray, left: int, top: int, rows: int, cols: int):
 def to_uint8(px: np.ndarray) -> np.ndarray:
     """A picture of floats from 0 to 1 as bytes; what drawing pushed out is clamped."""
     return (np.clip(px, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
+
+
+@lru_cache(maxsize=2048)
+def _string_image(font: Font, string: str, size: int, phase: float):
+    """A string as one coverage picture, drawn by a pen that starts at `phase`.
+
+    The glyphs sit where `Canvas.text` puts them one at a time: each at the pen's
+    rounded place. The phase is the pen's distance past an even whole number, so a
+    string drawn at any place that has the same phase gives the same picture.
+
+    Returns:
+        (coverage, left, top, advance): the picture, where its corner is from the pen
+        start and the baseline, and how far the pen moved; None for no ink.
+    """
+    pen = phase
+    boxes = []
+    for char in string:
+        glyph = font.glyph(char, size)
+        if glyph.coverage.size:
+            boxes.append((round(pen) + glyph.left, -glyph.top, glyph.coverage))
+        pen += glyph.advance
+    if not boxes:
+        return None, 0, 0, pen - phase
+    left = min(x for x, _, _ in boxes)
+    top = min(y for _, y, _ in boxes)
+    right = max(x + c.shape[1] for x, _, c in boxes)
+    bottom = max(y + c.shape[0] for _, y, c in boxes)
+    image = np.zeros((bottom - top, right - left), dtype=np.float32)
+    for x, y, coverage in boxes:
+        part = image[
+            y - top : y - top + coverage.shape[0],
+            x - left : x - left + coverage.shape[1],
+        ]
+        part[:] = 1.0 - (1.0 - part) * (1.0 - coverage)  # as two glyphs blended in turn
+    image.flags.writeable = False
+    return image, left, top, pen - phase
 
 
 class Canvas:
@@ -283,8 +320,18 @@ class Canvas:
     def text(
         self, font: Font, string: str, origin: Point, *, size: int, color: Color
     ) -> float:
-        """Draw a string from `origin` = (x, baseline); return the x after it."""
+        """Draw a string from `origin` = (x, baseline); return the x after it.
+
+        A solid colour draws the string as one picture that is kept, since the same
+        words are drawn again on every frame; a faded one draws a glyph at a time.
+        """
         pen, baseline = origin
+        if color[3] == 1.0:
+            base = math.floor(pen / 2.0) * 2.0
+            image, left, top, advance = _string_image(font, string, size, pen - base)
+            if image is not None:
+                self.blend(round(base) + left, round(baseline) + top, image, color)
+            return pen + advance
         for char in string:
             glyph = font.glyph(char, size)
             if glyph.coverage.size:

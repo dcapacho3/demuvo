@@ -156,6 +156,46 @@ def test_a_convex_polygon_can_grow_past_its_edge_to_meet_a_neighbour():
     assert pair.px[20, 19, 0] == 0.0 and pair.px[20, 20, 0] == 0.0
 
 
+def glyph_by_glyph(canvas, string, origin, size, color):
+    """The text drawn one glyph at a time, as a faded colour draws it: the oracle."""
+    pen, baseline = origin
+    face = font.regular()
+    for char in string:
+        glyph = face.glyph(char, size)
+        if glyph.coverage.size:
+            left = round(pen) + glyph.left
+            canvas.blend(left, round(baseline) - glyph.top, glyph.coverage, color)
+        pen += glyph.advance
+    return pen
+
+
+@pytest.mark.parametrize("text", ["AV To Wa", "Robots (12)", "x 4.28 m", "fi fl"])
+@pytest.mark.parametrize("size", [11, 13])
+def test_a_solid_string_looks_as_it_does_drawn_a_glyph_at_a_time(text, size):
+    """Kept as one picture, at places that round both ways, the pixels are the same."""
+    rng = np.random.default_rng(size)
+    for _ in range(8):
+        origin = (float(rng.uniform(5, 200)), float(rng.uniform(20, 50)))
+        cached, plain = Canvas(260, 70, "#ffffff"), Canvas(260, 70, "#ffffff")
+        color = rgba("#0f2b46")
+        after = cached.text(font.regular(), text, origin, size=size, color=color)
+        same = glyph_by_glyph(plain, text, origin, size, color)
+        assert np.allclose(cached.px, plain.px, atol=1e-6)
+        assert after == pytest.approx(same)
+
+
+def test_a_string_with_no_ink_moves_the_pen_and_a_faded_one_still_draws():
+    """Spaces advance; faded text takes the glyph path and matches the oracle."""
+    canvas = Canvas(100, 40, "#ffffff")
+    start = canvas.text(font.regular(), "  ", (10.0, 20.0), size=12, color=BLACK)
+    assert start > 10.0 and ink(canvas) == 0.0
+    faded, plain = Canvas(100, 40, "#ffffff"), Canvas(100, 40, "#ffffff")
+    color = rgba("#000000", 0.5)
+    faded.text(font.regular(), "Hi", (10.0, 25.0), size=14, color=color)
+    glyph_by_glyph(plain, "Hi", (10.0, 25.0), 14, color)
+    assert np.array_equal(faded.px, plain.px) and ink(faded) > 0
+
+
 def test_a_polygon_that_is_not_convex_is_filled_by_sampling():
     """An L of area 300; the notch stays clear."""
     canvas = Canvas(40, 40)
