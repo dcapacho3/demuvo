@@ -102,7 +102,9 @@ the file runs as it is written.
 | `--resolution R`, `--pieces` | the grid to draw on, and polygons or boxes |
 | `--attempts N` | maps to draw before giving up (default 20) |
 
-Each style takes its own settings too: `demuvo generate rooms --help` lists them.
+Each style takes its own settings too: `demuvo generate rooms --help` lists them. The
+window draws the same maps from the Generate map section of the inspector; see
+[the sandbox](docs/sandbox.md#generating-a-map).
 The command prints how the map measures and the command line that draws it again.
 
 ## The metrics file

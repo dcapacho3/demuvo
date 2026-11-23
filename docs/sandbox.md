@@ -91,6 +91,26 @@ place. Enter keeps the name and Esc drops it. A robot's goals follow its new nam
 obstacle with no name is listed by its shape, such as "box 1". Two robots, or two
 obstacles, cannot share a name.
 
+## Generating a map
+
+With nothing selected, the Generate map section of the inspector draws a map from a
+seed, as `demuvo generate` does, and puts it in the world.
+
+| Field | What it does |
+| --- | --- |
+| style | `field`, `rooms`, `caves` or `maze` |
+| map seed | the same seed and settings draw the same map; the world takes it as its seed |
+| robot radius | shown when the world has no robot; the map is drawn for a robot this size |
+| loops | the maze only: the share of walls opened to give a second route, 0 to 1 |
+| start and goal | move the first robot to a random start and give it a random goal; a world with no robot gets one |
+| Generate | draw the map |
+
+The map replaces every obstacle of the world. Robots, goals and actors stay, and the
+map is drawn for the widest robot, with a way to each robot and each goal. Undo brings
+the old obstacles back. A map that cannot be drawn, such as a rooms map in a world one
+metre across, leaves the world as it was and says why in the log. The button does
+nothing while a run is in progress, like every other field.
+
 ## The inspector
 
 Every field applies as you leave it. A number field selects its number when you click, so
@@ -98,7 +118,8 @@ typing replaces it; Left, Right, Home, End, Delete and Ctrl+A work as in a text 
 Up, Down and the wheel change it by a step.
 
 **Nothing selected** shows the world: its width, height, seed and step length, the
-corner, the sensors every robot starts with, and the global and local costmap.
+corner, [Generate map](#generating-a-map), the sensors every robot starts with, and the
+global and local costmap.
 
 **An actor** shows where it starts, its body, whether it is `solid` and whether it can
 `collide` with other actors, and its motion with that motion's settings; see
