@@ -19,36 +19,14 @@ from demuvo.generate.rooms import _plan
 from demuvo.planners import AStar
 from demuvo.world import (
     Obstacle,
-    RobotSpec,
     Task,
-    World,
     WorldError,
     load_world,
     save_world,
 )
-from demuvo.world.shapes import Box, Circle
+from demuvo.world.shapes import Box
 
-SIZE = (20.0, 14.0)
-# The robot a building is laid out for when no base world carries one.
-ROBOT = Clearance(radius=0.25)
-
-
-def a_robot(name="r1", x=1.5, y=1.5, radius=0.2):
-    """A round robot at a place."""
-    return RobotSpec(
-        name, "diff_drive", Circle(radius), Transform2D.from_xyt([x, y, 0.0])
-    )
-
-
-def base_world(*robots, tasks=(), obstacles=(), size=SIZE):
-    """A world for a building to be put into."""
-    return World(
-        size=size,
-        seed=1,
-        obstacles=tuple(obstacles),
-        robots=tuple(robots) or (a_robot(),),
-        tasks=tuple(tasks),
-    )
+from .worlds import ROBOT, SIZE, a_robot, base_world
 
 
 def test_a_seed_gives_the_same_building_every_time():
