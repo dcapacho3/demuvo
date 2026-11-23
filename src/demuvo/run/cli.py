@@ -2,6 +2,7 @@
 
 demuvo [world.toml] [--bench] [--check] [--dt S] [--result] [--metrics [FILE]]
        [--seconds S] [--seeds N [--jobs J] [--limit S]] [--install-desktop]
+demuvo generate STYLE --out FILE ...   (see `demuvo generate --help`)
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from ..gui.app import show
 from ..gui.session import Session
 from ..runner import Run
 from ..world import load_world
-from . import desktop
+from . import desktop, generate_cli
 from .seeds import run_seeds, table
 
 
@@ -98,6 +99,9 @@ def main(argv: list[str] | None = None) -> int:
         The exit code: 0 on success, 1 if the file, the step length or the window
         is wrong. A malformed option ends the program with code 2, as argparse does.
     """
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "generate":
+        return generate_cli.main(argv[1:])
     args = _parser().parse_args(argv)
     if args.install_desktop:
         for path in desktop.install():

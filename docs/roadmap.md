@@ -13,6 +13,10 @@ only if its licence allows it. Planners written from papers.
 - **Window:** build a world, run it, undo and redo, rename, save and open, drag a goal
   to aim it, Shift for waypoints, a card before unsaved work is lost, inspector groups
   with help text, layers, an empty default world.
+- **Generated worlds:** seeded field, rooms-and-corridors and cave styles, every
+  length of them sized by the robot the map is for, with a shared check that the
+  free space is one piece on the costmap the planner uses; random start and goal
+  pairs; `demuvo generate`.
 - **World:** box, circle, polygon and wall obstacles, maps from `map.yaml`, Gazebo
   `.world` and `.sdf` import (boxes, cylinders, spheres, includes and meshes cut at a
   robot's height), moving actors on waypoints.
@@ -40,12 +44,11 @@ and a table over seeds, with docs that stand alone.
 | 2 | **Determinism check.** A `--verify-determinism` command that runs a world twice and compares every step; run it in CI. | S |
 | 3 | **More metrics.** Path length against the shortest, clearance, planner expansions, stuck count, success weighted by path length. Expansions let planners compare on work done, not Python time. | S-M |
 | 4 | **Benchmark runner.** Every pairing of planner, controller and model over worlds and seeds from one TOML file, in one table and one CSV. `--seeds` does one world today. | M |
-| 5 | **Map and instance generator.** Seeded random maps (clutter, caves, rooms) with a check that start and goal connect, and random start and goal pairs. | M |
-| 6 | **The two missing models:** skid-steer (an effective track width, no slip) and a rear-steer forklift. | S, M |
-| 7 | **Enough built-in algorithms to compare:** Dijkstra and Theta* planners; Stanley and regulated pure pursuit controllers. | S each |
-| 8 | **Cars in tight rooms.** `DWB` stalls there, and `HybridAStar` without reversing often finds no path. A parking controller that reaches the goal angle exactly. | M |
-| 9 | **Release.** A PyPI release with a changelog and release notes, a plug-in template (`demuvo new planner`), and an example gallery with a GIF per world. | M |
-| 10 | **Pylint in CI**, now that the code is clean. | S |
+| 5 | **The two missing models:** skid-steer (an effective track width, no slip) and a rear-steer forklift. | S, M |
+| 6 | **Enough built-in algorithms to compare:** Dijkstra and Theta* planners; Stanley and regulated pure pursuit controllers. | S each |
+| 7 | **Cars in tight rooms.** `DWB` stalls there, and `HybridAStar` without reversing often finds no path. A parking controller that reaches the goal angle exactly. | M |
+| 8 | **Release.** A PyPI release with a changelog and release notes, a plug-in template (`demuvo new planner`), and an example gallery with a GIF per world. | M |
+| 9 | **Pylint in CI**, now that the code is clean. | S |
 
 ## Next: the teaching layer
 
@@ -155,7 +158,7 @@ and a table over seeds, with docs that stand alone.
 
 | Item | Size |
 |------|------|
-| Cave, maze (with loops), rooms-and-corridors generators. | S each |
+| Maze generator, with loops. The cave and rooms-and-corridors styles are built. | S |
 | Warehouse, supermarket, parking lot and street-grid generators. | M each |
 | A difficulty score for a world (clutter, corridor width, path winding) as its own tool. | S |
 | Occupancy image import (PNG and YAML). | S |

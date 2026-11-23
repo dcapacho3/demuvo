@@ -67,3 +67,8 @@ def check_positive(obj, *names: str) -> None:
 def check_not_negative(obj, *names: str) -> None:
     """Raise ValueError unless every named attribute of obj is 0 or more."""
     _check_numbers(obj, names, lambda value: value >= 0, "0 or more")
+
+
+def check_share(obj, *names: str) -> None:
+    """Raise ValueError unless every named attribute of obj is a share, 0 to 1."""
+    _check_numbers(obj, names, lambda value: 0.0 <= value <= 1.0, "from 0 to 1")

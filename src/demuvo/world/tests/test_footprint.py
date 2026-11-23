@@ -7,7 +7,7 @@ import math
 import numpy as np
 import pytest
 
-from demuvo.world import footprint
+from demuvo.world import footprint, regions
 from demuvo.world.footprint import slice_shapes
 from demuvo.world.meshes import is_closed
 
@@ -218,7 +218,7 @@ def test_a_mesh_too_wide_for_the_grid_is_refused(monkeypatch):
 
 def test_a_region_a_polygon_cannot_hold_becomes_boxes(monkeypatch):
     """With room for only two corners, a polygon is refused and boxes are made."""
-    monkeypatch.setattr(footprint, "MAX_CORNERS", 2)
+    monkeypatch.setattr(regions, "MAX_CORNERS", 2)
     corners = [
         (4 + math.cos(k * math.pi / 3), 4 + math.sin(k * math.pi / 3)) for k in range(6)
     ]
@@ -228,7 +228,7 @@ def test_a_region_a_polygon_cannot_hold_becomes_boxes(monkeypatch):
 
 def test_a_region_with_a_hole_that_cannot_be_cut_apart_becomes_boxes(monkeypatch):
     """Without cuts to spend, a thick ring falls back to boxes that leave the hole."""
-    monkeypatch.setattr(footprint, "MAX_CUTS", 0)
+    monkeypatch.setattr(regions, "MAX_CUTS", 0)
     outer = [(0, 0), (6, 0), (6, 6), (0, 6)]
     inner = [(1.5, 1.5), (4.5, 1.5), (4.5, 4.5), (1.5, 4.5)]
     shapes, _ = cut((np.concatenate([walls(outer), walls(inner)]), True))
@@ -250,39 +250,36 @@ def test_a_ring_that_is_cut_apart_leaves_no_hole_in_any_piece():
 def test_the_lines_fitted_to_a_run_find_a_straight_chain_and_a_closed_one():
     """Douglas-Peucker keeps the ends of a straight chain, and copes with a loop."""
     line = np.array([[0.0, 0.0], [1.0, 0.1], [2.0, 0.0], [3.0, 0.0]])
-    assert footprint._chain(line, 0.5) == [0, 3]
-    assert footprint._chain(line, 0.01) == [0, 1, 2, 3]
+    assert regions._chain(line, 0.5) == [0, 3]
+    assert regions._chain(line, 0.01) == [0, 1, 2, 3]
     loop = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 0.0]])
-    assert footprint._chain(loop, 0.1) == [0, 1, 2]
+    assert regions._chain(loop, 0.1) == [0, 1, 2]
 
 
 def test_a_polygon_with_fewer_than_three_corners_is_not_a_shape():
     """A degenerate outline gives None."""
-    assert (
-        footprint._shape(np.array([[0.0, 0.0], [1.0, 0.0]]), (0.0, 0.0), 0.05) is None
-    )
+    assert regions._shape(np.array([[0.0, 0.0], [1.0, 0.0]]), (0.0, 0.0), 0.05) is None
 
 
 def test_a_polygon_that_touches_itself_is_refused():
     """A bow tie is not simple, so the shape is not made."""
     bow = np.array([[0.0, 0.0], [10.0, 10.0], [10.0, 0.0], [0.0, 10.0]]) * 4
-    assert footprint._shape(bow, (0.0, 0.0), 0.05) is None
+    assert regions._shape(bow, (0.0, 0.0), 0.05) is None
 
 
 def test_the_hull_of_few_points_is_the_points_themselves():
     """Two points have no hull to speak of."""
-    assert len(footprint._hull(np.array([[0.0, 0.0], [1.0, 1.0]]))) == 2
+    assert len(regions._hull(np.array([[0.0, 0.0], [1.0, 1.0]]))) == 2
 
 
 def test_a_box_of_no_area_and_a_ragged_shape_are_not_turned_boxes():
     """A line has no box; a shape with a deep notch does not fill the box."""
     assert (
-        footprint._turned_box(np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]]), 0.1)
-        is None
+        regions._turned_box(np.array([[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]]), 0.1) is None
     )
     notch = np.array([[0, 0], [4, 0], [4, 4], [2, 1], [0, 4]], dtype=float)
-    assert footprint._turned_box(notch, 0.1) is None
-    assert footprint._turned_box(np.array([[0.0, 0.0], [1.0, 1.0]]), 0.1) is None
+    assert regions._turned_box(notch, 0.1) is None
+    assert regions._turned_box(np.array([[0.0, 0.0], [1.0, 1.0]]), 0.1) is None
     # fills 92.5 percent of its box, but one corner is 1.5 m inside it
     dent = np.array([[0, 0], [10, 0], [10, 10], [5, 8.5], [0, 10]], dtype=float)
-    assert footprint._turned_box(dent, 0.1) is None
+    assert regions._turned_box(dent, 0.1) is None

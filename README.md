@@ -36,6 +36,7 @@ demuvo needs Python 3.12 or later. The window uses the system's GLFW and OpenGL
 
 ```text
 demuvo [world.toml] [options]
+demuvo generate STYLE --out FILE [options]
 ```
 
 | Option | Meaning |
@@ -52,6 +53,7 @@ demuvo [world.toml] [options]
 | `--seeds N` | open no window; run `N` seeds to the end and print a table |
 | `--jobs J`, `--limit S` | with `--seeds`: runs at once, and simulated seconds before a run stops |
 | `--install-desktop` | add demuvo and its icon to the desktop launcher, then exit |
+| `generate STYLE` | draw a world from a seed and write it; see below |
 
 `--result` prints, for each task, whether the robot reached it and when, and the distance
 driven. For `examples/worlds/demo.toml` after the robot reaches the star:
@@ -60,6 +62,44 @@ driven. For `examples/worlds/demo.toml` after the robot reaches the star:
 r1 task 1: reached at 19.26 s
 r1 drove 8.86 m
 ```
+
+### Drawing a world
+
+`demuvo generate` draws a world from a seed and writes it to a file. There are three
+styles: `field` is clutter from a smooth random field, `rooms` is a building of rooms
+joined by corridors, and `caves` is caverns worn out of noise.
+
+```bash
+demuvo generate caves --size 20 14 --seed 5 --radius 0.25 --pair --out cave5.toml
+demuvo cave5.toml
+```
+
+What a style draws is sized by the robot that will drive it, so a corridor, a cave
+and the room round a start are as wide as that robot needs and no narrower. Say
+which robot with `--radius`, or with `--from base.toml`, whose widest robot is taken
+and whose robots, tasks and settings are kept. A generator with no robot refuses to
+draw rather than guess one.
+
+Every map that comes back has free space the robot can cross in one piece, checked
+on the costmap the planner will use; a map that fails is thrown away and another
+drawn, up to `--attempts`. `--pair` then picks a start and a goal at random out of
+that free space, at least `--min-distance` apart, moves the first robot to the start
+and gives it the goal. A world with no robot of its own gets one that can drive, so
+the file runs as it is written.
+
+| Option | Meaning |
+| --- | --- |
+| `--out FILE` | where to write; always required |
+| `--size W H` | the world in metres, unless `--from` brings one |
+| `--from FILE` | a world to draw into, whose robot the map is drawn for |
+| `--seed N` | the seed of the map, and of the world (default 1) |
+| `--radius R`, `--margin M` | the robot the map is for, and room beyond it |
+| `--pair`, `--min-distance M` | place a start and a goal in the free space |
+| `--resolution R`, `--pieces` | the grid to draw on, and polygons or boxes |
+| `--attempts N` | maps to draw before giving up (default 20) |
+
+Each style takes its own settings too: `demuvo generate rooms --help` lists them.
+The command prints how the map measures and the command line that draws it again.
 
 ## The metrics file
 
@@ -241,7 +281,6 @@ The full list, with sizes and what the first release still needs, is in the
 
 - [ ] A recorder and a replay, so a run can be saved, played back and compared.
 - [ ] A benchmark runner over planners, controllers, models, worlds and seeds, in one table.
-- [ ] A map and instance generator with a check that start and goal connect.
 - [ ] Skid-steer and forklift models.
 - [ ] A parking controller for the car, and a fix for the car in tight rooms.
 - [ ] An extended Kalman filter, SLAM and more sensors, written from scratch.
