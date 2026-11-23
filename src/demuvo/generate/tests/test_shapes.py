@@ -50,14 +50,15 @@ def test_nothing_is_dropped_as_a_speck():
     assert len(found) == 1 and found[0].shape.size == (0.1, 0.1)
 
 
-def test_a_region_whose_outline_would_leave_the_world_is_tiled_with_boxes():
+def test_a_region_whose_outline_would_leave_the_world_is_cut_flat_along_its_edge():
     """Straightening a staircase moves a corner out; the bounds keep it in.
 
     The region is a wedge cut off flat along the bottom of the grid, which is
     what a blob the border of a world cut off looks like. Its flanks are fitted
     as straight lines and extended until they meet, and at this angle they meet
     1.3 m past the edge. With no bounds it becomes that polygon; with the
-    world's bounds it becomes boxes of whole cells, which cannot leave.
+    world's bounds the corners that pass the edge lie on it, so the wedge is one
+    polygon that is cut flat there.
     """
     mask = np.zeros((30, 40), dtype=bool)
     for row in range(10):
@@ -76,7 +77,7 @@ def test_a_region_whose_outline_would_leave_the_world_is_tiled_with_boxes():
         for o in kept
         for x, y in o.shape.points(o.pose)
     )
-    assert all(o.shape.name == "box" for o in kept)
+    assert [o.shape.name for o in kept] == ["polygon"]
 
 
 def test_asking_for_boxes_traces_no_outline_at_all():

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
+from functools import partial
 
 import numpy as np
 from robomath import Transform2D
@@ -30,6 +31,22 @@ MIN_CELLS = 4
 MAX_CUTS = 12
 # An edge of fewer cells than this, between two longer ones, is a chamfer.
 SHORT_EDGE = 10
+# An edge this close to an axis, as a share of its length, is made to lie on it.
+SQUARE_SLOPE = 0.05
+# A corner sharper than this cosine of the angle between its edges (30 degrees) has
+# its tip cut off, by this many cells along each edge at most.
+SPIKE_COS = 0.866
+SPIKE_CUT = 3.0
+# A loop with no edge shorter than this many cells is a wall and is traced exactly.
+SHORT_WALL = 2
+# A traced outline may cover this share of its region's cells again as cells that
+# belong to no region, plus a few; one that strays further is traced at a looser
+# tolerance, or tiled with boxes.
+STRAY_SHARE = 0.06
+STRAY_CELLS = 6
+# A traced outline may hold this many cells of other regions, which is a sliver
+# of overlap at an edge and not a body lying across another.
+FOREIGN_CELLS = 2
 # The most corners of a polygon; a region that needs more is cut into boxes.
 MAX_CORNERS = 120
 
@@ -254,6 +271,15 @@ def _line(points: np.ndarray):
     return centre, direction
 
 
+def _keep(points: np.ndarray, tolerance: float) -> list[int]:
+    """The places of a closed loop of points that stay when it is cut into edges."""
+    far = int(np.argmax(np.hypot(*(points - points[0]).T)))
+    one = _chain(points[: far + 1], tolerance)
+    two = _chain(np.vstack([points[far:], points[:1]]), tolerance)
+    keep = sorted({*one, *(far + i for i in two[:-1]), *([] if two[-1] else [0])})
+    return [k for k in keep if k < len(points)]
+
+
 def _corners(loop, tolerance: float) -> np.ndarray:
     """The corners of a closed loop, with the staircase of its cells straightened.
 
@@ -262,11 +288,7 @@ def _corners(loop, tolerance: float) -> np.ndarray:
     straight edge and a sharp corner stays sharp.
     """
     points = np.array(loop, dtype=float)
-    far = int(np.argmax(np.hypot(*(points - points[0]).T)))
-    one = _chain(points[: far + 1], tolerance)
-    two = _chain(np.vstack([points[far:], points[:1]]), tolerance)
-    keep = sorted({*one, *(far + i for i in two[:-1]), *([] if two[-1] else [0])})
-    keep = [k for k in keep if k < len(points)]
+    keep = _keep(points, tolerance)
     corners = points[keep]
     edges = []
     for i, start in enumerate(keep):
@@ -301,7 +323,124 @@ def _corners(loop, tolerance: float) -> np.ndarray:
             i = max(i - 1, 0)
         else:
             i += 1
-    return np.array(pts)
+    return _blunt(_square_up(pts))
+
+
+def _root(parent: list[int], i: int) -> int:
+    """The first of the places joined to place `i`, by path halving."""
+    while parent[i] != i:
+        parent[i] = parent[parent[i]]
+        i = parent[i]
+    return i
+
+
+def _square_up(pts: list) -> np.ndarray:
+    """Make every edge that is nearly level or nearly upright exactly so.
+
+    The fitted lines leave a wall meant to be straight a few hundredths of a metre
+    off true. The corners at the ends of a run of such edges take their mean, so a
+    long wall stays one wall and its neighbours move with it.
+    """
+    out = np.array(pts, dtype=float)
+    count = len(out)
+    for axis in (0, 1):  # 0 - level edges share y, 1 - upright edges share x
+        along, across = (0, 1) if axis == 0 else (1, 0)
+        parent = list(range(count))
+        true = [False] * count  # on an edge that already lies on the axis
+
+        for i in range(count):
+            j = (i + 1) % count
+            step = np.abs(out[j] - out[i])
+            if step[along] > 0 and step[across] <= SQUARE_SLOPE * step[along]:
+                parent[_root(parent, i)] = _root(parent, j)
+                true[i] = true[j] = true[i] or step[across] < 1e-9
+        groups: dict[int, list[int]] = defaultdict(list)
+        for i in range(count):
+            groups[_root(parent, i)].append(i)
+        for members in groups.values():
+            if len(members) > 1:
+                # A line that is straight already, such as the cut that splits a
+                # region round a hole, keeps its place so both sides of it agree.
+                fixed = [m for m in members if true[m]] or members
+                # The wall is cells, so it lies on the cell boundary nearest its fit.
+                out[members, across] = round(float(out[fixed, across].mean()))
+    return out
+
+
+def _blunt(pts: np.ndarray) -> np.ndarray:
+    """Cut the tip off every corner sharper than 30 degrees that points outwards.
+
+    A tip this thin is an accident of the noise and no robot reaches into it. The
+    cut only takes away from the obstacle, so free space never shrinks.
+    """
+    count = len(pts)
+    area = np.sum(
+        pts[:, 0] * np.roll(pts[:, 1], -1) - np.roll(pts[:, 0], -1) * pts[:, 1]
+    )
+    sign = 1.0 if area > 0 else -1.0
+    out = []
+    for i in range(count):
+        here = pts[i]
+        back, ahead = pts[i - 1] - here, pts[(i + 1) % count] - here
+        lb, la = np.hypot(*back), np.hypot(*ahead)
+        if lb == 0 or la == 0:
+            out.append(here)
+            continue
+        cos = float(back @ ahead) / (lb * la)
+        turn = sign * (ahead[0] * back[1] - ahead[1] * back[0])
+        if cos > SPIKE_COS and turn > 0:
+            cut = min(SPIKE_CUT, 0.4 * lb, 0.4 * la)
+            out += [here + back / lb * cut, here + ahead / la * cut]
+        else:
+            out.append(here)
+    return np.array(out)
+
+
+def _exact(loop) -> np.ndarray | None:
+    """The corners of a loop that is long straight edges only, or None.
+
+    A loop of cell edges is a wall of a building when no two short edges (under two
+    cells) lie within one edge of each other: a lone step is a nick, while a staircase
+    is a slope.
+    A wall is kept as it is, since fitting lines to it could only move a corner off
+    its cell.
+    """
+    points = np.array(loop, dtype=float)
+    ahead, back = (
+        np.roll(points, -1, axis=0) - points,
+        points - np.roll(points, 1, axis=0),
+    )
+    corners = points[np.abs(ahead[:, 0] * back[:, 1] - ahead[:, 1] * back[:, 0]) > 0]
+    steps = np.hypot(*(np.roll(corners, -1, axis=0) - corners).T)
+    short = steps < SHORT_WALL
+    near = (
+        np.roll(short, 1) | np.roll(short, -1) | np.roll(short, 2) | np.roll(short, -2)
+    )
+    if len(corners) < 4 or (short & near).any():
+        return None
+    return corners
+
+
+def _plain(loop, tolerance: float) -> np.ndarray:
+    """The corners of a loop with the staircase cut by tolerance and no line fitting.
+
+    The corners stay on the cells' own outline, so a region that wraps round a thin
+    neck is not pulled into touching itself the way fitted lines can.
+    """
+    points = np.array(loop, dtype=float)
+    return points[_keep(points, tolerance)]
+
+
+def _traces(loop):
+    """The outlines to try for a loop, best first; each is made only when asked for."""
+    exact = _exact(loop)
+    if exact is not None:
+        yield exact
+    yield _corners(loop, 1.5)
+    for tolerance in (1.0, 0.6):  # finer, for a shape the first cut strayed from
+        yield _plain(loop, tolerance)
+    for tolerance in (3.0, 6.0):  # coarser, for one with too many corners
+        yield _corners(loop, tolerance)
 
 
 def _meet(first, second, near: np.ndarray, reach: float):
@@ -381,9 +520,8 @@ def _turned_box(corners: np.ndarray, reach: float):
     turn = (
         angle + math.pi / 2
     ) % math.pi - math.pi / 2  # a box turned by pi is the same
+    # The angle moved by a half turn at most, so the first side is still the length.
     length, width = high - low
-    if turn != angle:  # the box's sides swap when its angle is brought into range
-        length, width = width, length
     return float(middle[0]), float(middle[1]), turn, float(length), float(width)
 
 
@@ -410,16 +548,73 @@ def fits(table: dict, bounds) -> bool:
     return inside(shape.points(pose), bounds)
 
 
-def _shape(corners: np.ndarray, corner, resolution: float, bounds=None) -> dict | None:
+def _cells_in(corners: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The rows and columns of the cells with their centre inside an outline."""
+    low = np.floor(corners.min(axis=0)).astype(int)
+    high = np.ceil(corners.max(axis=0)).astype(int)
+    xs, ys = np.meshgrid(
+        np.arange(low[0], high[0]) + 0.5, np.arange(low[1], high[1]) + 0.5
+    )
+    covered = np.zeros(xs.shape, dtype=bool)
+    for a, b in zip(corners, np.roll(corners, -1, axis=0)):
+        if a[1] == b[1]:
+            continue
+        crosses = (a[1] > ys) != (b[1] > ys)
+        at = a[0] + (ys - a[1]) / (b[1] - a[1]) * (b[0] - a[0])
+        covered ^= crosses & (xs < at)
+    return ys[covered].astype(int), xs[covered].astype(int)
+
+
+def _strays(corners: np.ndarray, crop: np.ndarray, r0: int, c0: int) -> int:
+    """How many cells whose centre lies in the outline are two or more from the region.
+
+    The outline is in cells, the region cropped at row `r0` and column `c0`. A cell
+    next to the region is the region's own edge, which a straight outline cannot
+    follow cell for cell.
+    """
+    wide = np.pad(crop, 1)
+    near = np.zeros_like(wide)
+    for dr in range(3):
+        for dc in range(3):
+            near |= np.roll(np.roll(wide, dr - 1, axis=0), dc - 1, axis=1)
+    rows, cols = _cells_in(corners)
+    rows, cols = rows - (r0 - 1), cols - (c0 - 1)
+    held = (rows >= 0) & (rows < near.shape[0]) & (cols >= 0) & (cols < near.shape[1])
+    return int(len(rows) - near[rows[held], cols[held]].sum())
+
+
+def _holds(cells: np.ndarray, *, crop, r0, c0, limit, others) -> bool:
+    """True if an outline stays near its region and off the cells of other regions."""
+    return (
+        _strays(cells, crop, r0, c0) <= limit
+        and _foreign(cells, others) <= FOREIGN_CELLS
+    )
+
+
+def _foreign(corners: np.ndarray, others: np.ndarray) -> int:
+    """How many cells of other regions have their centre inside the outline."""
+    rows, cols = _cells_in(corners)
+    held = (
+        (rows >= 0) & (rows < others.shape[0]) & (cols >= 0) & (cols < others.shape[1])
+    )
+    return int(others[rows[held], cols[held]].sum())
+
+
+def _shape(
+    corners: np.ndarray, corner, resolution: float, bounds=None, *, accept=None
+) -> dict | None:
     """The obstacle table of a loop's corners: a box if it is one, else a polygon.
 
     Returns None if the corners do not make a simple polygon, or if neither the box
     nor the polygon stays inside the bounds. Straightening the staircase of a region
     moves a corner outwards, and a region cut off flat along the edge of its grid
     can send one a long way out, so a caller that has an edge to keep gives its
-    bounds and gets boxes for that region instead.
+    bounds and gets boxes for that region instead. A caller that gives `accept`, a
+    test of the outline in cells, has a shape that fails it refused the same way.
     """
     world = corners * resolution + corner
+    if bounds is not None:  # a corner pushed past the edge by straightening lies on it
+        world = np.clip(world, bounds[:2], bounds[2:])
     box = _turned_box(world, 1.5 * resolution)
     if box is not None:
         x, y, turn, length, width = box
@@ -431,9 +626,16 @@ def _shape(corners: np.ndarray, corner, resolution: float, bounds=None) -> dict 
             ],
             "shape": {"name": "box", "size": [round(length, 3), round(width, 3)]},
         }
-        if fits(table, bounds):
+        around = (_outline(table) - corner) / resolution
+        if fits(table, bounds) and (accept is None or accept(around)):
             return table
-    vertices = [[round(float(x), 3), round(float(y), 3)] for x, y in world]
+    vertices: list[list[float]] = []
+    for x, y in world:
+        point = [round(float(x), 3), round(float(y), 3)]
+        if not vertices or point != vertices[-1]:
+            vertices.append(point)
+    if len(vertices) > 1 and vertices[0] == vertices[-1]:
+        vertices.pop()
     if len(vertices) < 3 or len(vertices) > MAX_CORNERS:
         return None
     try:
@@ -441,31 +643,96 @@ def _shape(corners: np.ndarray, corner, resolution: float, bounds=None) -> dict 
     except WorldError:
         return None
     table = {"shape": {"name": "polygon", "vertices": vertices}}
+    if accept is not None and not accept((np.array(vertices) - corner) / resolution):
+        return None
     return table if fits(table, bounds) else None
 
 
-def _regions(mask: np.ndarray, cuts: int = 0):
-    """The regions of a mask that have no hole, as (cropped mask, loop).
+def _regions(mask: np.ndarray, cuts: int = 0, family: int | None = None):
+    """The regions of a mask that have no hole, as (cropped mask, loop, family).
 
     A region with a hole is cut in two through the hole, again until none is left; if
-    that does not work the loop is None.
+    that does not work the loop is None. The family is the number of the region of
+    the whole mask that a piece was cut from, so pieces that were cut apart know each
+    other.
     """
-    for crop, r0, c0 in components(mask):
+    for number, (crop, r0, c0) in enumerate(components(mask)):
+        kin = number if family is None else family
         loops = _loops(crop)
         if len(loops) == 1:
-            yield crop, r0, c0, loops[0]
+            yield crop, r0, c0, loops[0], kin
             continue
         hole = min(loops, key=_area2)
         if cuts >= MAX_CUTS:
-            yield crop, r0, c0, None
+            yield crop, r0, c0, None, kin
             continue
         middle = int(np.mean([x for x, _ in hole]))
         left, right = crop.copy(), crop.copy()
         left[:, middle:] = False
         right[:, :middle] = False
         for part in (left, right):
-            for sub, sr, sc, loop in _regions(part, cuts + 1):
-                yield sub, r0 + sr, c0 + sc, loop
+            for sub, sr, sc, loop, _ in _regions(part, cuts + 1, kin):
+                yield sub, r0 + sr, c0 + sc, loop, kin
+
+
+def _outline(table: dict) -> np.ndarray:
+    """The corners, in world metres, of an obstacle table that is a box or polygon."""
+    shape = parse_shape(table["shape"], "region")
+    pose = (
+        Transform2D.from_xyt(table["pose"])
+        if "pose" in table
+        else Transform2D.identity()
+    )
+    return np.array(shape.points(pose), dtype=float)
+
+
+def _nearest(point: np.ndarray, outline: np.ndarray) -> tuple[float, np.ndarray]:
+    """The distance from a point to a closed outline, and the nearest point of it."""
+    start, step = outline, np.roll(outline, -1, axis=0) - outline
+    length = np.einsum("ij,ij->i", step, step)
+    along = np.clip(
+        np.einsum("ij,ij->i", point - start, step) / np.where(length == 0, 1, length),
+        0,
+        1,
+    )
+    near = start + along[:, None] * step
+    gap = np.hypot(*(near - point).T)
+    best = int(np.argmin(gap))
+    return float(gap[best]), near[best]
+
+
+def _weld(tables: list[dict], kin: list[int], reach: float) -> None:
+    """Move the corners of pieces cut from one region onto the edges beside them.
+
+    Pieces cut apart along a hole meet along the cut, and each was traced on its own,
+    so the two sides of the cut can end a few centimetres off one another: a step
+    in the wall, or a sliver where they overlap. A corner within `reach` of a
+    sister piece's edge, and not on it, is put on it. A move that would spoil the
+    polygon is not made.
+    """
+    for i, table in enumerate(tables):
+        if table["shape"]["name"] != "polygon":
+            continue
+        sisters = [
+            _outline(tables[j])
+            for j in range(len(tables))
+            if j != i and kin[j] == kin[i]
+        ]
+        vertices = np.array(table["shape"]["vertices"], dtype=float)
+        moved = vertices.copy()
+        for k, vertex in enumerate(vertices):
+            found = [_nearest(vertex, outline) for outline in sisters]
+            gap, point = min(found, key=lambda f: f[0], default=(math.inf, vertex))
+            if 1e-6 < gap <= reach:
+                moved[k] = point
+        if np.array_equal(moved, vertices):
+            continue
+        listed = [[round(float(x), 3), round(float(y), 3)] for x, y in moved]
+        try:
+            Polygon.parse({"vertices": listed}, "mesh")
+        except WorldError:
+            continue
+        table["shape"]["vertices"] = listed
 
 
 def vectorize(
@@ -502,15 +769,23 @@ def vectorize(
     """
     shapes: list[dict] = []
     dropped = 0
-    for crop, r0, c0, loop in _regions(grid):
+    kin: list[int] = []
+    for crop, r0, c0, loop, family in _regions(grid):
         if int(crop.sum()) < min_cells:
             dropped += 1
             continue
         found = None
         if loop is not None and pieces != "boxes":
-            for tolerance in (1.5, 3.0, 6.0):
+            limit = STRAY_SHARE * crop.sum() + STRAY_CELLS
+
+            others = grid.copy()
+            others[r0 : r0 + crop.shape[0], c0 : c0 + crop.shape[1]] &= ~crop
+
+            near = partial(_holds, crop=crop, r0=r0, c0=c0, limit=limit, others=others)
+
+            for traced in _traces(loop):
                 found = _shape(
-                    _corners(loop, tolerance) + (c0, r0), corner, resolution, bounds
+                    traced + (c0, r0), corner, resolution, bounds, accept=near
                 )
                 if found is not None:
                     break
@@ -534,7 +809,27 @@ def vectorize(
             ]
         else:
             shapes.append(found)
+        kin += [family] * (len(shapes) - len(kin))
+    _weld(shapes, kin, 0.8 * resolution)
     return shapes, dropped
+
+
+def drop_thin(mask: np.ndarray, width: int) -> None:
+    """Clear every part of the mask that is narrower than `width` cells.
+
+    The mask is changed in place. A line of cells one cell wide is a trace of the
+    grid and no wall; what stands wider than `width` keeps its shape.
+    """
+    if width < 2:
+        return
+    solid = mask.copy()
+    for _ in range(width - 1):
+        solid = solid[:-1, :-1] & solid[1:, :-1] & solid[:-1, 1:] & solid[1:, 1:]
+    kept = np.zeros_like(mask)
+    for dr in range(width):
+        for dc in range(width):
+            kept[dr : dr + solid.shape[0], dc : dc + solid.shape[1]] |= solid
+    mask &= kept
 
 
 def drop_small(mask: np.ndarray, smallest: int) -> int:

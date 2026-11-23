@@ -278,6 +278,7 @@ def generate_maze(  # pylint: disable=too-many-arguments
         seed,
         mask_of=mask_of,
         resolution=style.resolution,
+        thin=max(1, min(2, round(style.wall / style.resolution))),
         pieces=style.pieces,
         prefix=PREFIX,
         origin=origin,

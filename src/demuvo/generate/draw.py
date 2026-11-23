@@ -15,6 +15,7 @@ from dataclasses import replace
 
 from ..sensing import stream
 from ..world import World
+from ..world.regions import drop_thin
 from .connectivity import (
     Clearance,
     Connectivity,
@@ -41,6 +42,7 @@ def draw_world(  # pylint: disable=too-many-arguments,too-many-locals
     attempts: int,
     clearance: Clearance | None,
     advice: str = "",
+    thin: int = 2,
 ) -> Generated:
     """Draw worlds in this style until one passes the check; see the module docstring.
 
@@ -63,6 +65,9 @@ def draw_world(  # pylint: disable=too-many-arguments,too-many-locals
         attempts: how many worlds to draw before giving up.
         clearance: what the free space must be like, or None for no check.
         advice: what the caller might change, in a sentence of the style's own.
+        thin: obstacles narrower than this many cells are erased from the grid, as
+            they are traces of the grid and no wall. A style that draws walls one
+            cell thick gives 1.
 
     Returns:
         The world and the grids it was drawn from; see `Generated`.
@@ -88,6 +93,7 @@ def draw_world(  # pylint: disable=too-many-arguments,too-many-locals
     for attempt in range(attempts):
         rng = stream(seed, "generate", style, str(attempt))
         mask, field = mask_of(rng, rows, cols, measure, points)
+        drop_thin(mask, thin)
         obstacles = grid_obstacles(
             mask, resolution, origin, pieces=pieces, prefix=prefix, bounds=bounds
         )
