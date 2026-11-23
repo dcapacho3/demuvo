@@ -10,6 +10,8 @@ from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
+import numpy as np
+
 from .. import edit
 from ..generate import STYLES, Clearance, pair_world
 from ..verify import WorldError
@@ -188,38 +190,44 @@ class WorldEdits:  # pylint: disable=too-many-public-methods
             lambda w: edit.set_step(w, dt), self.session.scene.selected_obstacle
         )
 
+    def draft(self, recipe: dict) -> tuple[World, np.ndarray]:
+        """The world a recipe would give and its blocked cells, with nothing changed.
+
+        The map is drawn for the widest robot of the world, and for the recipe's
+        radius when there is none. With `pair`, the first robot goes to a random
+        start with a random goal, and a world with no robot gets one.
+
+        Raises:
+            WorldError: if no map of these settings could be drawn.
+        """
+        world = self.session.world
+        settings, draw = STYLES[recipe["style"]]
+        seed = world.seed if recipe["seed"] is None else int(recipe["seed"])
+        options = {"loops": recipe["loops"]} if recipe["style"] == "maze" else {}
+        try:
+            got = draw(
+                world.size,
+                seed,
+                settings(**options),
+                Clearance(radius=None if world.robots else recipe["radius"]),
+                origin=world.origin,
+                base=replace(world, obstacles=()),
+            )
+            made = (
+                pair_world(got, seed, recipe["radius"]) if recipe["pair"] else got.world
+            )
+        except ValueError as error:
+            raise WorldError(str(error)) from error
+        return made, got.mask
+
     def generate(self) -> str | None:
         """Replace the obstacles with a map drawn from `recipe`.
 
-        The robots, the goals and the actors stay. The map is drawn for the widest
-        robot of the world, and for the recipe's radius when there is none. With
-        `pair`, the first robot goes to a random start with a random goal, and a
-        world with no robot gets one.
+        The robots, the goals and the actors stay; see `draft`.
         """
-        recipe = self.recipe
-
-        def make(world: World) -> World:
-            settings, draw = STYLES[recipe["style"]]
-            seed = world.seed if recipe["seed"] is None else int(recipe["seed"])
-            options = {"loops": recipe["loops"]} if recipe["style"] == "maze" else {}
-            try:
-                got = draw(
-                    world.size,
-                    seed,
-                    settings(**options),
-                    Clearance(radius=None if world.robots else recipe["radius"]),
-                    origin=world.origin,
-                    base=replace(world, obstacles=()),
-                )
-                return (
-                    pair_world(got, seed, recipe["radius"])
-                    if recipe["pair"]
-                    else got.world
-                )
-            except ValueError as error:
-                raise WorldError(str(error)) from error
-
-        return self._edit(make, None, rebuild=True, select="")
+        return self._edit(
+            lambda _: self.draft(self.recipe)[0], None, rebuild=True, select=""
+        )
 
     def save(self, path: str) -> str | None:
         """Write the world to a file, and remember the file."""

@@ -10,7 +10,7 @@ from . import font, look
 from .inputs import Popup
 from .keys import KEY
 from .raster import Canvas, rgba
-from .widgets import Event, TextButton, text_baseline
+from .widgets import Event, TextButton, draw_card, text_baseline
 
 
 class ConfirmBox(Popup):
@@ -79,14 +79,7 @@ class ConfirmBox(Popup):
 
     def draw(self, canvas: Canvas) -> None:
         """Draw a shadow, the card, the question and the buttons."""
-        card = (self.x, self.y, self.width, self.height)
-        canvas.rect(
-            (self.x + 1, self.y + 5, self.width, self.height),
-            rgba(look.NAVY, 0.10),
-            radius=12,
-        )
-        canvas.rect(card, rgba(look.PANEL), radius=10)
-        canvas.rect_outline(card, rgba(look.LINE), width=1, radius=10)
+        draw_card(canvas, (self.x, self.y, self.width, self.height))
         canvas.text(
             font.bold(),
             self.title,

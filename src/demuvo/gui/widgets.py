@@ -81,6 +81,14 @@ class Event:
     ctrl: bool = False
 
 
+def draw_card(canvas: Canvas, box: tuple[float, float, float, float]) -> None:
+    """A white card with a rounded edge and a soft shadow, for a dialog."""
+    x, y, width, height = box
+    canvas.rect((x + 1, y + 5, width, height), rgba(look.NAVY, 0.10), radius=12)
+    canvas.rect(box, rgba(look.PANEL), radius=10)
+    canvas.rect_outline(box, rgba(look.LINE), width=1, radius=10)
+
+
 def text_baseline(top: float, height: float, size: int) -> float:
     """The baseline that centres a line of text of this size in a box."""
     return top + height / 2 + size * 0.36

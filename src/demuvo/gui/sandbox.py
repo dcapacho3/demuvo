@@ -23,6 +23,7 @@ from .inputs import Combo, MenuItem, NameBox, Row, TreeList
 from .inspector import Inspector
 from .keys import KEY
 from .logview import LogView
+from .mapbox import NewMapBox
 from .paneactions import PaneActions
 from .panels import Badge, FormRow, Pill
 from .scenedraw import LAYERS, STATIC
@@ -40,7 +41,7 @@ GOAL_MESSAGE = (
 ZOOM_KEY = 1.25
 # The tools, and what the status bar says when one is chosen.
 # Said in a tool's tooltip while it is grey, and why.
-EDIT_BUTTONS = ("add", "add_actor", "delete", "box", "circle", "polygon", "line")
+EDIT_BUTTONS = ("map", "add", "add_actor", "delete", "box", "circle", "polygon", "line")
 LOCKED_TIP = " - grey while a run is in progress; press Reset (R) to edit again"
 SELECT_TIP = " - grey until a robot is selected"
 TOOL_MESSAGES = {
@@ -211,6 +212,7 @@ class Sandbox:  # pylint: disable=too-many-public-methods
                 True,
                 "tool",
             ),
+            ("map", "map", self._new_map, "New map (Ctrl+G)", False, None),
             ("add", "robot_add", self._add_robot, "Add robot (Ctrl+N)", False, None),
             (
                 "add_actor",
@@ -253,7 +255,7 @@ class Sandbox:  # pylint: disable=too-many-public-methods
         top = MENU_H + 6
         self.buttons["left"].set_rect(8, top, BUTTON, BUTTON)
         x = 8 + 36 + 6
-        for key in (*TOOL_MESSAGES, "add", "add_actor", "delete"):
+        for key in (*TOOL_MESSAGES, "map", "add", "add_actor", "delete"):
             self.buttons[key].set_rect(x, top, BUTTON, BUTTON)
             x += 34
         self.buttons["right"].set_rect(width - 40, top, BUTTON, BUTTON)
@@ -271,6 +273,12 @@ class Sandbox:  # pylint: disable=too-many-public-methods
             fixed = self.session.mode == "benchmark"
             return [
                 MenuItem("New world", enabled=not fixed, action=self._new_world),
+                MenuItem(
+                    "New map…",
+                    shortcut="Ctrl+G",
+                    enabled=ok,
+                    action=self._new_map,
+                ),
                 MenuItem(
                     "Open…",
                     shortcut="Ctrl+O",
@@ -413,6 +421,7 @@ class Sandbox:  # pylint: disable=too-many-public-methods
             (KEY["3"], True): lambda: self._toggle_panel("bottom"),
             (KEY["n"], True): self._add_robot,
             (KEY["m"], True): self._add_actor,
+            (KEY["g"], True): self._new_map,
             (KEY["f2"], False): self._rename_selected,
             (KEY["z"], True): self._undo,
             (KEY["y"], True): self._redo,
@@ -714,6 +723,27 @@ class Sandbox:  # pylint: disable=too-many-public-methods
             return
         self.refresh()
         self.message(f"Opened {path}.")
+
+    def _new_map(self) -> None:
+        """Open the card that draws a map of a style the user picks."""
+        if not self.session.editable:
+            return
+        screen = self.shell.screen
+        width = min(760.0, screen.width - 40)
+        height = min(600.0, screen.height - MENU_H - TOOL_H - 32)
+        place = ((screen.width - width) / 2, MENU_H + TOOL_H + 12, width, height)
+        self.shell.open_popup(NewMapBox(self.session.edits, self._map_used, place))
+
+    def _map_used(self) -> None:
+        """The card took a map: draw it into the world and say which one."""
+        recipe = self.session.edits.recipe
+        error = self.session.edits.generate()
+        self.edited(error)
+        if error is None:
+            self.message(
+                f"Drew a {recipe['style']} map, seed {recipe['seed']}. "
+                "Ctrl+Z brings the old one back."
+            )
 
     def _new_world(self) -> None:
         """Start again with a blank world, after asking if anything is unsaved."""

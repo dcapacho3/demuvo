@@ -244,7 +244,7 @@ def test_the_menus_list_the_commands_and_run_them(app):
     """File has Quit; Edit has the tools; View has the panels and layers."""
     window, program = app
     assert [i.text for i in program.menu_items("File") if not i.separator] == [
-        "New world", "Open…", "Save", "Save as…", "Quit",
+        "New world", "New map…", "Open…", "Save", "Save as…", "Quit",
     ]  # fmt: skip
     edit_items = program.menu_items("Edit")
     assert [i.text for i in edit_items if not i.separator] == [
@@ -272,11 +272,12 @@ def test_the_menus_list_the_commands_and_run_them(app):
 def test_open_always_shows_the_dialog_and_says_if_unsaved_changes_will_be_lost(app):
     """It opens at once, whether or not the world was edited."""
     window, program = app
-    program.menu_items("File")[1].action()
+    opener = next(i for i in program.menu_items("File") if i.text == "Open…")
+    opener.action()
     assert window.input.popup.ask.title == "Open a world"
     window.input.close_popup()
     program.session.add_robot()
-    program.menu_items("File")[1].action()
+    opener.action()
     assert window.input.popup.ask.title == (
         "Open a world - unsaved changes will be lost"
     )
