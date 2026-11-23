@@ -322,3 +322,11 @@ def test_install_desktop_asks_the_desktop_tools_to_refresh_when_they_exist(
     cli.desktop.install(tmp_path, exe="demuvo")
     assert [c[0] for c in ran] == ["gtk-update-icon-cache"]
     assert ran[0][-1].endswith("hicolor")
+
+
+def test_the_version_is_printed_and_nothing_opens(capsys):
+    """`--version` names the program and the installed release, then exits."""
+    with pytest.raises(SystemExit) as stop:
+        main(["--version"])
+    assert stop.value.code == 0
+    assert capsys.readouterr().out.startswith("demuvo ")

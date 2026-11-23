@@ -96,8 +96,8 @@ def _common() -> argparse.ArgumentParser:
     parent.add_argument(
         "--pair",
         action="store_true",
-        help="place a start and a goal at random in the free space, which the "
-        "check has already found to be one piece. The first robot of the world "
+        help="place a start and a goal at random in the largest free region, so "
+        "that one can be reached from the other. The first robot of the world "
         "is moved to the start and given the goal; a world with no robot gets a "
         f"round one of --radius with {PLANNER} and {CONTROLLER}",
     )

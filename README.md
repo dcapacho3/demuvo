@@ -52,6 +52,7 @@ demuvo generate STYLE --out FILE [options]
 | `--one-process` | simulate in the window's process, not in a process of its own |
 | `--seeds N` | open no window; run `N` seeds to the end and print a table |
 | `--jobs J`, `--limit S` | with `--seeds`: runs at once, and simulated seconds before a run stops |
+| `--version` | print the installed release, then exit |
 | `--install-desktop` | add demuvo and its icon to the desktop launcher, then exit |
 | `generate STYLE` | draw a world from a seed and write it; see below |
 
@@ -81,11 +82,13 @@ which robot with `--radius`, or with `--from base.toml`, whose widest robot is t
 and whose robots, tasks and settings are kept. A generator with no robot refuses to
 draw rather than guess one.
 
-Every map that comes back has free space the robot can cross in one piece, checked
-on the costmap the planner will use; a map that fails is thrown away and another
-drawn, up to `--attempts`. `--pair` then picks a start and a goal at random out of
-that free space, at least `--min-distance` apart, moves the first robot to the start
-and gives it the goal. A world with no robot of its own gets one that can drive, so
+Every map that comes back has one free region that holds at least nine tenths of the
+free space, measured for the robot on the costmap the planner will use. Small closed
+pockets may hold the rest, and the printed summary says how many regions there are. A
+map that fails is thrown away and another drawn, up to `--attempts`. `--pair` then
+picks a start and a goal at random out of the largest region, at least
+`--min-distance` apart, so the goal can always be reached from the start; it moves the
+first robot to the start and gives it the goal. A world with no robot of its own gets one that can drive, so
 the file runs as it is written.
 
 | Option | Meaning |

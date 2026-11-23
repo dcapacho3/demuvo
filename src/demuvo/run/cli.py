@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 from dataclasses import replace
+from importlib.metadata import version
 from pathlib import Path
 
 from ..evaluation import metrics_path, write_metrics
@@ -31,6 +32,9 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="demuvo",
         description="Open a world file in the sandbox window, or a blank world.",
+    )
+    parser.add_argument(
+        "--version", action="version", version=f"demuvo {version('demuvo')}"
     )
     parser.add_argument("world", nargs="?", help="path of the world file (TOML)")
     parser.add_argument(
