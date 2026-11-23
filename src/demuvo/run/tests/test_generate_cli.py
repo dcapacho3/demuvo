@@ -55,7 +55,7 @@ def drawn(tmp_path, style, *extra, name="out.toml"):
     return main(argv), path
 
 
-@pytest.mark.parametrize("style", ["field", "rooms", "caves"])
+@pytest.mark.parametrize("style", ["field", "rooms", "caves", "maze"])
 def test_each_style_writes_a_world_file_that_reads_back(tmp_path, capsys, style):
     """The command's one job: a file the loader takes."""
     code, path = drawn(tmp_path, style)
@@ -68,7 +68,7 @@ def test_each_style_writes_a_world_file_that_reads_back(tmp_path, capsys, style)
     assert f"# demuvo generate {style}" in printed  # the command that draws it again
 
 
-@pytest.mark.parametrize("style", ["field", "rooms", "caves"])
+@pytest.mark.parametrize("style", ["field", "rooms", "caves", "maze"])
 def test_a_world_with_a_pair_runs_to_its_goal_as_it_is_written(tmp_path, style):
     """A map, a robot that can drive and somewhere to drive to, in one command."""
     code, path = drawn(tmp_path, style, "--pair")
@@ -270,3 +270,10 @@ def test_the_command_is_asked_for_by_name_and_leaves_the_rest_alone(capsys):
         main(["generate"])  # a style is needed
     assert raised.value.code == 2
     assert "STYLE" in capsys.readouterr().err
+
+
+def test_a_maze_takes_its_loops_from_the_command_line(tmp_path):
+    """The style's own option reaches the style, and more loops open more walls."""
+    _, plain = drawn(tmp_path, "maze", name="plain.toml")
+    _, looped = drawn(tmp_path, "maze", "--loops", "0.5", name="looped.toml")
+    assert len(load_world(looped).obstacles) != len(load_world(plain).obstacles)

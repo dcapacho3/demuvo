@@ -23,9 +23,11 @@ from ..generate import (
     Clearance,
     FieldStyle,
     Generated,
+    MazeStyle,
     RoomsStyle,
     generate_caves,
     generate_field,
+    generate_maze,
     generate_rooms,
     place_pair,
 )
@@ -37,6 +39,7 @@ STYLES = {
     "field": (FieldStyle, generate_field),
     "rooms": (RoomsStyle, generate_rooms),
     "caves": (CaveStyle, generate_caves),
+    "maze": (MazeStyle, generate_maze),
 }
 # What a robot invented for a map is given, so the file runs as it is written.
 PLANNER = "demuvo.planners:AStar"
@@ -122,6 +125,7 @@ def _add(command: argparse.ArgumentParser, style, skip=()) -> None:
         "min_room": "shortest side of a room in metres (default: three corridors)",
         "wall": "thickness of a wall in metres",
         "depth": "how many times the building is cut in two",
+        "loops": "share of the inner walls opened to make loops, 0 to 1",
     }
     whole = ("octaves", "smooth", "depth")
     for item in fields(style):
@@ -149,6 +153,7 @@ def parser() -> argparse.ArgumentParser:
                 "field": "clutter from a smooth random field",
                 "rooms": "a building of rooms joined by corridors",
                 "caves": "caverns worn out of noise",
+                "maze": "a maze of corridors, with loops if asked",
             }[name],
         )
         _add(one, settings, skip=("resolution", "pieces"))

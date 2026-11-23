@@ -13,7 +13,7 @@ only if its licence allows it. Planners written from papers.
 - **Window:** build a world, run it, undo and redo, rename, save and open, drag a goal
   to aim it, Shift for waypoints, a card before unsaved work is lost, inspector groups
   with help text, layers, an empty default world.
-- **Generated worlds:** seeded field, rooms-and-corridors and cave styles, every
+- **Generated worlds:** seeded field, rooms-and-corridors, cave and maze styles, every
   length of them sized by the robot the map is for, with a shared check that the
   free space is one piece on the costmap the planner uses; random start and goal
   pairs; `demuvo generate`.
@@ -158,7 +158,6 @@ and a table over seeds, with docs that stand alone.
 
 | Item | Size |
 |------|------|
-| Maze generator, with loops. The cave and rooms-and-corridors styles are built. | S |
 | Warehouse, supermarket, parking lot and street-grid generators. | M each |
 | A difficulty score for a world (clutter, corridor width, path winding) as its own tool. | S |
 | Occupancy image import (PNG and YAML). | S |

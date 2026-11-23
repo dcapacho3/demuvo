@@ -65,9 +65,10 @@ r1 drove 8.86 m
 
 ### Drawing a world
 
-`demuvo generate` draws a world from a seed and writes it to a file. There are three
+`demuvo generate` draws a world from a seed and writes it to a file. There are four
 styles: `field` is clutter from a smooth random field, `rooms` is a building of rooms
-joined by corridors, and `caves` is caverns worn out of noise.
+joined by corridors, `caves` is caverns worn out of noise, and `maze` is a maze of
+corridors, with loops if `--loops` asks for them.
 
 ```bash
 demuvo generate caves --size 20 14 --seed 5 --radius 0.25 --pair --out cave5.toml
