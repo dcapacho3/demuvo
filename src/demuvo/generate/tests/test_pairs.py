@@ -13,6 +13,7 @@ from demuvo.generate import (
     generate_caves,
     place_pair,
 )
+from demuvo.generate.pairs import _across
 
 ROBOT = Clearance(radius=0.25)
 
@@ -112,3 +113,9 @@ def test_a_report_made_by_hand_still_gives_a_pair():
     start, goal = place_pair(report, 1, min_distance=1.0)
     assert start[0] >= 1.0 and goal[0] >= 1.0  # the origin is honoured
     assert math.dist(start, goal) >= 1.0
+
+
+def test_a_region_with_no_cells_is_no_metres_across():
+    """The failure message of a world with no free cell still has a number to give."""
+    empty = np.array([])
+    assert _across(empty, empty) == 0.0
