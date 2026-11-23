@@ -14,39 +14,10 @@ from __future__ import annotations
 import argparse
 import math
 import sys
-from dataclasses import fields, replace
+from dataclasses import fields
 
-from robomath import Transform2D
-
-from ..generate import (
-    CaveStyle,
-    Clearance,
-    FieldStyle,
-    Generated,
-    MazeStyle,
-    RoomsStyle,
-    generate_caves,
-    generate_field,
-    generate_maze,
-    generate_rooms,
-    place_pair,
-)
-from ..world import RobotSpec, Task, World, WorldError, load_world, save_world
-from ..world.shapes import Circle
-
-# The style, the settings class and the function of each subcommand.
-STYLES = {
-    "field": (FieldStyle, generate_field),
-    "rooms": (RoomsStyle, generate_rooms),
-    "caves": (CaveStyle, generate_caves),
-    "maze": (MazeStyle, generate_maze),
-}
-# What a robot invented for a map is given, so the file runs as it is written.
-PLANNER = "demuvo.planners:AStar"
-CONTROLLER = "demuvo.controllers:PurePursuit"
-CONTROLLER_PARAMS = {"speed": 0.5, "lookahead": 0.6}
-# A goal is a place and not a heading, so any heading counts as reaching it.
-GOAL_TOLERANCE = (0.1, math.pi)
+from ..generate import CONTROLLER, PLANNER, STYLES, Clearance, Generated, pair_world
+from ..world import World, WorldError, load_world, save_world
 
 
 def _common() -> argparse.ArgumentParser:
@@ -188,40 +159,6 @@ def _size_and_origin(args, base: World | None):
     return (args.size[0], args.size[1]), tuple(args.origin or (0.0, 0.0))
 
 
-def _with_pair(got: Generated, args) -> World:
-    """The world with a start and a goal placed at random in its free space.
-
-    The first robot of the world is moved to the start and given the goal, its own
-    tasks making way; a world with no robot of its own gets one that can drive, so
-    that the file runs as it is written.
-    """
-    world = got.world
-    least = args.min_distance
-    if least is None:
-        least = math.hypot(*world.size) / 2
-    start, goal = place_pair(got.connectivity, args.seed, min_distance=least)
-    heading = math.atan2(goal[1] - start[1], goal[0] - start[0])
-    pose = Transform2D.from_xyt([start[0], start[1], heading])
-    where = Transform2D.from_xyt([goal[0], goal[1], 0.0])
-    if world.robots:
-        first = world.robots[0]
-        robots = (replace(first, pose=pose), *world.robots[1:])
-    else:
-        first = RobotSpec(
-            "r1",
-            "diff_drive",
-            Circle(args.radius),
-            pose,
-            planner=PLANNER,
-            controller=CONTROLLER,
-            controller_params=dict(CONTROLLER_PARAMS),
-        )
-        robots = (first,)
-    kept = tuple(task for task in world.tasks if task.robot != first.name)
-    task = Task(first.name, where, goal_tolerance=GOAL_TOLERANCE)
-    return replace(world, robots=robots, tasks=(*kept, task))
-
-
 def _report(got: Generated, world: World, args, argv: list[str]) -> None:
     """Say what was drawn, how it measures, and the command that draws it again."""
     found = got.connectivity
@@ -269,7 +206,11 @@ def main(argv: list[str]) -> int:
             base=base,
             attempts=args.attempts,
         )
-        world = _with_pair(got, args) if args.pair else got.world
+        world = (
+            pair_world(got, args.seed, args.radius, args.min_distance)
+            if args.pair
+            else got.world
+        )
         save_world(world, args.out)
     except (OSError, ValueError) as error:
         print(f"demuvo generate: {error}", file=sys.stderr)

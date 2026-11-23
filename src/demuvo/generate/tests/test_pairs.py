@@ -11,6 +11,7 @@ from demuvo.generate import (
     GenerateError,
     check_grid,
     generate_caves,
+    pair_world,
     place_pair,
 )
 from demuvo.generate.pairs import _across
@@ -119,3 +120,10 @@ def test_a_region_with_no_cells_is_no_metres_across():
     """The failure message of a world with no free cell still has a number to give."""
     empty = np.array([])
     assert _across(empty, empty) == 0.0
+
+
+def test_a_world_with_no_robot_and_no_radius_cannot_be_given_a_pair():
+    """A robot needs a size, and nobody said one."""
+    got = generate_caves((20.0, 14.0), 1, clearance=ROBOT)
+    with pytest.raises(ValueError, match="no robot, and no radius"):
+        pair_world(got, 1)

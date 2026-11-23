@@ -13,12 +13,26 @@ would need a search, and making the planner do that search is the point of the p
 
 from __future__ import annotations
 
+import math
+from dataclasses import replace
+
 import numpy as np
+from robomath import Transform2D
 
 from ..sensing import stream
+from ..world import RobotSpec, Task, World
+from ..world.shapes import Circle
 from .connectivity import Connectivity, GenerateError
+from .result import Generated
 
 Point = tuple[float, float]
+
+# What a robot invented for a map is given, so the file runs as it is written.
+PLANNER = "demuvo.planners:AStar"
+CONTROLLER = "demuvo.controllers:PurePursuit"
+CONTROLLER_PARAMS = {"speed": 0.5, "lookahead": 0.6}
+# A goal is a place and not a heading, so any heading counts as reaching it.
+GOAL_TOLERANCE = (0.1, math.pi)
 
 
 def _points(places: np.ndarray, origin: tuple[float, float], resolution: float):
@@ -108,3 +122,58 @@ def place_pair(
         f"{limit} apart; the free space is about {_across(xs, ys):.2f} m "
         f"across at its widest"
     )
+
+
+def pair_world(
+    got: Generated,
+    seed: int,
+    radius: float | None = None,
+    min_distance: float | None = None,
+) -> World:
+    """The world of a generated map with a start and a goal placed at random in it.
+
+    The first robot of the world is moved to the start, facing the goal, and given
+    the goal, its own tasks making way; a world with no robot of its own gets a
+    round one that can drive, so that the file runs as it is written.
+
+    Args:
+        got: the map, as a generator gave it back.
+        seed: the seed of the pair.
+        radius: the radius of the robot to add when the world has none.
+        min_distance: the least the start and the goal may be apart in metres, or
+            None for half the world corner to corner.
+
+    Returns:
+        The world with the pair in it.
+
+    Raises:
+        GenerateError: if no two places in the largest free region are as far apart
+            as asked.
+        ValueError: if the world has no robot and no radius says how big one is.
+    """
+    world = got.world
+    if min_distance is None:
+        min_distance = math.hypot(*world.size) / 2
+    if not world.robots and radius is None:
+        raise ValueError("pair: the world has no robot, and no radius for a new one")
+    start, goal = place_pair(got.connectivity, seed, min_distance=min_distance)
+    heading = math.atan2(goal[1] - start[1], goal[0] - start[0])
+    pose = Transform2D.from_xyt([start[0], start[1], heading])
+    where = Transform2D.from_xyt([goal[0], goal[1], 0.0])
+    if world.robots:
+        first = world.robots[0]
+        robots = (replace(first, pose=pose), *world.robots[1:])
+    else:
+        first = RobotSpec(
+            "r1",
+            "diff_drive",
+            Circle(radius),
+            pose,
+            planner=PLANNER,
+            controller=CONTROLLER,
+            controller_params=dict(CONTROLLER_PARAMS),
+        )
+        robots = (first,)
+    kept = tuple(task for task in world.tasks if task.robot != first.name)
+    task = Task(first.name, where, goal_tolerance=GOAL_TOLERANCE)
+    return replace(world, robots=robots, tasks=(*kept, task))

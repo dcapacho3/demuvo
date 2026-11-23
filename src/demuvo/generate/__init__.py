@@ -32,12 +32,23 @@ from .connectivity import (
 )
 from .field import FieldStyle, cut_mask, field_of, generate_field
 from .maze import MazeStyle, generate_maze, maze_corridor
-from .pairs import place_pair
+from .pairs import CONTROLLER, PLANNER, pair_world, place_pair
 from .result import Generated
 from .rooms import RoomsStyle, corridor_width, generate_rooms
 from .shapes import grid_obstacles
 
+# The style, its settings class and its function, by the name a person types.
+STYLES = {
+    "field": (FieldStyle, generate_field),
+    "rooms": (RoomsStyle, generate_rooms),
+    "caves": (CaveStyle, generate_caves),
+    "maze": (MazeStyle, generate_maze),
+}
+
 __all__ = [
+    "STYLES",
+    "CONTROLLER",
+    "PLANNER",
     "CaveStyle",
     "Clearance",
     "Connectivity",
@@ -61,6 +72,7 @@ __all__ = [
     "lane",
     "maze_corridor",
     "numbered",
+    "pair_world",
     "place_pair",
     "room",
     "within",
