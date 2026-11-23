@@ -141,11 +141,27 @@ def test_a_concave_obstacle_is_solid_with_no_line_between_its_pieces(scene):
     assert checked > 200
 
 
+def test_no_outline_is_drawn_far_from_a_concave_obstacle(scene):
+    """Past the inner corner of the notch the outline follows the edges, no further."""
+    geometry = pytest.importorskip("shapely.geometry")
+    shape = geometry.Polygon([(6, 4), (7, 4), (7, 5), (6.4, 4.4), (6, 5)])
+    far = 4.0 / scene.view.scale  # outline is 2 pixels, so 4 is well clear of it
+    canvas = paint(scene)
+    checked = 0
+    for x in np.arange(5.8, 7.2, 0.02):
+        for y in np.arange(3.8, 5.2, 0.02):
+            if shape.distance(geometry.Point(x, y)) > far:
+                red, _, blue = canvas.px[at(scene, x, y)[::-1]]
+                assert red > 0.3 or blue > 0.4, (x, y)
+                checked += 1
+    assert checked > 500
+
+
 def test_two_obstacles_that_touch_show_no_outline_between_them(tmp_path):
     """A body that a world file holds as two pieces is drawn as one."""
     path = tmp_path / "pair.toml"
     path.write_text(
-        WORLD.split("[[obstacle]]")[0]
+        WORLD.split("[[obstacle]]", maxsplit=1)[0]
         + """[[obstacle]]
 pose = [3.0, 3.0, 0.0]
 shape = { name = "box", size = [1.0, 1.0] }

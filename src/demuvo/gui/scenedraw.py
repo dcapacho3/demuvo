@@ -500,7 +500,7 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
         a body that the world file holds as two pieces shows no seam.
         """
         fill, edge = rgba(look.NAVY2, opacity), rgba(look.NAVY, opacity)
-        bodies = []
+        bodies, loops = [], []
         for obstacle in self.world.obstacles:
             shape = obstacle.shape
             if isinstance(shape, Circle):
@@ -516,7 +516,12 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
                 bodies.append([screen])
             else:
                 bodies.append(self._pieces(view, obstacle))
-        fill_bodies(canvas, bodies, edge, OUTLINE)
+                loops.append(np.vstack([screen, screen[:1]]))
+        # A grown piece of a concave body would stick out at its reflex corners, so
+        # the outline of such a body is a stroke along the whole boundary instead.
+        fill_bodies(canvas, [b for b in bodies if len(b) == 1], edge, OUTLINE)
+        for loop in loops:
+            polyline(canvas, loop, 2 * OUTLINE, edge)
         fill_bodies(canvas, bodies, fill, 0.0)
 
     @staticmethod
