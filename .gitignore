@@ -215,5 +215,6 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# Local stress tests and timing scripts; not part of the package.
-stress_examples/
+# Local work that stays off the repository: stress tests, timing scripts, design
+# notes and check output. Not part of the package.
+ignore/
