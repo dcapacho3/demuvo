@@ -102,7 +102,8 @@ Use this map (or Enter) puts the chosen one in the world; Cancel changes nothing
 
 The card has three settings. Place a start and a goal moves the first robot to a random
 start and gives it a random goal (teal and amber in the pictures); a world with no robot
-gets one. Robot radius shows when the world has no robot, and sizes the corridors.
+gets one. Shuffle start and goal places the pair again on the same maps, so one map can
+be tried from many starts; it has its own seed, shown beside the map's. Robot radius shows when the world has no robot, and sizes the corridors.
 Loops shows for the maze, and opens some walls to give a second route, from none to all.
 A slider is read when you let go of it.
 

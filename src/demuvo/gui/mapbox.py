@@ -2,7 +2,8 @@
 
 Every style draws a map of the world's own size, for the world's own robot, and the
 card shows them side by side with the same seed, so a student sees what each style
-makes before choosing. Shuffle draws the next seed of all four. Nothing is changed
+makes before choosing. Shuffle map draws the next seed of all four, and Shuffle
+start and goal places the pair again on the same maps. Nothing is changed
 in the world until Use this map is pressed.
 """
 
@@ -56,6 +57,8 @@ class NewMapBox(Popup):
         self.recipe = dict(edits.recipe)
         if self.recipe["seed"] is None:
             self.recipe["seed"] = edits.session.world.seed
+        if self.recipe["pair_seed"] is None:
+            self.recipe["pair_seed"] = self.recipe["seed"]
         self.styles = list(STYLES)
         self.drafts: dict[str, tuple] = {}
         self.tiles: dict[str, tuple[float, float, float, float]] = {}
@@ -69,7 +72,8 @@ class NewMapBox(Popup):
         self.radius.visible = not robots
         self.loops = Slider(self.recipe["loops"], 0.0, 1.0)
         self.buttons = {
-            "shuffle": TextButton("Shuffle", self._shuffle),
+            "shuffle": TextButton("Shuffle map", self._shuffle),
+            "pair": TextButton("Shuffle start and goal", self._shuffle_pair),
             "no": TextButton("Cancel", self._close),
             "yes": TextButton("Use this map", self._use),
         }
@@ -89,11 +93,13 @@ class NewMapBox(Popup):
                 recipe["seed"],
                 recipe["radius"],
                 recipe["pair"],
+                recipe["pair_seed"] if recipe["pair"] else None,
                 recipe["loops"] if name == "maze" else 0.0,
             )
             if self.drafts.get(name, (None,))[0] != key:
                 self.drafts[name] = (key, *self._draft(name))
         self.loops.visible = recipe["style"] == "maze"
+        self.buttons["pair"].enabled = recipe["pair"]
         self.buttons["yes"].enabled = self.drafts[recipe["style"]][1] is not None
         self.invalidate()
 
@@ -114,6 +120,11 @@ class NewMapBox(Popup):
     def _shuffle(self) -> None:
         """Draw the next seed of every style."""
         self.recipe["seed"] += 1
+        self._refresh()
+
+    def _shuffle_pair(self) -> None:
+        """Place the start and the goal again, on the same maps."""
+        self.recipe["pair_seed"] += 1
         self._refresh()
 
     def _use(self) -> None:
@@ -165,7 +176,8 @@ class NewMapBox(Popup):
         self.radius.set_rect(x + 450, row, 100, 32)
         self.loops.set_rect(x + 640, row, 100, 32)
         top = y + h - buttons + 8
-        self.buttons["shuffle"].set_rect(x + MARGIN, top, 100, 36)
+        self.buttons["shuffle"].set_rect(x + MARGIN, top, 112, 36)
+        self.buttons["pair"].set_rect(x + MARGIN + 120, top, 176, 36)
         self.buttons["no"].set_rect(x + w - 246, top, 100, 36)
         self.buttons["yes"].set_rect(x + w - 130, top, 114, 36)
 
@@ -281,11 +293,13 @@ class NewMapBox(Popup):
         """The words beside the sliders and the seed beside Shuffle."""
         face = font.regular()
         row = self.pair.y
-        seed = f"seed {self.recipe['seed']}"
+        seed = f"map {self.recipe['seed']}"
+        if self.recipe["pair"]:
+            seed += f", start and goal {self.recipe['pair_seed']}"
         canvas.text(
             face,
             seed,
-            (self.x + MARGIN + 112, text_baseline(self.buttons["shuffle"].y, 36, 12)),
+            (self.x + MARGIN + 308, text_baseline(self.buttons["shuffle"].y, 36, 12)),
             size=12,
             color=rgba(look.MUTED),
         )

@@ -277,3 +277,14 @@ def test_a_maze_takes_its_loops_from_the_command_line(tmp_path):
     _, plain = drawn(tmp_path, "maze", name="plain.toml")
     _, looped = drawn(tmp_path, "maze", "--loops", "0.5", name="looped.toml")
     assert len(load_world(looped).obstacles) != len(load_world(plain).obstacles)
+
+
+def test_a_pair_seed_moves_the_start_and_goal_and_leaves_the_map(tmp_path):
+    """The map is drawn from --seed and the pair from --pair-seed."""
+    _, one = drawn(tmp_path, "rooms", "--pair", name="one.toml")
+    _, two = drawn(tmp_path, "rooms", "--pair", "--pair-seed", "9", name="two.toml")
+    first, second = load_world(one), load_world(two)
+    assert first.obstacles == second.obstacles
+    assert first.robots[0].pose != second.robots[0].pose
+    _, same = drawn(tmp_path, "rooms", "--pair", "--pair-seed", "5", name="same.toml")
+    assert load_world(same) == first

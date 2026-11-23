@@ -261,3 +261,24 @@ def test_the_reason_a_style_cannot_be_drawn_is_written_in_its_tile():
     )
     assert has(canvas, look.WARN_BG, tile)
     assert has(canvas, look.WARN_TEXT, tile, near=0.25)
+
+
+def test_shuffling_the_start_and_goal_keeps_the_maps():
+    """The pair has its own seed, so the same map is tried from another place."""
+    session = Session(edit.set_size(edit.new_world(), (20.0, 14.0)))
+    _, program = start(session)
+    program._new_map()  # pylint: disable=protected-access
+    box = card(program)
+    assert not box.buttons["pair"].enabled
+    box.pair.set(True)
+    assert box.buttons["pair"].enabled
+    first = box.drafts["rooms"][1]
+    press_on(box, box.buttons["pair"])
+    second = box.drafts["rooms"][1]
+    assert box.recipe["seed"] == box.recipe["pair_seed"] - 1
+    assert second.obstacles == first.obstacles
+    assert second.robots[0].pose != first.robots[0].pose
+    assert second.tasks != first.tasks
+    box.recipe["style"] = "rooms"
+    press_on(box, box.buttons["yes"])
+    assert program.session.world.robots[0].pose == second.robots[0].pose

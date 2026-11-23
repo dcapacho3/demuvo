@@ -73,6 +73,12 @@ def _common() -> argparse.ArgumentParser:
         f"round one of --radius with {PLANNER} and {CONTROLLER}",
     )
     parent.add_argument(
+        "--pair-seed",
+        type=int,
+        help="the seed of the start and the goal, to change them while the map "
+        "stays (default: the map's seed)",
+    )
+    parent.add_argument(
         "--min-distance",
         type=float,
         help="the least a start and a goal may be apart (default half the world "
@@ -206,8 +212,9 @@ def main(argv: list[str]) -> int:
             base=base,
             attempts=args.attempts,
         )
+        pair_seed = args.seed if args.pair_seed is None else args.pair_seed
         world = (
-            pair_world(got, args.seed, args.radius, args.min_distance)
+            pair_world(got, pair_seed, args.radius, args.min_distance)
             if args.pair
             else got.world
         )

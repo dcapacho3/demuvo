@@ -99,6 +99,7 @@ the file runs as it is written.
 | `--seed N` | the seed of the map, and of the world (default 1) |
 | `--radius R`, `--margin M` | the robot the map is for, and room beyond it |
 | `--pair`, `--min-distance M` | place a start and a goal in the free space |
+| `--pair-seed N` | the seed of the start and goal, to move them while the map stays |
 | `--resolution R`, `--pieces` | the grid to draw on, and polygons or boxes |
 | `--attempts N` | maps to draw before giving up (default 20) |
 

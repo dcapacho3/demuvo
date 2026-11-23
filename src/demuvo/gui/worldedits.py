@@ -44,6 +44,7 @@ class WorldEdits:  # pylint: disable=too-many-public-methods
             "radius": 0.25,
             "loops": 0.0,
             "pair": False,
+            "pair_seed": None,
         }
 
     @property
@@ -195,7 +196,9 @@ class WorldEdits:  # pylint: disable=too-many-public-methods
 
         The map is drawn for the widest robot of the world, and for the recipe's
         radius when there is none. With `pair`, the first robot goes to a random
-        start with a random goal, and a world with no robot gets one.
+        start with a random goal, and a world with no robot gets one. The pair has
+        its own seed, `pair_seed`, which is the map's when None, so the start and
+        the goal can change while the map stays.
 
         Raises:
             WorldError: if no map of these settings could be drawn.
@@ -203,6 +206,8 @@ class WorldEdits:  # pylint: disable=too-many-public-methods
         world = self.session.world
         settings, draw = STYLES[recipe["style"]]
         seed = world.seed if recipe["seed"] is None else int(recipe["seed"])
+        pair_seed = recipe["pair_seed"]
+        pair_seed = seed if pair_seed is None else int(pair_seed)
         options = {"loops": recipe["loops"]} if recipe["style"] == "maze" else {}
         try:
             got = draw(
@@ -214,7 +219,9 @@ class WorldEdits:  # pylint: disable=too-many-public-methods
                 base=replace(world, obstacles=()),
             )
             made = (
-                pair_world(got, seed, recipe["radius"]) if recipe["pair"] else got.world
+                pair_world(got, pair_seed, recipe["radius"])
+                if recipe["pair"]
+                else got.world
             )
         except ValueError as error:
             raise WorldError(str(error)) from error
