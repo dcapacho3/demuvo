@@ -93,23 +93,24 @@ obstacles, cannot share a name.
 
 ## Generating a map
 
-With nothing selected, the Generate map section of the inspector draws a map from a
-seed, as `demuvo generate` does, and puts it in the world.
+File, New map (Ctrl+G, or the map button of the tool bar) opens a card with a small
+map of each style - `field`, `rooms`, `caves` and `maze` - drawn for this world, the
+same size and for the same robot, all from one seed. Click a tile to choose its style,
+or move between them with the arrow keys. Shuffle draws the next seed of all four, and
+the seed shows beside it, so the same map can be drawn again from the command line.
+Use this map (or Enter) puts the chosen one in the world; Cancel changes nothing.
 
-| Field | What it does |
-| --- | --- |
-| style | `field`, `rooms`, `caves` or `maze` |
-| map seed | the same seed and settings draw the same map; the world takes it as its seed |
-| robot radius | shown when the world has no robot; the map is drawn for a robot this size |
-| loops | the maze only: the share of walls opened to give a second route, 0 to 1 |
-| start and goal | move the first robot to a random start and give it a random goal; a world with no robot gets one |
-| Generate | draw the map |
+The card has three settings. Place a start and a goal moves the first robot to a random
+start and gives it a random goal (teal and amber in the pictures); a world with no robot
+gets one. Robot radius shows when the world has no robot, and sizes the corridors.
+Loops shows for the maze, and opens some walls to give a second route, from none to all.
+A slider is read when you let go of it.
 
 The map replaces every obstacle of the world. Robots, goals and actors stay, and the
 map is drawn for the widest robot, with a way to each robot and each goal. Undo brings
-the old obstacles back. A map that cannot be drawn, such as a rooms map in a world one
-metre across, leaves the world as it was and says why in the log. The button does
-nothing while a run is in progress, like every other field.
+the old obstacles back. A style that cannot be drawn for this world, such as rooms in a
+world one metre across, shows why in its tile, and cannot be used. The card does not
+open while a run is in progress, like every other edit.
 
 ## The inspector
 
@@ -118,8 +119,7 @@ typing replaces it; Left, Right, Home, End, Delete and Ctrl+A work as in a text 
 Up, Down and the wheel change it by a step.
 
 **Nothing selected** shows the world: its width, height, seed and step length, the
-corner, [Generate map](#generating-a-map), the sensors every robot starts with, and the
-global and local costmap.
+corner, the sensors every robot starts with, and the global and local costmap.
 
 **An actor** shows where it starts, its body, whether it is `solid` and whether it can
 `collide` with other actors, and its motion with that motion's settings; see
@@ -149,7 +149,7 @@ smoother, will make. The preview does not change the run.
 
 ## Files
 
-The File menu has New world, Open, Save and Save as.
+The File menu has New world, New map, Open, Save and Save as.
 
 - Open and Save as show a file browser drawn by demuvo. Click a folder twice to go in,
   click a file twice to take it, use Up and Home, or type a name or a whole path in the
@@ -264,6 +264,7 @@ starting a world forgets the list. Undo is off while a run is in progress.
 | Enter, Esc | finish or cancel a polygon or line |
 | F2 | rename the selected robot, actor or obstacle |
 | Ctrl+N, Ctrl+M, Delete | add a robot, add an actor, delete the selected one |
+| Ctrl+G | open the New map card |
 | Ctrl+O, Ctrl+S | open a world file, save the world |
 | Ctrl+Z, Ctrl+Y | undo, redo |
 | Ctrl+1, Ctrl+2, Ctrl+3 | the scene list, the inspector, the log |

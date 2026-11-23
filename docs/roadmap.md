@@ -16,7 +16,7 @@ only if its licence allows it. Planners written from papers.
 - **Generated worlds:** seeded field, rooms-and-corridors, cave and maze styles, every
   length of them sized by the robot the map is for, with a shared check that the
   free space is one piece on the costmap the planner uses; random start and goal
-  pairs; `demuvo generate` and the Generate map section of the window.
+  pairs; `demuvo generate` and the New map card of the window.
 - **World:** box, circle, polygon and wall obstacles, maps from `map.yaml`, Gazebo
   `.world` and `.sdf` import (boxes, cylinders, spheres, includes and meshes cut at a
   robot's height), moving actors on waypoints.

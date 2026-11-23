@@ -103,7 +103,7 @@ the file runs as it is written.
 | `--attempts N` | maps to draw before giving up (default 20) |
 
 Each style takes its own settings too: `demuvo generate rooms --help` lists them. The
-window draws the same maps from the Generate map section of the inspector; see
+window draws the same maps from File, New map; see
 [the sandbox](docs/sandbox.md#generating-a-map).
 The command prints how the map measures and the command line that draws it again.
 
@@ -143,6 +143,7 @@ resizes by dragging its edge.
 | Box, Circle | B, C | drag on the floor |
 | Polygon, Line | P, L | click the corners; double click, right click or Enter finishes |
 | Add robot, Add actor | Ctrl+N, Ctrl+M | add a robot, add an actor |
+| New map | Ctrl+G | choose a generated map from four styles |
 | Delete | Delete | delete the selected one |
 
 The inspector shows a form for what is selected: for a robot, its pose, goals, body,
