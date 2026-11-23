@@ -25,8 +25,8 @@ ALLOWED = {
     "controllers": {"costmap", "models", "paths", "plugins", "sensing"},
     "evaluation": {"sim", "world"},
     # The generator draws worlds and measures their free space with the costmap's
-    # own layers, so what it calls connected is what a planner can cross. Nothing
-    # imports it: a generated world is an ordinary world.
+    # own layers, so what it calls connected is what a planner can cross. Only the
+    # window and the command line import it: a generated world is an ordinary world.
     "generate": {"costmap", "plugins", "sensing", "verify", "world"},
     "nav": {
         "controllers",
@@ -40,7 +40,7 @@ ALLOWED = {
         "smoothers",
         "world",
     },
-    "gui": {"costmap", "edit", "options", "runner", "verify", "world"},
+    "gui": {"costmap", "edit", "generate", "options", "runner", "verify", "world"},
     "options": {"models", "nav", "sensing", "verify"},
     "runner": {"costmap", "evaluation", "nav", "sim", "verify", "world"},
     "edit_core": {"sim", "verify", "world"},

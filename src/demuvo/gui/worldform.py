@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 
 from .. import edit
+from ..generate import STYLES
 from ..world.shapes import Box, Circle
 from . import look
 from .costmapform import CostmapForm
@@ -26,6 +27,14 @@ OUTLINES = ("polygon", "linestring")
 SIZE_HINT = "The size of the world, in metres."
 SEED_HINT = (
     "Starts the random numbers of sensor noise, so the same seed gives the same run."
+)
+STYLE_HINT = "The kind of map to draw. It replaces the obstacles of the world."
+MAP_SEED_HINT = "The same seed and settings draw the same map."
+RADIUS_HINT = "The robot the map is drawn for, when the world has none."
+LOOPS_HINT = "Maze only: the share of walls opened to make a second route, 0 to 1."
+PAIR_HINT = (
+    "Move the first robot to a random start and give it a random goal. "
+    "A world with no robot gets one."
 )
 STEP_HINT = "Seconds of simulated time in one step of the simulation."
 CORNER_HINT = "Where the lower left corner of the world is, in metres."
@@ -69,10 +78,61 @@ class WorldForm(FormBase):
             self._origin_edited,
             hint=CORNER_HINT,
         )
+        self._generate()
         self._sensors()
         costmaps = CostmapForm(self.column, self.session, self.fields, self.done)
         costmaps.costmap("global")
         costmaps.costmap("local")
+
+    def _generate(self) -> None:
+        """What to draw a map from, and the button that draws it."""
+        edits, recipe = self.session.edits, self.session.edits.recipe
+        self.column.add(Section("Generate map"))
+        self.choice(
+            "gen_style",
+            "style",
+            list(STYLES),
+            recipe["style"],
+            lambda text: recipe.update(style=text),
+            hint=STYLE_HINT,
+        )
+        seed = self.session.world.seed if recipe["seed"] is None else recipe["seed"]
+        spec = NumberSpec(0, 2**31 - 1, 1, 0, "", True)
+        self.number(
+            "gen_seed",
+            "map seed",
+            seed,
+            spec,
+            lambda: recipe.update(seed=int(self.fields["gen_seed"].value)),
+            hint=MAP_SEED_HINT,
+        )
+        if not self.session.world.robots:
+            spec = NumberSpec(0.01, MAX_SIZE, 0.05, 2, " m")
+            self.number(
+                "gen_radius",
+                "robot radius",
+                recipe["radius"],
+                spec,
+                lambda: recipe.update(radius=self.fields["gen_radius"].value),
+                hint=RADIUS_HINT,
+            )
+        spec = NumberSpec(0.0, 1.0, 0.05, 2)
+        self.number(
+            "gen_loops",
+            "loops",
+            recipe["loops"],
+            spec,
+            lambda: recipe.update(loops=self.fields["gen_loops"].value),
+            hint=LOOPS_HINT,
+        )
+        self.switch(
+            "gen_pair",
+            "start and goal",
+            recipe["pair"],
+            lambda on: recipe.update(pair=on),
+            hint=PAIR_HINT,
+        )
+        self.button("generate", "Generate", lambda: self.done(edits.generate()))
 
     def _sensors(self) -> None:
         """The sensors every robot starts with, and buttons to add one."""

@@ -7,9 +7,11 @@ if it worked.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 from .. import edit
+from ..generate import STYLES, Clearance, pair_world
 from ..verify import WorldError
 from ..world import GAZEBO_SUFFIXES as SUFFIXES
 from ..world import World, load_world, save_world
@@ -33,6 +35,14 @@ class WorldEdits:  # pylint: disable=too-many-public-methods
         self.session = session
         self.path: str | None = None
         self.saved = session.world
+        # What the Generate section of the inspector asks for, kept between forms.
+        self.recipe: dict = {
+            "style": "caves",
+            "seed": None,
+            "radius": 0.25,
+            "loops": 0.0,
+            "pair": False,
+        }
 
     @property
     def modified(self) -> bool:
@@ -177,6 +187,39 @@ class WorldEdits:  # pylint: disable=too-many-public-methods
         return self._edit(
             lambda w: edit.set_step(w, dt), self.session.scene.selected_obstacle
         )
+
+    def generate(self) -> str | None:
+        """Replace the obstacles with a map drawn from `recipe`.
+
+        The robots, the goals and the actors stay. The map is drawn for the widest
+        robot of the world, and for the recipe's radius when there is none. With
+        `pair`, the first robot goes to a random start with a random goal, and a
+        world with no robot gets one.
+        """
+        recipe = self.recipe
+
+        def make(world: World) -> World:
+            settings, draw = STYLES[recipe["style"]]
+            seed = world.seed if recipe["seed"] is None else int(recipe["seed"])
+            options = {"loops": recipe["loops"]} if recipe["style"] == "maze" else {}
+            try:
+                got = draw(
+                    world.size,
+                    seed,
+                    settings(**options),
+                    Clearance(radius=None if world.robots else recipe["radius"]),
+                    origin=world.origin,
+                    base=replace(world, obstacles=()),
+                )
+                return (
+                    pair_world(got, seed, recipe["radius"])
+                    if recipe["pair"]
+                    else got.world
+                )
+            except ValueError as error:
+                raise WorldError(str(error)) from error
+
+        return self._edit(make, None, rebuild=True, select="")
 
     def save(self, path: str) -> str | None:
         """Write the world to a file, and remember the file."""
