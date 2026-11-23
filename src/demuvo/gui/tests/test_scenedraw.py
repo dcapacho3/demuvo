@@ -141,6 +141,29 @@ def test_a_concave_obstacle_is_solid_with_no_line_between_its_pieces(scene):
     assert checked > 200
 
 
+def test_two_obstacles_that_touch_show_no_outline_between_them(tmp_path):
+    """A body that a world file holds as two pieces is drawn as one."""
+    path = tmp_path / "pair.toml"
+    path.write_text(
+        WORLD.split("[[obstacle]]")[0]
+        + """[[obstacle]]
+pose = [3.0, 3.0, 0.0]
+shape = { name = "box", size = [1.0, 1.0] }
+[[obstacle]]
+pose = [4.0, 3.0, 0.0]
+shape = { name = "box", size = [1.0, 1.0] }
+"""
+    )
+    scene = SceneDraw(Run(path))
+    scene.fit((20, 30, 700, 460), bottom_room=40)
+    canvas = paint(scene)
+    inside = canvas.px[at(scene, 3.0, 3.0)[::-1]]
+    seam = canvas.px[at(scene, 3.5, 3.0)[::-1]]
+    assert seam.tolist() == pytest.approx(inside.tolist(), abs=0.01)
+    outer = canvas.px[at(scene, 4.5, 3.0)[::-1]]
+    assert outer.tolist() == pytest.approx(inside.tolist(), abs=0.2)
+
+
 def test_the_costmap_picture_is_made_once_for_a_costmap_and_a_palette(scene):
     """The same picture comes back until the palette changes."""
     costmap = scene._first_costmap()

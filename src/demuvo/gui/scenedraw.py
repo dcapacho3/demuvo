@@ -56,6 +56,8 @@ PATH_CHECK = 0.35
 # Length of the goal arrow in metres.
 GOAL_ARROW = 0.62
 # The layers that go into the cut-out.
+# Pixels of outline round an obstacle.
+OUTLINE = 2.0
 STATIC = ("floor", "costmap", "obstacles", "paths", "goals")
 
 
@@ -491,19 +493,19 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
         canvas.image_scaled(picture, origin, costmap.resolution * view.scale, opacity)
 
     def _obstacles(self, canvas: Canvas, view: View, opacity: float) -> None:
-        """Circles as discs, lines as thick strokes, other shapes as filled polygons."""
+        """Circles as discs, lines as thick strokes, other shapes as filled polygons.
+
+        Every outline goes down first, grown past its shape, and every fill on top of
+        them. An outline between two shapes that touch is covered by their fills, so
+        a body that the world file holds as two pieces shows no seam.
+        """
         fill, edge = rgba(look.NAVY2, opacity), rgba(look.NAVY, opacity)
+        bodies = []
         for obstacle in self.world.obstacles:
             shape = obstacle.shape
             if isinstance(shape, Circle):
                 x, y = view.to_screen(*obstacle.pose.translation)
-                canvas.circle(
-                    (float(x), float(y)),
-                    shape.radius * view.scale,
-                    fill=fill,
-                    stroke=edge,
-                    width=2,
-                )
+                bodies.append([((float(x), float(y)), shape.radius * view.scale)])
                 continue
             corners = np.array(shape.points(obstacle.pose), dtype=float)
             sx, sy = view.to_screen(corners[:, 0], corners[:, 1])
@@ -511,26 +513,36 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
             if isinstance(shape, LineString):
                 polyline(canvas, screen, 6, edge)
             elif is_convex(screen):
-                canvas.convex(screen, fill=fill, stroke=edge, width=2)
+                bodies.append([screen])
             else:
-                self._concave(canvas, view, obstacle, fill, edge)
+                bodies.append(self._pieces(view, obstacle))
+        for body in bodies:
+            for piece in body:
+                if isinstance(piece, tuple):
+                    canvas.circle(piece[0], piece[1] + OUTLINE, fill=edge)
+                else:
+                    canvas.convex(piece, fill=edge, grow=OUTLINE)
+        for body in bodies:
+            for piece in body:
+                if isinstance(piece, tuple):
+                    canvas.circle(piece[0], piece[1], fill=fill)
+                else:
+                    canvas.convex(piece, fill=fill, grow=0.5 if len(body) > 1 else 0.0)
 
     @staticmethod
-    def _concave(canvas: Canvas, view: View, obstacle, fill, edge) -> None:
-        """A shape that is not convex: its convex pieces, then its outline.
+    def _pieces(view: View, obstacle) -> list[np.ndarray]:
+        """The convex pieces of a shape that is not convex, on the screen.
 
         The pieces are cheap to fill, and a long polygon that crosses the window
-        would cost every pixel of it to sample. Each is grown by half a pixel so no
-        line shows where two meet.
+        would cost every pixel of it to sample. Each is grown by half a pixel when
+        filled so no line shows where two meet.
         """
+        pieces = []
         for part in obstacle.shape.parts(obstacle.pose):
             corners = np.array(part.vertices, dtype=float)
             sx, sy = view.to_screen(corners[:, 0], corners[:, 1])
-            canvas.convex(np.column_stack([sx, sy]), fill=fill, grow=0.5)
-        outline = np.array(obstacle.shape.points(obstacle.pose), dtype=float)
-        sx, sy = view.to_screen(outline[:, 0], outline[:, 1])
-        closed = np.column_stack([np.append(sx, sx[0]), np.append(sy, sy[0])])
-        polyline(canvas, closed, 2, edge)
+            pieces.append(np.column_stack([sx, sy]))
+        return pieces
 
     def _draw_actors(self, canvas: Canvas, opacity: float) -> None:
         """Every actor where it is now; one that is not solid is drawn hollow.
