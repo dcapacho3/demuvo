@@ -221,3 +221,19 @@ def segments(canvas: Canvas, ends: np.ndarray, width: float, color: Color) -> No
     ys = y0[which] + (y1 - y0)[which] * fraction
     weight = min(width, 1.0) * RAY_STEP * RAY_GAIN
     stamp_points(canvas, np.column_stack([xs, ys]), weight, color)
+
+
+def fill_bodies(canvas: Canvas, bodies, color, grow: float) -> None:
+    """Fill every piece of every body, each grown by `grow` pixels.
+
+    A disc is a (centre, radius) pair and any other piece an array of corners. The
+    pieces of a body of several are also grown by half a pixel, so no line shows
+    where two meet.
+    """
+    for body in bodies:
+        for piece in body:
+            if isinstance(piece, tuple):
+                canvas.circle(piece[0], piece[1] + grow, fill=color)
+            else:
+                joined = 0.5 if len(body) > 1 else 0.0
+                canvas.convex(piece, fill=color, grow=grow + joined)

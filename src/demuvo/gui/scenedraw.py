@@ -22,7 +22,7 @@ from .cutout import Cutout, slid, uncovered
 from .raster import Canvas, is_convex, rgba
 from .robots import draw_robots, footprint, robot_at, robot_boxes
 from .sprites import SpriteCache
-from .strokes import polyline, polylines, segments
+from .strokes import fill_bodies, polyline, polylines, segments
 from .view import Camera, View
 from .zoombar import draw_scale_bar
 
@@ -516,18 +516,8 @@ class SceneDraw:  # pylint: disable=too-many-instance-attributes,too-many-public
                 bodies.append([screen])
             else:
                 bodies.append(self._pieces(view, obstacle))
-        for body in bodies:
-            for piece in body:
-                if isinstance(piece, tuple):
-                    canvas.circle(piece[0], piece[1] + OUTLINE, fill=edge)
-                else:
-                    canvas.convex(piece, fill=edge, grow=OUTLINE)
-        for body in bodies:
-            for piece in body:
-                if isinstance(piece, tuple):
-                    canvas.circle(piece[0], piece[1], fill=fill)
-                else:
-                    canvas.convex(piece, fill=fill, grow=0.5 if len(body) > 1 else 0.0)
+        fill_bodies(canvas, bodies, edge, OUTLINE)
+        fill_bodies(canvas, bodies, fill, 0.0)
 
     @staticmethod
     def _pieces(view: View, obstacle) -> list[np.ndarray]:
