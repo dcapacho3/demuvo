@@ -71,6 +71,7 @@ class NewMapBox(Popup):
         self.radius = Slider(self.recipe["radius"], *RADII)
         self.radius.visible = not robots
         self.loops = Slider(self.recipe["loops"], 0.0, 1.0)
+        self.apart = Slider(self.recipe["apart"], 0.1, 0.9)
         self.buttons = {
             "shuffle": TextButton("Shuffle map", self._shuffle),
             "pair": TextButton("Shuffle start and goal", self._shuffle_pair),
@@ -79,7 +80,7 @@ class NewMapBox(Popup):
         }
         super().__init__([], place[0], place[1])
         self.focusable = True
-        self.add(self.pair, self.radius, self.loops, *self.buttons.values())
+        self.add(self.pair, self.radius, self.loops, self.apart, *self.buttons.values())
         self.set_rect(*place)
         self._pressed = None
         self._refresh()
@@ -93,13 +94,13 @@ class NewMapBox(Popup):
                 recipe["seed"],
                 recipe["radius"],
                 recipe["pair"],
-                recipe["pair_seed"] if recipe["pair"] else None,
+                (recipe["pair_seed"], recipe["apart"]) if recipe["pair"] else None,
                 recipe["loops"] if name == "maze" else 0.0,
             )
             if self.drafts.get(name, (None,))[0] != key:
                 self.drafts[name] = (key, *self._draft(name))
         self.loops.visible = recipe["style"] == "maze"
-        self.buttons["pair"].enabled = recipe["pair"]
+        self.buttons["pair"].enabled = self.apart.visible = recipe["pair"]
         self.buttons["yes"].enabled = self.drafts[recipe["style"]][1] is not None
         self.invalidate()
 
@@ -165,7 +166,7 @@ class NewMapBox(Popup):
         """Place the four tiles, the controls and the buttons."""
         x, y, w, h = self.x, self.y, self.width, self.height
         tile_w = (w - 3 * MARGIN) / 2
-        controls, buttons = 40, 52
+        controls, buttons = 72, 52
         tile_h = (h - 72 - controls - buttons - MARGIN) / 2
         for i, name in enumerate(self.styles):
             left = x + MARGIN + (i % 2) * (tile_w + MARGIN)
@@ -175,6 +176,7 @@ class NewMapBox(Popup):
         self.pair.set_rect(x + 8, row, 310, 32)
         self.radius.set_rect(x + 450, row, 100, 32)
         self.loops.set_rect(x + 640, row, 100, 32)
+        self.apart.set_rect(x + 450, row + 32, 100, 32)
         top = y + h - buttons + 8
         self.buttons["shuffle"].set_rect(x + MARGIN, top, 112, 36)
         self.buttons["pair"].set_rect(x + MARGIN + 120, top, 176, 36)
@@ -311,6 +313,14 @@ class NewMapBox(Popup):
                 size=12,
                 color=rgba(look.NAVY),
             )
+        if self.apart.visible:
+            canvas.text(
+                face,
+                f"start and goal at least {self.apart.value:.0%} apart",
+                (self.x + 210, text_baseline(row + 32, 32, 12)),
+                size=12,
+                color=rgba(look.NAVY),
+            )
         if self.loops.visible:
             canvas.text(
                 face,
@@ -350,6 +360,8 @@ class NewMapBox(Popup):
         control.on_release(event)
         if control is self.radius:
             self.recipe["radius"] = round(self.radius.value, 2)
+        elif control is self.apart:
+            self.recipe["apart"] = round(self.apart.value, 2)
         elif control is self.loops:
             self.recipe["loops"] = round(self.loops.value, 2)
         self._refresh()

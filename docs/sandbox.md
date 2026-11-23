@@ -100,10 +100,11 @@ or move between them with the arrow keys. Shuffle draws the next seed of all fou
 the seed shows beside it, so the same map can be drawn again from the command line.
 Use this map (or Enter) puts the chosen one in the world; Cancel changes nothing.
 
-The card has three settings. Place a start and a goal moves the first robot to a random
+The card has four settings. Place a start and a goal moves the first robot to a random
 start and gives it a random goal (teal and amber in the pictures); a world with no robot
 gets one. Shuffle start and goal places the pair again on the same maps, so one map can
-be tried from many starts; it has its own seed, shown beside the map's. Robot radius shows when the world has no robot, and sizes the corridors.
+be tried from many starts; it has its own seed, shown beside the map's. Start and goal at least N% apart sets how far the pair lies, as a share of the
+world's corner to corner. Robot radius shows when the world has no robot, and sizes the corridors.
 Loops shows for the maze, and opens some walls to give a second route, from none to all.
 A slider is read when you let go of it.
 

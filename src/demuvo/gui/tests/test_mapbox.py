@@ -282,3 +282,24 @@ def test_shuffling_the_start_and_goal_keeps_the_maps():
     box.recipe["style"] = "rooms"
     press_on(box, box.buttons["yes"])
     assert program.session.world.robots[0].pose == second.robots[0].pose
+
+
+def test_the_distance_slider_moves_the_start_and_goal_apart():
+    """The pair keeps at least the asked share of the world's diagonal between it."""
+    session = Session(edit.set_size(edit.new_world(), (20.0, 14.0)))
+    _, program = start(session)
+    program._new_map()  # pylint: disable=protected-access
+    box = card(program)
+    assert not box.apart.visible
+    box.pair.set(True)
+    assert box.apart.visible
+    diagonal = float(np.hypot(20.0, 14.0))
+    for at in (0.15, 0.85):
+        x, y = box.apart.x + at * box.apart.width, box.apart.y + 16
+        box.on_press(Event(x, y))
+        box.on_release(Event(x, y))
+        assert box.recipe["apart"] == pytest.approx(box.apart.value, abs=0.01)
+        world = box.drafts["rooms"][1]
+        start_, goal = world.robots[0].pose, world.tasks[-1].goal
+        gap = float(np.linalg.norm(start_.translation - goal.translation))
+        assert gap >= box.recipe["apart"] * diagonal - 1e-6

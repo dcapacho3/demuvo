@@ -6,6 +6,7 @@ if it worked.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
@@ -45,6 +46,7 @@ class WorldEdits:  # pylint: disable=too-many-public-methods
             "loops": 0.0,
             "pair": False,
             "pair_seed": None,
+            "apart": 0.5,
         }
 
     @property
@@ -198,7 +200,8 @@ class WorldEdits:  # pylint: disable=too-many-public-methods
         radius when there is none. With `pair`, the first robot goes to a random
         start with a random goal, and a world with no robot gets one. The pair has
         its own seed, `pair_seed`, which is the map's when None, so the start and
-        the goal can change while the map stays.
+        the goal can change while the map stays. They lie at least `apart` of the
+        world's diagonal from each other.
 
         Raises:
             WorldError: if no map of these settings could be drawn.
@@ -219,7 +222,12 @@ class WorldEdits:  # pylint: disable=too-many-public-methods
                 base=replace(world, obstacles=()),
             )
             made = (
-                pair_world(got, pair_seed, recipe["radius"])
+                pair_world(
+                    got,
+                    pair_seed,
+                    recipe["radius"],
+                    recipe["apart"] * math.hypot(*world.size),
+                )
                 if recipe["pair"]
                 else got.world
             )
