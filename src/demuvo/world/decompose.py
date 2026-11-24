@@ -12,6 +12,11 @@ from __future__ import annotations
 
 Point = tuple[float, float]
 
+# Twice the area, in square metres, below which three corners count as on one line. A
+# triangle on the 0.001 m grid of a world file has at least 1e-6, and rounding error
+# in a cross product of coordinates near 100 m is near 1e-13.
+FLAT = 1e-9
+
 
 def _cross(o: Point, a: Point, b: Point) -> float:
     """Twice the signed area of the triangle o, a, b."""
@@ -60,7 +65,22 @@ def triangulate(points: list[Point]) -> list[tuple[int, int, int]]:
             del ring[k]
             break
         else:
-            raise ValueError("the polygon is not simple")
+            # Once the other ears are cut, what is left may lie on one line, and
+            # rounding gives such a corner a cross product above zero. It cuts off
+            # no area, so it goes without a triangle.
+            flat = [
+                k
+                for k in range(n)
+                if abs(
+                    _cross(
+                        points[ring[k - 1]], points[ring[k]], points[ring[(k + 1) % n]]
+                    )
+                )
+                <= FLAT
+            ]
+            if not flat:
+                raise ValueError("the polygon is not simple")
+            del ring[flat[0]]
     if len(ring) == 3 and _cross(*(points[i] for i in ring)) > 0:
         triangles.append(tuple(ring))
     return triangles
