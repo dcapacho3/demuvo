@@ -626,8 +626,11 @@ def _shape(
             ],
             "shape": {"name": "box", "size": [round(length, 3), round(width, 3)]},
         }
-        around = (_outline(table) - corner) / resolution
-        if fits(table, bounds) and (accept is None or accept(around)):
+        # `fits` comes first: a box thin enough to round to a side of zero cannot be
+        # read back, so `_outline` would raise on it.
+        if fits(table, bounds) and (
+            accept is None or accept((_outline(table) - corner) / resolution)
+        ):
             return table
     vertices: list[list[float]] = []
     for x, y in world:

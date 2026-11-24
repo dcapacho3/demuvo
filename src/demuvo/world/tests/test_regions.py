@@ -319,3 +319,9 @@ def test_a_width_of_one_changes_nothing():
     mask[3, :] = True
     drop_thin(mask, 1)
     assert mask[3].all()
+
+
+def test_a_box_too_thin_to_read_back_is_refused_and_not_raised():
+    """A sliver whose box side rounds to zero gives None, so the caller uses boxes."""
+    sliver = np.array([[0.0, 0.0], [10.0, 0.0], [10.0, 1e-4], [0.0, 1e-4]])
+    assert _shape(sliver, (0.0, 0.0), 1.0, (0.0, 0.0, 10.0, 10.0)) is None
